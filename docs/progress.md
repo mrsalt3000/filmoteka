@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-001`
+- Last completed task: `INIT-002`
 - Current branch: `main`
 - Last updated: `2026-06-03`
 
 ### Overall status
-- Initialization: `5%`
+- Initialization: `10%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -34,9 +34,9 @@
 - None
 
 ### Next recommended tasks
-1. INIT-002 — Create service files (README.md, .gitignore, .env.example, pyproject.toml)
-2. INIT-004 — Configure Python project
-3. INIT-003 — Create docs/test-runbook.md
+1. INIT-004 — Configure Python project (install deps, verify editable install)
+2. INIT-003 — Create docs/test-runbook.md
+3. INIT-005 — Set up src layout with empty modules
 
 ---
 
@@ -69,6 +69,27 @@
   - None
 - Next task:
   - INIT-002 — Create service files
+
+## Task Report: INIT-002 — 2026-06-03
+
+- Status: `done`
+- Summary: Created basic service files — README.md, .gitignore, .env.example, pyproject.toml.
+- Changed files:
+  - `README.md`
+  - `.gitignore`
+  - `.env.example`
+  - `pyproject.toml`
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `python3 -c "import tomllib; tomllib.load(open('pyproject.toml', 'rb'))"` — valid TOML
+  - `grep -c '__pycache__\|\.env\$\|\.venv' .gitignore` — all 3 patterns present
+  - `grep` for secret patterns in `.env.example` — none found
+- Checks:
+  - manual: `yes`
+- Risks:
+  - Нужно будет актуализировать зависимости при добавлении новых модулей
+- Next task:
+  - INIT-004 — Configure Python project
 
 ---
 
