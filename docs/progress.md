@@ -18,14 +18,14 @@
 ## Current Project Snapshot
 
 ### Current phase
-- Phase: `initialization | mvp | v1 | v2`
+- Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `NONE`
+- Last completed task: `INIT-001`
 - Current branch: `main`
-- Last updated: `YYYY-MM-DD HH:MM`
+- Last updated: `2026-06-03`
 
 ### Overall status
-- Initialization: `0%`
+- Initialization: `5%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -34,9 +34,41 @@
 - None
 
 ### Next recommended tasks
-1. INIT-001 — Create repository skeleton
-2. INIT-002 — Create service files
-3. INIT-004 — Configure Python project
+1. INIT-002 — Create service files (README.md, .gitignore, .env.example, pyproject.toml)
+2. INIT-004 — Configure Python project
+3. INIT-003 — Create docs/test-runbook.md
+
+---
+
+## Task Report: INIT-001 — 2026-06-03
+
+- Status: `done`
+- Summary: Created repository skeleton — all required directories with `.gitkeep` files.
+- Changed files:
+  - `src/filmoteka/api/.gitkeep`
+  - `src/filmoteka/domain/.gitkeep`
+  - `src/filmoteka/infrastructure/.gitkeep`
+  - `src/filmoteka/tasks/.gitkeep`
+  - `tests/unit/.gitkeep`
+  - `tests/integration/.gitkeep`
+  - `tests/e2e/.gitkeep`
+  - `docker/.gitkeep`
+  - `specs/.gitkeep`
+  - `migrations/.gitkeep`
+  - `scripts/.gitkeep`
+  - `docs/progress.md` (updated snapshot + report)
+- Commands run:
+  - `mkdir -p src/filmoteka/{api,domain,infrastructure,tasks} tests/{unit,integration,e2e} docker specs migrations scripts`
+  - `touch .../.gitkeep` for each directory
+  - `ls -d` all directories — confirmed
+  - `find ... -name .gitkeep` — all 11 present
+  - `git status --short` — only new directories
+- Checks:
+  - manual: `yes`
+- Risks:
+  - None
+- Next task:
+  - INIT-002 — Create service files
 
 ---
 
