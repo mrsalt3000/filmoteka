@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-002`
+- Last completed task: `INIT-003`
 - Current branch: `main`
 - Last updated: `2026-06-03`
 
 ### Overall status
-- Initialization: `10%`
+- Initialization: `15%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -35,8 +35,8 @@
 
 ### Next recommended tasks
 1. INIT-004 — Configure Python project (install deps, verify editable install)
-2. INIT-003 — Create docs/test-runbook.md
-3. INIT-005 — Set up src layout with empty modules
+2. INIT-005 — Set up src layout with empty modules
+3. INIT-014 — Set up test structure (conftest, fixtures)
 
 ---
 
@@ -88,6 +88,22 @@
   - manual: `yes`
 - Risks:
   - Нужно будет актуализировать зависимости при добавлении новых модулей
+- Next task:
+  - INIT-004 — Configure Python project
+
+## Task Report: INIT-003 — 2026-06-03
+
+- Status: `done`
+- Summary: Created docs/test-runbook.md with instructions for unit, integration, and e2e test levels.
+- Changed files:
+  - `docs/test-runbook.md`
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `ls docs/test-runbook.md` — exists
+- Checks:
+  - manual: `yes`
+- Risks:
+  - runbook нужно будет актуализировать при появлении conftest, фикстур и Docker Compose
 - Next task:
   - INIT-004 — Configure Python project
 
