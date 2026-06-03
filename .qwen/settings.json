@@ -1,0 +1,18 @@
+{
+  "$version": 3,
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf 'Read AGENTS.md, agent-tasklist.md, docs/progress.md, docs/architecture-decisions.md before starting. Work on exactly one task.'",
+            "name": "project-start-reminder",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
