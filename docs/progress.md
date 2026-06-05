@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-009`
+- Last completed task: `INIT-010`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `60%`
+- Initialization: `70%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -34,9 +34,9 @@
 - None
 
 ### Next recommended tasks
-1. INIT-010 — Create basic Dockerfiles for api and worker
-2. INIT-011 — Implement app settings layer via .env
-3. INIT-012 — Implement library.yaml loading
+1. INIT-011 — Implement app settings layer via .env
+2. INIT-012 — Implement library.yaml loading
+3. INIT-014 — Set up test structure (conftest, fixtures)
 
 ---
 
@@ -178,6 +178,31 @@
   - Медиа-директории еще не используются кодом — будут подключены в INIT-011/INIT-012
 - Next task:
   - INIT-010 — Create basic Dockerfiles for api and worker
+
+---
+
+## Task Report: INIT-010 — 2026-06-05
+
+- Status: `done`
+- Summary: Created Dockerfiles for api and worker, .dockerignore, and verified both images build and serve health endpoint.
+- Changed files:
+  - `docker/Dockerfile.api` (new — python:3.12-slim, pip install, uvicorn)
+  - `docker/Dockerfile.worker` (new — same base, placeholder CMD)
+  - `.dockerignore` (new — exclude dev/ci artifacts)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `docker build -t filmoteka-api -f docker/Dockerfile.api .` — ✅ built (28s)
+  - `docker run -p 8082:8000 filmoteka-api` + `curl localhost:8082/health` — `{"status":"ok","version":"0.1.0"}`
+  - `docker build -t filmoteka-worker -f docker/Dockerfile.worker .` — ✅ built
+- Checks:
+  - docker build api: `yes`
+  - smoke test (curl /health): `yes`
+  - docker build worker: `yes`
+  - manual: `yes`
+- Risks:
+  - Worker CMD — заглушка, будет заменён при реализации worker-кода
+- Next task:
+  - INIT-011 — Implement app settings layer via .env
 
 ---
 
