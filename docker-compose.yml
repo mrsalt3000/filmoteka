@@ -10,12 +10,23 @@ services:
       POSTGRES_DB: filmoteka
     ports:
       - "5432:5432"
+    healthcheck:
+      test: pg_isready -U filmoteka
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: redis-cli ping
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   api:
     build:
@@ -23,8 +34,10 @@ services:
       dockerfile: docker/Dockerfile.api
     restart: unless-stopped
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg://filmoteka:filmoteka@db:5432/filmoteka
       REDIS_URL: redis://redis:6379/0
@@ -34,6 +47,12 @@ services:
       - ./specs:/app/specs:ro
     ports:
       - "8000:8000"
+    healthcheck:
+      test: python -c "import urllib.request; exit(0) if urllib.request.urlopen('http://localhost:8000/health').status == 200 else exit(1)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   worker:
     build:
@@ -41,8 +60,10 @@ services:
       dockerfile: docker/Dockerfile.worker
     restart: unless-stopped
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg://filmoteka:filmoteka@db:5432/filmoteka
       REDIS_URL: redis://redis:6379/0
@@ -59,7 +80,8 @@ services:
     volumes:
       - ./docker/nginx:/etc/nginx/conf.d:ro
     depends_on:
-      - api
+      api:
+        condition: service_started
 
 volumes:
   pgdata:

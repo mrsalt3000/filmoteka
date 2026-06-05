@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-007`
+- Last completed task: `INIT-008`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `45%`
+- Initialization: `52%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -35,8 +35,8 @@
 
 ### Next recommended tasks
 1. INIT-010 — Create basic Dockerfiles for api and worker
-2. INIT-008 — Add healthcheck and startup dependencies
-3. INIT-009 — Configure bind mounts
+2. INIT-009 — Configure bind mounts
+3. INIT-014 — Set up test structure (conftest, fixtures)
 
 ---
 
@@ -136,6 +136,25 @@
   - manual: `yes`
 - Risks:
   - Dockerfiles (`docker/Dockerfile.api`, `docker/Dockerfile.worker`) ещё не существуют — api и worker не соберутся. Будут созданы в INIT-010.
+- Next task:
+  - INIT-010 — Create basic Dockerfiles for api and worker
+
+---
+
+## Task Report: INIT-008 — 2026-06-05
+
+- Status: `done`
+- Summary: Added healthchecks to db, redis, api services and converted depends_on to conditional startup.
+- Changed files:
+  - `docker-compose.yml` (healthchecks + depends_on conditions)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `docker compose config` — validated, all healthchecks and conditions resolved
+- Checks:
+  - docker compose config: `yes`
+  - manual: `yes`
+- Risks:
+  - API healthcheck требует запущенного приложения — не сработает, пока нет Dockerfile (INIT-010)
 - Next task:
   - INIT-010 — Create basic Dockerfiles for api and worker
 
