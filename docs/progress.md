@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-013`
+- Last completed task: `INIT-014`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `90%`
+- Initialization: `95%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -34,9 +34,9 @@
 - None
 
 ### Next recommended tasks
-1. INIT-014 — Set up test structure (conftest, fixtures)
-2. INIT-015 — Add first smoke tests
-3. MVP-001 — Подключить SQLAlchemy и Alembic
+1. INIT-015 — Add first smoke tests
+2. MVP-001 — Подключить SQLAlchemy и Alembic
+3. MVP-002 — Реализовать core models
 
 ---
 
@@ -274,6 +274,35 @@
   - None
 - Next task:
   - INIT-014 — Set up test structure (conftest, fixtures)
+
+---
+
+## Task Report: INIT-014 — 2026-06-05
+
+- Status: `done`
+- Summary: Created test infrastructure (conftest with TestClient, test settings override) and first health smoke test.
+- Changed files:
+  - `tests/conftest.py` (new — env override, TestClient fixture)
+  - `tests/unit/conftest.py` (new — package marker)
+  - `tests/unit/test_health.py` (new — 2 tests: 200 + 405)
+  - `pyproject.toml` (mypy exclude conftest files)
+  - `tests/unit/.gitkeep` (removed)
+  - `tests/integration/.gitkeep` (removed)
+  - `tests/e2e/.gitkeep` (removed)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `pytest tests/ -v` — 2/2 passed
+  - `ruff check src/ tests/` — all checks passed
+  - `mypy src/ tests/` — success, 11 source files
+- Checks:
+  - pytest: `yes` (2/2)
+  - ruff: `yes`
+  - mypy: `yes`
+  - manual: `yes`
+- Risks:
+  - None
+- Next task:
+  - INIT-015 — Add first smoke tests
 
 ---
 

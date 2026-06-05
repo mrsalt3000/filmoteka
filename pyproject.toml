@@ -55,4 +55,4 @@ python_version = "3.11"
 strict = true
 follow_imports = "silent"
 ignore_missing_imports = true
-exclude = ["migrations/"]
+exclude = ["migrations/", ".*conftest\\.py"]
