@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-003`
+- Last completed task: `INIT-004`
 - Current branch: `main`
-- Last updated: `2026-06-03`
+- Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `15%`
+- Initialization: `22%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -34,9 +34,34 @@
 - None
 
 ### Next recommended tasks
-1. INIT-004 — Configure Python project (install deps, verify editable install)
-2. INIT-005 — Set up src layout with empty modules
-3. INIT-014 — Set up test structure (conftest, fixtures)
+1. INIT-005 — Set up src layout with empty modules
+2. INIT-014 — Set up test structure (conftest, fixtures)
+3. INIT-006 — Create minimal app bootstrap with FastAPI health endpoint
+
+---
+
+## Task Report: INIT-004 — 2026-06-05
+
+- Status: `done`
+- Summary: Created Python virtual environment, installed all runtime and dev dependencies, verified tooling works.
+- Changed files:
+  - `pyproject.toml` (fixed build-backend from `setuptools.backends._legacy` to `setuptools.build_meta`)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `python3 -m venv .venv` — venv created (ensurepip unavailable, bootstrapped via get-pip.py)
+  - `.venv/bin/pip install -e ".[dev]"` — all 44 packages installed
+  - `.venv/bin/pytest --collect-only` — 0 tests collected (expected, no tests yet)
+  - `.venv/bin/ruff check src/` — no Python files found (expected)
+  - `.venv/bin/mypy src/` — no `.py` files (expected)
+- Checks:
+  - pytest collect: `yes` (no tests — expected at this stage)
+  - ruff: `yes` (no files — expected)
+  - mypy: `yes` (no files — expected)
+  - manual: `yes`
+- Risks:
+  - Нет собственных тестов для проверки editable install — появится в INIT-015
+- Next task:
+  - INIT-005 — Set up src layout with empty modules
 
 ---
 
