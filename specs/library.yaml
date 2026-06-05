@@ -3,6 +3,12 @@
 # This file defines business rules for the media library.
 # Secrets and environment-specific values belong in .env, not here.
 
+paths:
+  # Directory where new video files appear (e.g. browser downloads, torrents)
+  downloads_root: /media/downloads
+  # Directory where the library organises files after import
+  target_root: /media/library
+
 import:
   # File extensions to scan for during import
   extensions:

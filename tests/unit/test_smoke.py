@@ -42,10 +42,6 @@ class TestConfigLoading:
 
     def test_settings_defaults(self) -> None:
         assert Settings.model_fields["version"].default == "0.1.0"
-        assert Settings.model_fields["downloads_root"].default == Path(
-            "media/downloads"
-        )
-        assert Settings.model_fields["library_root"].default == Path("media/library")
         assert Settings.model_fields["library_spec_path"].default == Path(
             "specs/library.yaml"
         )
@@ -58,6 +54,8 @@ class TestConfigLoading:
         cfg = load_library_config(Path("specs/library.yaml"))
         assert ".mp4" in cfg.import_.extensions
         assert cfg.organization == "by_year"
+        assert str(cfg.paths.downloads_root) == "/media/downloads"
+        assert str(cfg.paths.target_root) == "/media/library"
 
 
 class TestBootstrapBreaks:

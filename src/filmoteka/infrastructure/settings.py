@@ -11,8 +11,6 @@ class Settings(BaseSettings):
     secret_key: str
 
     library_spec_path: Path = Path("specs/library.yaml")
-    downloads_root: Path = Path("media/downloads")
-    library_root: Path = Path("media/library")
 
     version: str = "0.1.0"
 

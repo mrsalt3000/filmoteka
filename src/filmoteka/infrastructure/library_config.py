@@ -4,6 +4,11 @@ import yaml
 from pydantic import BaseModel, Field
 
 
+class PathsConfig(BaseModel):
+    downloads_root: Path = Path("/media/downloads")
+    target_root: Path = Path("/media/library")
+
+
 class ImportConfig(BaseModel):
     extensions: list[str] = Field(
         default=[".mp4", ".mkv", ".avi", ".mov", ".m4v", ".ts"]
@@ -12,6 +17,7 @@ class ImportConfig(BaseModel):
 
 
 class LibraryConfig(BaseModel):
+    paths: PathsConfig
     import_: ImportConfig = Field(alias="import")
     organization: str = "by_year"
 
