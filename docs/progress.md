@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-004`
+- Last completed task: `INIT-005`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `22%`
+- Initialization: `30%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -34,9 +34,9 @@
 - None
 
 ### Next recommended tasks
-1. INIT-005 — Set up src layout with empty modules
-2. INIT-014 — Set up test structure (conftest, fixtures)
-3. INIT-006 — Create minimal app bootstrap with FastAPI health endpoint
+1. INIT-014 — Set up test structure (conftest, fixtures)
+2. INIT-006 — Create minimal app bootstrap with FastAPI health endpoint
+3. INIT-015 — Add first smoke tests
 
 ---
 
@@ -62,6 +62,35 @@
   - Нет собственных тестов для проверки editable install — появится в INIT-015
 - Next task:
   - INIT-005 — Set up src layout with empty modules
+
+---
+
+## Task Report: INIT-005 — 2026-06-05
+
+- Status: `done`
+- Summary: Created `__init__.py` files in all `src/filmoteka/` subdirectories, removed obsolete `.gitkeep` files.
+- Changed files:
+  - `src/filmoteka/__init__.py` (new)
+  - `src/filmoteka/api/__init__.py` (new)
+  - `src/filmoteka/domain/__init__.py` (new)
+  - `src/filmoteka/infrastructure/__init__.py` (new)
+  - `src/filmoteka/tasks/__init__.py` (new)
+  - `src/filmoteka/api/.gitkeep` (removed)
+  - `src/filmoteka/domain/.gitkeep` (removed)
+  - `src/filmoteka/infrastructure/.gitkeep` (removed)
+  - `src/filmoteka/tasks/.gitkeep` (removed)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/python -c "from filmoteka import api, domain, infrastructure, tasks"` — all imports OK
+  - `.venv/bin/ruff check src/` — all checks passed
+- Checks:
+  - import: `yes`
+  - ruff: `yes`
+  - manual: `yes`
+- Risks:
+  - None
+- Next task:
+  - INIT-014 — Set up test structure (conftest, fixtures)
 
 ---
 
