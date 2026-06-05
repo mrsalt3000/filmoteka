@@ -18,15 +18,15 @@
 ## Current Project Snapshot
 
 ### Current phase
-- Phase: `initialization`
+- Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `INIT-015`
+- Last completed task: `MVP-004`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `0%`
+- MVP: `20%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,9 +34,136 @@
 - None
 
 ### Next recommended tasks
-1. MVP-001 — Подключить SQLAlchemy и Alembic
-2. MVP-002 — Реализовать core models (Film, Person, Genre)
-3. MVP-003 — Настроить миграции
+1. MVP-005 — Реализовать минимального пользователя (регистрация, логин, базовая сессия)
+
+---
+
+## Task Report: MVP-004 — 2026-06-05
+
+- Status: `done`
+- Summary: Создал integration-тесты для миграций и constraints. 6 тестов: lifecycle (apply, roundtrip downgrade, tables exist), cascade delete, unique constraints. Добавлен маркер `integration` — unit-тесты не требуют БД, integration запускаются отдельно через `pytest -m integration`.
+- Changed files:
+  - `tests/integration/__init__.py` (new)
+  - `tests/integration/conftest.py` (new — DB создание/удаление, сессия с rollback, alembic config)
+  - `tests/integration/test_migrations.py` (new — 6 integration тестов)
+  - `migrations/env.py` (config URL override — уважает уже установленное значение)
+  - `pyproject.toml` (добавлен `integration` marker)
+  - `scripts/run-integration.sh` (new — `docker compose up -d db && pytest -m integration`)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `pytest tests/unit/ -v` — 37/37 passed (без БД)
+  - `pytest -m integration -v` — 6/6 passed (требует PostgreSQL)
+  - `ruff check src/ tests/` — all checks passed
+  - `mypy src/ tests/` — success, 19 source files
+- Checks:
+  - pytest unit: `yes` (37/37)
+  - pytest integration: `yes` (6/6)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Integration тесты требуют запущенного PostgreSQL (`docker compose up -d db`)
+  - `scripts/run-integration.sh` запускает и останавливает контейнер автоматически
+  - ALembic env.py изменён: `config.get_main_option("sqlalchemy.url") or settings.database_url` — теперь можно переопределить URL через Config
+- Next task:
+  - MVP-005 — Реализовать минимального пользователя (регистрация, логин, базовая сессия)
+
+---
+
+## Task Report: MVP-003 — 2026-06-05
+
+- Status: `done`
+- Summary: Добавил `ON DELETE CASCADE` на все внешние ключи (6 FK) и недостающие индексы (ix_films_year, ix_movie_editions_film_id, ix_media_files_edition_id). Миграция протестирована round-trip: upgrade → downgrade → upgrade. 2 новых unit-теста.
+- Changed files:
+  - `src/filmoteka/domain/catalog/models.py` (CASCADE на всех FK + index на year, film_id, edition_id)
+  - `migrations/versions/c6dc40f7cf26_add_constraints_and_indexes.py` (new)
+  - `tests/unit/test_database.py` (2 теста: single head/base, синтаксис миграций)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `DATABASE_URL=... alembic upgrade head` → 487a45a0f362 → c6dc40f7cf26
+  - `DATABASE_URL=... alembic downgrade -1` → 487a45a0f362
+  - `DATABASE_URL=... alembic upgrade head` → c6dc40f7cf26
+  - `.venv/bin/pytest tests/ -v` — 37/37 passed
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 17 source files
+- Checks:
+  - pytest: `yes` (37/37)
+  - ruff: `yes`
+  - mypy: `yes`
+  - alembic upgrade: `yes`
+  - alembic downgrade: `yes`
+  - alembic upgrade again: `yes`
+  - psql verify CASCADE: `yes` (все 6 FK с ON DELETE CASCADE)
+- Risks:
+  - CASCADE удаление — осознанное решение для домашней библиотеки. При удалении фильма уходят все связанные версии, файлы, связи
+- Next task:
+  - MVP-004 — Написать integration тесты на миграции (апгрейд с чистой БД)
+
+---
+
+## Task Report: MVP-002 — 2026-06-05
+
+- Status: `done`
+- Summary: Реализовал core catalog models: Film, Person, Genre, MovieEdition, MediaFile с правильными связями, ассоциативными таблицами и композитными unique constraints. Сгенерирована миграция, применена к PostgreSQL. 17 новых unit-тестов.
+- Changed files:
+  - `src/filmoteka/domain/catalog/__init__.py` (new)
+  - `src/filmoteka/domain/catalog/models.py` (new — 7 таблиц: films, persons, genres, film_genre, film_person, movie_editions, media_files)
+  - `migrations/env.py` (import моделей для autogenerate)
+  - `migrations/versions/487a45a0f362_add_catalog_models.py` (new — авто-миграция)
+  - `tests/unit/test_models.py` (new — 17 тестов: создание, repr, отношения)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `DATABASE_URL=... alembic upgrade head` — init-миграция применена
+  - `DATABASE_URL=... alembic revision --autogenerate -m "add catalog models"` — создана
+  - `DATABASE_URL=... alembic upgrade head` — применена (7 таблиц в БД)
+  - `.venv/bin/pytest tests/ -v` — 35/35 passed
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 17 source files
+- Checks:
+  - pytest: `yes` (35/35)
+  - ruff: `yes`
+  - mypy: `yes`
+  - alembic upgrade: `yes` (7 tables created)
+- Risks:
+  - Association tables (film_genre, film_person) без surrogate PK — композитный PK достаточно для M2M
+  - subtitle_languages хранится как строка — упрощение для MVP, позже можно вынести в отдельную таблицу
+- Next task:
+  - MVP-003 — Настроить миграции (индексы, constraints)
+
+---
+
+## Task Report: MVP-001 — 2026-06-05
+
+- Status: `done`
+- Summary: Подключил SQLAlchemy 2 и Alembic — database engine, session factory, Alembic env, пустая инициализационная миграция, entrypoint для наката миграций при старте контейнера.
+- Changed files:
+  - `src/filmoteka/infrastructure/database.py` (new — engine, SessionLocal, Base, get_db)
+  - `alembic.ini` (new)
+  - `migrations/env.py` (new)
+  - `migrations/script.py.mako` (new)
+  - `migrations/__init__.py` (new)
+  - `migrations/versions/__init__.py` (new)
+  - `migrations/versions/bae30842757b_init.py` (new — пустая init-миграция)
+  - `docker/entrypoint-api.sh` (new — alembic upgrade head + uvicorn)
+  - `docker/Dockerfile.api` (ENTRYPOINT, копирование alembic.ini + migrations/)
+  - `docker/Dockerfile.worker` (копирование alembic.ini + migrations/)
+  - `migrations/.gitkeep` (removed)
+  - `tests/unit/test_database.py` (new — 9 тестов: engine, SessionLocal, Base, Alembic config)
+  - `tests/unit/test_smoke.py` (добавлен `type: ignore[call-arg]` для mypy)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/alembic revision -m "init"` — создана пустая миграция
+  - `.venv/bin/pytest tests/ -v` — 18/18 passed
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 14 source files
+- Checks:
+  - pytest: `yes` (18/18)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Для полной проверки `alembic upgrade head` нужен запущенный PostgreSQL — будет проверено в интеграционных тестах (MVP-004) или при `docker compose up`
+  - Пул соединений engine — default 5, может потребоваться тюнинг позже
+- Next task:
+  - MVP-002 — Реализовать core models (Film, Person, Genre)
 
 ---
 
