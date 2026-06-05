@@ -527,7 +527,7 @@ Design doc не должен быть огромным. Достаточно:
 4. **Checks run**
 5. **Result**
 6. **Risks / follow-ups**
-7. **Recommended next task**
+7. **Recommended next task** — обязательно с номером задачи (TASK-ID), например `MVP-009 — ...`
 
 ---
 
