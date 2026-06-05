@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-005`
+- Last completed task: `INIT-006`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `30%`
+- Initialization: `37%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -35,8 +35,8 @@
 
 ### Next recommended tasks
 1. INIT-014 — Set up test structure (conftest, fixtures)
-2. INIT-006 — Create minimal app bootstrap with FastAPI health endpoint
-3. INIT-015 — Add first smoke tests
+2. INIT-015 — Add first smoke tests
+3. INIT-007 — Create docker-compose.yml with services
 
 ---
 
@@ -86,6 +86,32 @@
 - Checks:
   - import: `yes`
   - ruff: `yes`
+  - manual: `yes`
+- Risks:
+  - None
+- Next task:
+  - INIT-014 — Set up test structure (conftest, fixtures)
+
+---
+
+## Task Report: INIT-006 — 2026-06-05
+
+- Status: `done`
+- Summary: Created minimal FastAPI app bootstrap with health endpoint.
+- Changed files:
+  - `src/filmoteka/app.py` (new — app factory with FastAPI)
+  - `src/filmoteka/api/health.py` (new — `GET /health` route)
+  - `src/filmoteka/main.py` (new — uvicorn entry point)
+  - `pyproject.toml` (added `[project.scripts]` entry)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/` — all checks passed
+  - `.venv/bin/mypy src/` — success, no issues found in 8 source files
+  - `uvicorn filmoteka.app:app --port 8081` + `curl localhost:8081/health` — `{"status":"ok","version":"0.1.0"}`
+- Checks:
+  - ruff: `yes`
+  - mypy: `yes`
+  - smoke (server + curl): `yes`
   - manual: `yes`
 - Risks:
   - None
