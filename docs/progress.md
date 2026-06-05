@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-007`
+- Last completed task: `MVP-009`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `35%`
+- MVP: `45%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,59 @@
 - None
 
 ### Next recommended tasks
-1. MVP-008 — Реализовать чтение путей downloads_root и target_root из library.yaml
+1. MVP-010 — ImportCandidate модель и создание кандидатов при сканировании
+
+---
+
+## Task Report: MVP-009 — 2026-06-05
+
+- Status: `done`
+- Summary: Создал ImportRun модель и `scan_downloads()` — рекурсивный обход папки загрузок с фильтром по расширениям, записью ImportRun в БД. 6 unit-тестов (чистая логика сбора файлов) + 3 integration теста.
+- Changed files:
+  - `src/filmoteka/domain/importing/__init__.py` (new)
+  - `src/filmoteka/domain/importing/models.py` (new — ImportRun)
+  - `src/filmoteka/domain/importing/scan.py` (new — scan_downloads, _collect_files)
+  - `migrations/env.py` (+ importing models)
+  - `migrations/versions/41207e590286_add_import_runs_table.py` (new)
+  - `tests/unit/test_scan.py` (new — 6 тестов)
+  - `tests/integration/test_importing.py` (new — 3 теста)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `pytest tests/unit/ -v` — 53/53 passed
+  - `pytest -m integration -v` — 23/23 passed
+  - `ruff check src/ tests/` — all checks passed
+  - `mypy src/ tests/` — success, 34 source files
+- Checks:
+  - pytest unit: `yes` (53/53)
+  - pytest integration: `yes` (23/23)
+  - ruff: `yes`
+  - mypy: `yes`
+  - alembic upgrade: `yes`
+- Risks:
+  - scan_downloads пока не создаёт ImportCandidate — будет в MVP-010
+- Next task:
+  - MVP-010 — ImportCandidate модель и создание кандидатов при сканировании
+
+---
+
+## Task Report: MVP-008 — 2026-06-05
+
+- Status: `done`
+- Summary: Перенёс пути `downloads_root` и `target_root` из `.env`/Settings в `library.yaml`/LibraryConfig. Добавил `PathsConfig`, убрал дублирующие поля из Settings. 47 unit-тестов, ruff + mypy чисты.
+- Changed files:
+  - `specs/library.yaml` (+ paths: downloads_root, target_root)
+  - `src/filmoteka/infrastructure/library_config.py` (+ PathsConfig)
+  - `src/filmoteka/infrastructure/settings.py` (− downloads_root, library_root)
+  - `tests/unit/test_smoke.py` (обновлены проверки)
+  - `docs/progress.md` (snapshot + report)
+- Checks:
+  - pytest unit: `yes` (47/47)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Пути теперь читаются из `library.yaml`, а не из `.env` — docker-compose всё ещё использует свои env-переменные для mount'ов, это не противоречие
+- Next task:
+  - MVP-009 — ImportRun модель и scan_downloads
 
 ---
 
