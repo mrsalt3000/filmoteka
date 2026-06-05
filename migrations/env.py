@@ -5,7 +5,8 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from filmoteka.domain.catalog import models  # noqa: F401  register models
+from filmoteka.domain.access import models as access_models  # noqa: F401
+from filmoteka.domain.catalog import models as catalog_models  # noqa: F401
 from filmoteka.infrastructure.database import Base
 from filmoteka.infrastructure.settings import settings
 

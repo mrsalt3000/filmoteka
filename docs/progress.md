@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-004`
+- Last completed task: `MVP-007`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `20%`
+- MVP: `35%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,100 @@
 - None
 
 ### Next recommended tasks
-1. MVP-005 — Реализовать минимального пользователя (регистрация, логин, базовая сессия)
+1. MVP-008 — Реализовать чтение путей downloads_root и target_root из library.yaml
+
+---
+
+## Task Report: MVP-007 — 2026-06-05
+
+- Status: `done`
+- Summary: Написал 10 unit-тестов для auth service (bcrypt + JWT). Исправил `decode_access_token` — добавил `KeyError` в except для обработки токенов без `sub`. 47 unit-тестов, все проходят, ruff + mypy чисты.
+- Changed files:
+  - `tests/unit/test_auth_service.py` (new — 10 тестов)
+  - `src/filmoteka/domain/access/service.py` (+ KeyError в except)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `pytest tests/unit/ -v` — 47/47 passed
+  - `ruff check src/ tests/` — all checks passed
+  - `mypy src/ tests/` — success, 29 source files
+- Checks:
+  - pytest unit: `yes` (47/47)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - None
+- Next task:
+  - MVP-008 — Реализовать чтение путей downloads_root и target_root из library.yaml
+
+---
+
+## Task Report: MVP-006 — 2026-06-05
+
+- Status: `done`
+- Summary: Добавил роли `admin` и `user`. Поле `role` в User (default "user"), `require_role()` dependency factory, admin-only endpoint `GET /admin/health`. Миграция добавляет колонку `role` в таблицу users. 4 integration теста на role enforcement.
+- Changed files:
+  - `src/filmoteka/domain/access/models.py` (+ role column)
+  - `src/filmoteka/api/schemas/auth.py` (+ role в UserOut)
+  - `src/filmoteka/api/auth.py` (+ require_role, Callable import)
+  - `src/filmoteka/api/admin.py` (new — GET /admin/health)
+  - `src/filmoteka/app.py` (wired admin_router)
+  - `migrations/versions/7f0abe825982_add_role_column_to_users.py` (new)
+  - `tests/integration/test_admin.py` (new — 4 теста)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `pytest tests/unit/ -v` — 37/37 passed
+  - `pytest -m integration -v` — 20/20 passed
+  - `ruff check src/ tests/` — all checks passed
+  - `mypy src/ tests/` — success, 28 source files
+- Checks:
+  - pytest unit: `yes` (37/37)
+  - pytest integration: `yes` (20/20)
+  - ruff: `yes`
+  - mypy: `yes`
+  - alembic upgrade: `yes`
+- Risks:
+  - Роль меняется через БД (UPDATE) — в MVP ещё нет admin-панели, промоушен выполняется вручную
+  - `require_role("admin")` — строгое сравнение, не иерархия ролей
+- Next task:
+  - MVP-007 — Написать тесты auth flow
+
+---
+
+## Task Report: MVP-005 — 2026-06-05
+
+- Status: `done`
+- Summary: Реализовал минимальную аутентификацию — регистрация, логин с JWT, endpoint `/auth/me`. User модель (id, username, hashed_password, is_active, created_at), bcrypt для паролей, JWT HS256 с secret_key из settings. 10 integration тестов.
+- Changed files:
+  - `pyproject.toml` (bcrypt, pyjwt)
+  - `src/filmoteka/domain/access/__init__.py` (new)
+  - `src/filmoteka/domain/access/models.py` (new — User ORM)
+  - `src/filmoteka/domain/access/service.py` (new — hash, verify, JWT)
+  - `src/filmoteka/api/schemas/__init__.py` (new)
+  - `src/filmoteka/api/schemas/auth.py` (new — RegisterRequest, LoginRequest, TokenResponse, UserOut)
+  - `src/filmoteka/api/auth.py` (new — POST /auth/register, POST /auth/login, GET /auth/me)
+  - `src/filmoteka/app.py` (wired auth_router)
+  - `migrations/env.py` (import access models)
+  - `migrations/versions/5e5b30af2aae_add_users_table.py` (new)
+  - `tests/integration/test_auth.py` (new — 10 integration тестов)
+  - `tests/conftest.py` (увеличил SECRET_KEY до 40 символов для HS256)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `pytest tests/unit/ -v` — 37/37 passed
+  - `pytest -m integration -v` — 16/16 passed (6 migration + 10 auth)
+  - `ruff check src/ tests/` — all checks passed
+  - `mypy src/ tests/` — success, 26 source files
+- Checks:
+  - pytest unit: `yes` (37/37)
+  - pytest integration: `yes` (16/16)
+  - ruff: `yes`
+  - mypy: `yes`
+  - alembic upgrade: `yes`
+- Risks:
+  - JWT HS256 с `secret_key` из env — при смене ключа все существующие токены станут невалидными
+  - Нет refresh token, нет ролей (будет в MVP-006)
+  - Нет rate limiting на /auth/login
+- Next task:
+  - MVP-006 — Реализовать роль `admin` и роль `user`
 
 ---
 
