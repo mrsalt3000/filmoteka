@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-010`
+- Last completed task: `INIT-011`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `70%`
+- Initialization: `77%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -34,9 +34,9 @@
 - None
 
 ### Next recommended tasks
-1. INIT-011 — Implement app settings layer via .env
-2. INIT-012 — Implement library.yaml loading
-3. INIT-014 — Set up test structure (conftest, fixtures)
+1. INIT-012 — Implement library.yaml loading
+2. INIT-014 — Set up test structure (conftest, fixtures)
+3. INIT-015 — Add first smoke tests
 
 ---
 
@@ -203,6 +203,32 @@
   - Worker CMD — заглушка, будет заменён при реализации worker-кода
 - Next task:
   - INIT-011 — Implement app settings layer via .env
+
+---
+
+## Task Report: INIT-011 — 2026-06-05
+
+- Status: `done`
+- Summary: Created pydantic-settings config layer with env file support, wired into app factory.
+- Changed files:
+  - `src/filmoteka/infrastructure/settings.py` (new — `Settings` class with 7 fields)
+  - `src/filmoteka/app.py` (use `settings.version` for FastAPI title/version)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `ruff check src/` — all checks passed
+  - `mypy src/` — success, 9 source files (added `type: ignore[call-arg]` for env-only fields)
+  - `python -c "from filmoteka.infrastructure.settings import settings; print(settings.model_dump())"` — all fields loaded
+  - `python -c "from filmoteka.app import app; print(app.version)"` — `0.1.0`
+- Checks:
+  - ruff: `yes`
+  - mypy: `yes`
+  - settings import: `yes`
+  - app bootstrap: `yes`
+  - manual: `yes`
+- Risks:
+  - `type: ignore[call-arg]` — осознанное: `database_url`, `redis_url`, `secret_key` приходят только из env
+- Next task:
+  - INIT-012 — Implement library.yaml loading
 
 ---
 

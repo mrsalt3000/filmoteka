@@ -1,0 +1,20 @@
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    database_url: str
+    redis_url: str
+    secret_key: str
+
+    library_spec_path: Path = Path("specs/library.yaml")
+    downloads_root: Path = Path("media/downloads")
+    library_root: Path = Path("media/library")
+
+    version: str = "0.1.0"
+
+
+settings = Settings()  # type: ignore[call-arg]
