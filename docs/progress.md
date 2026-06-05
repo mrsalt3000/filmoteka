@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-011`
+- Last completed task: `INIT-012`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `77%`
+- Initialization: `85%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -34,9 +34,9 @@
 - None
 
 ### Next recommended tasks
-1. INIT-012 — Implement library.yaml loading
-2. INIT-014 — Set up test structure (conftest, fixtures)
-3. INIT-015 — Add first smoke tests
+1. INIT-014 — Set up test structure (conftest, fixtures)
+2. INIT-015 — Add first smoke tests
+3. INIT-013 — Prepare minimal project docs for agent
 
 ---
 
@@ -229,6 +229,35 @@
   - `type: ignore[call-arg]` — осознанное: `database_url`, `redis_url`, `secret_key` приходят только из env
 - Next task:
   - INIT-012 — Implement library.yaml loading
+
+---
+
+## Task Report: INIT-012 — 2026-06-05
+
+- Status: `done`
+- Summary: Created library.yaml spec with import rules and organization config, plus pydantic-validated loader.
+- Changed files:
+  - `specs/library.yaml` (new — extensions, max_file_size, organization rules)
+  - `src/filmoteka/infrastructure/library_config.py` (new — `LibraryConfig` model + `load_library_config()`)
+  - `specs/.gitkeep` (removed)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `ruff check src/` — all checks passed
+  - `mypy src/` — success, 10 source files
+  - Happy path: `load_library_config()` — all fields correct
+  - Missing file: `FileNotFoundError` — clear message
+  - Invalid YAML: pydantic `ValidationError` — readable output
+- Checks:
+  - ruff: `yes`
+  - mypy: `yes`
+  - happy path: `yes`
+  - file not found: `yes`
+  - invalid yaml: `yes`
+  - manual: `yes`
+- Risks:
+  - None
+- Next task:
+  - INIT-014 — Set up test structure (conftest, fixtures)
 
 ---
 

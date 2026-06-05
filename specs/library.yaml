@@ -1,0 +1,23 @@
+# Filmoteka — library configuration
+#
+# This file defines business rules for the media library.
+# Secrets and environment-specific values belong in .env, not here.
+
+import:
+  # File extensions to scan for during import
+  extensions:
+    - .mp4
+    - .mkv
+    - .avi
+    - .mov
+    - .m4v
+    - .ts
+
+  # Maximum individual file size (GB) — larger files are skipped
+  max_file_size_gb: 50
+
+library:
+  # Directory organization scheme
+  # by_year   — grouped by release year
+  # flat      — all files in one directory
+  organization: by_year
