@@ -45,6 +45,8 @@ services:
       LIBRARY_SPEC_PATH: /app/specs/library.yaml
     volumes:
       - ./specs:/app/specs:ro
+      - ${DOWNLOADS_ROOT:-./media/downloads}:/media/downloads
+      - ${LIBRARY_ROOT:-./media/library}:/media/library
     ports:
       - "8000:8000"
     healthcheck:
@@ -71,6 +73,8 @@ services:
       LIBRARY_SPEC_PATH: /app/specs/library.yaml
     volumes:
       - ./specs:/app/specs:ro
+      - ${DOWNLOADS_ROOT:-./media/downloads}:/media/downloads
+      - ${LIBRARY_ROOT:-./media/library}:/media/library
 
   nginx:
     image: nginx:alpine

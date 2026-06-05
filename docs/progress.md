@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-008`
+- Last completed task: `INIT-009`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `52%`
+- Initialization: `60%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -35,8 +35,8 @@
 
 ### Next recommended tasks
 1. INIT-010 — Create basic Dockerfiles for api and worker
-2. INIT-009 — Configure bind mounts
-3. INIT-014 — Set up test structure (conftest, fixtures)
+2. INIT-011 — Implement app settings layer via .env
+3. INIT-012 — Implement library.yaml loading
 
 ---
 
@@ -155,6 +155,27 @@
   - manual: `yes`
 - Risks:
   - API healthcheck требует запущенного приложения — не сработает, пока нет Dockerfile (INIT-010)
+- Next task:
+  - INIT-010 — Create basic Dockerfiles for api and worker
+
+---
+
+## Task Report: INIT-009 — 2026-06-05
+
+- Status: `done`
+- Summary: Added bind mounts for downloads and library directories to api and worker services.
+- Changed files:
+  - `docker-compose.yml` (bind mounts: downloads + library)
+  - `.env.example` (DOWNLOADS_ROOT, LIBRARY_ROOT)
+  - `.gitignore` (media/)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `docker compose config` — validated, both mounts resolved
+- Checks:
+  - docker compose config: `yes`
+  - manual: `yes`
+- Risks:
+  - Медиа-директории еще не используются кодом — будут подключены в INIT-011/INIT-012
 - Next task:
   - INIT-010 — Create basic Dockerfiles for api and worker
 

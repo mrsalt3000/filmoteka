@@ -33,3 +33,6 @@ Thumbs.db
 # Qwen
 .qwen/worktrees/
 .qwen/settings.json.orig
+
+# Media directories
+media/
