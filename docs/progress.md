@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-012`
+- Last completed task: `INIT-013`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `85%`
+- Initialization: `90%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -36,7 +36,7 @@
 ### Next recommended tasks
 1. INIT-014 — Set up test structure (conftest, fixtures)
 2. INIT-015 — Add first smoke tests
-3. INIT-013 — Prepare minimal project docs for agent
+3. MVP-001 — Подключить SQLAlchemy и Alembic
 
 ---
 
@@ -253,6 +253,22 @@
   - happy path: `yes`
   - file not found: `yes`
   - invalid yaml: `yes`
+  - manual: `yes`
+- Risks:
+  - None
+- Next task:
+  - INIT-014 — Set up test structure (conftest, fixtures)
+
+---
+
+## Task Report: INIT-013 — 2026-06-05
+
+- Status: `done`
+- Summary: Audit of project documentation — all three required files verified complete. Added Commit Convention section to AGENTS.md with TBD rules.
+- Changed files:
+  - `agents.md` (added `Commit Convention` section, added commit checkbox to Verification Checklist)
+  - `docs/progress.md` (snapshot + report)
+- Checks:
   - manual: `yes`
 - Risks:
   - None

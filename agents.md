@@ -309,6 +309,35 @@ migrations/
 
 ---
 
+## Commit Convention
+
+Проект следует **Trunk-Based Development (TBD)** — маленькие атомарные коммиты, частые пуши в `main`.
+
+### Правила
+
+1. **Формат сообщения:** `type: краткое описание`
+   - Допустимые `type`: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`
+   - Subject — до 72 символов, без точки в конце
+2. **Тело коммита:** номер задачи в формате `TASK-ID: описание`
+3. **Стейжинг:** только файлы, относящиеся к задаче. Не включать `.qwen/settings.json`, `.qwen/settings.json.orig` и другие локальные артефакты.
+4. **Push:** сразу после коммита.
+
+### Примеры
+
+```
+feat: add minimal FastAPI app bootstrap
+
+INIT-006: create app factory, health endpoint, and scripts entry
+```
+
+```
+chore: configure Python project environment
+
+INIT-004: create venv, install dependencies, fix build-backend
+```
+
+---
+
 ## Testing Strategy
 
 Тесты делятся на три уровня:
@@ -368,6 +397,7 @@ tests/e2e
 - [ ] изменены только нужные файлы;
 - [ ] добавлены/обновлены тесты, если поведение изменилось;
 - [ ] выполнены релевантные проверки;
+- [ ] коммит следует TBD-формату: `type: описание` + `TASK-ID: ...` в теле;
 - [ ] обновлён `docs/progress.md`;
 - [ ] если было архитектурное решение — обновлён `docs/architecture-decisions.md`.
 
