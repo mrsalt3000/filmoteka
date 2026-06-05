@@ -20,12 +20,12 @@
 ### Current phase
 - Phase: `initialization`
 - Active task: `NONE`
-- Last completed task: `INIT-014`
+- Last completed task: `INIT-015`
 - Current branch: `main`
 - Last updated: `2026-06-05`
 
 ### Overall status
-- Initialization: `95%`
+- Initialization: `100%`
 - MVP: `0%`
 - V1: `0%`
 - V2: `0%`
@@ -34,9 +34,9 @@
 - None
 
 ### Next recommended tasks
-1. INIT-015 — Add first smoke tests
-2. MVP-001 — Подключить SQLAlchemy и Alembic
-3. MVP-002 — Реализовать core models
+1. MVP-001 — Подключить SQLAlchemy и Alembic
+2. MVP-002 — Реализовать core models (Film, Person, Genre)
+3. MVP-003 — Настроить миграции
 
 ---
 
@@ -303,6 +303,29 @@
   - None
 - Next task:
   - INIT-015 — Add first smoke tests
+
+---
+
+## Task Report: INIT-015 — 2026-06-05
+
+- Status: `done`
+- Summary: Added comprehensive smoke tests — app importability, config validation, and negative test for missing env vars.
+- Changed files:
+  - `tests/unit/test_smoke.py` (new — 7 tests in 3 classes)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `pytest tests/ -v` — 9/9 passed (2 health + 7 smoke)
+  - `ruff check tests/` — all checks passed
+  - `mypy tests/` — success, 2 source files
+- Checks:
+  - pytest: `yes` (9/9)
+  - ruff: `yes`
+  - mypy: `yes`
+- Notes:
+  - **Initialization phase complete (100%)** — all 15 INIT tasks done
+  - Next phase: **MVP**
+- Next task:
+  - MVP-001 — Подключить SQLAlchemy и Alembic
 
 ---
 
