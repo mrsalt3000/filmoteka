@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from filmoteka.app import create_app
 from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
+from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
 
 pytestmark = pytest.mark.integration
@@ -27,13 +28,7 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
 
 def _auth_token(client: TestClient) -> str:
     """Register a test user and return a Bearer token."""
-    resp = client.post(
-        "/auth/register",
-        json={"username": "watchtest", "password": "secret123"},
-    )
-    assert resp.status_code == 201
-    token: str = resp.json()["access_token"]
-    return token
+    return _register_user(client, "watchtest", "secret123")
 
 
 class TestStreamMedia:
@@ -172,3 +167,118 @@ class TestWatchStart:
         )
         assert resp2.status_code == 200
         assert resp2.json()["watch_event_id"] == event_id_1
+
+
+class TestUpdateProgress:
+    """PATCH /media/{id}/watch/{watch_event_id}/progress"""
+
+    def test_requires_auth(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        media = self._create_media(db_session)
+        event = self._start_watch(client, media)
+
+        resp = client.patch(
+            f"/media/{media.id}/watch/{event}/progress",
+            json={"position": 100.5},
+        )
+        assert resp.status_code == 401
+
+    def test_not_found(self, client: TestClient) -> None:
+        token = _auth_token(client)
+        resp = client.patch(
+            "/media/1/watch/99999/progress",
+            json={"position": 100.5},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404
+
+    def test_forbidden_another_user(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        # Create an event as user A
+        media = self._create_media(db_session)
+        token_a = _auth_token(client)
+        resp = client.post(
+            f"/media/{media.id}/watch/start",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+        assert resp.status_code == 200
+        event_id = resp.json()["watch_event_id"]
+
+        # Try to update it as user B
+        client2 = client  # Reuse the same TestClient but register a new user
+        token_b = _register_user(client, "other", "pass456")
+
+        resp = client2.patch(
+            f"/media/{media.id}/watch/{event_id}/progress",
+            json={"position": 50.0},
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        assert resp.status_code == 403
+
+    def test_update_success(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _auth_token(client)
+        media = self._create_media(db_session)
+
+        # Start watch
+        resp_start = client.post(
+            f"/media/{media.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        event_id = resp_start.json()["watch_event_id"]
+
+        # Update position
+        resp = client.patch(
+            f"/media/{media.id}/watch/{event_id}/progress",
+            json={"position": 123.45},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+        # Verify the position was persisted
+        watch = db_session.get(WatchEvent, event_id)
+        assert watch is not None
+        assert watch.last_position == 123.45
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _create_media(db_session: Session) -> MediaFile:
+        film = Film(title="Progress Test", year=2020)
+        db_session.add(film)
+        db_session.flush()
+        edition = MovieEdition(film_id=film.id)
+        db_session.add(edition)
+        db_session.flush()
+        media = MediaFile(edition_id=edition.id, file_path="/tmp/p.mkv", file_size=100)
+        db_session.add(media)
+        db_session.commit()
+        return media
+
+    @staticmethod
+    def _start_watch(client: TestClient, media: MediaFile) -> int:
+        token = _auth_token(client)
+        resp = client.post(
+            f"/media/{media.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        event_id: int = resp.json()["watch_event_id"]
+        return event_id
+
+
+def _register_user(client: TestClient, username: str, password: str) -> str:
+    """Register a user and return token."""
+    resp = client.post(
+        "/auth/register",
+        json={"username": username, "password": password},
+    )
+    assert resp.status_code == 201
+    token: str = resp.json()["access_token"]
+    return token

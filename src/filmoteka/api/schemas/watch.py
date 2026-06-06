@@ -13,3 +13,7 @@ class WatchStartResponse(BaseModel):
     started_at: datetime
     last_position: float
     finished: bool
+
+
+class WatchProgressRequest(BaseModel):
+    position: float

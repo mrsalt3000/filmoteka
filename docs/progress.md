@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-019`
+- Last completed task: `MVP-020`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `82%`
+- MVP: `85%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,33 @@
 - None
 
 ### Next recommended tasks
-1. MVP-020 — Implement playback progress saving (playback_states)
+1. MVP-021 — Implement resume playback
+
+---
+
+## Task Report: MVP-020 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал `PATCH /media/{media_id}/watch/{watch_event_id}/progress` — сохранение позиции просмотра. Эндпойнт принимает `{"position": float}`, требует аутентификации и проверяет принадлежность watch_event текущему пользователю. 4 integration-теста: без токена (401), не найден (404), чужой event (403), успешное обновление (проверка персистентности в БД).
+- Changed files:
+  - `src/filmoteka/api/schemas/watch.py` (+ WatchProgressRequest)
+  - `src/filmoteka/api/media.py` (+ PATCH /media/{id}/watch/{watch_event_id}/progress)
+  - `tests/integration/test_media.py` (+ TestUpdateProgress — 4 integration-теста)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 48 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 60/60 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (60/60)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Клиент может отправлять позицию в любом формате — нет валидации range (0.0..duration). Для MVP норм.
+- Next task:
+  - MVP-021 — Implement resume playback
 
 ---
 

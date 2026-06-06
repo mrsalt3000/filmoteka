@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from filmoteka.api.auth import _get_current_user
-from filmoteka.api.schemas.watch import WatchStartResponse
+from filmoteka.api.schemas.watch import WatchProgressRequest, WatchStartResponse
 from filmoteka.domain.access.models import User
 from filmoteka.domain.catalog.models import MediaFile
 from filmoteka.domain.watching.models import WatchEvent
@@ -100,3 +100,30 @@ def start_watch(
         last_position=event.last_position,
         finished=event.finished,
     )
+
+
+@router.patch("/{media_id}/watch/{watch_event_id}/progress")
+def update_progress(
+    media_id: int,
+    watch_event_id: int,
+    body: WatchProgressRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> dict[str, str]:
+    """Update playback position for a watch event."""
+    event = db.get(WatchEvent, watch_event_id)
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Watch event not found",
+        )
+    if event.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Watch event belongs to another user",
+        )
+
+    event.last_position = body.position
+    db.flush()
+
+    return {"status": "ok"}
