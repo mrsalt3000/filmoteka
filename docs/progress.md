@@ -20,7 +20,7 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-025`
+- Last completed task: `MVP-026`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
@@ -34,7 +34,24 @@
 - None
 
 ### Next recommended tasks
-1. MVP-026 — Implement light and dark theme
+1. MVP-027 — Write basic e2e tests (catalog, card, player)
+
+---
+
+## Task Report: MVP-026 — 2026-06-06
+
+- Status: `done`
+- Summary: Добавил переключение светлой/тёмной темы в фронтенд. CSS-переменные для обеих тем, автоопределение системной темы через `prefers-color-scheme`, кнопка переключения в навбаре (☀/🌙), сохранение выбора в `localStorage`. Темы меняются через класс `.light-theme` на `<html>`.
+- Changed files:
+  - `src/filmoteka/static/index.html` (+ CSS-переменные light-темы, `.light-theme`, `prefers-color-scheme`, кнопка, JS toggleTheme/setTheme/getTheme)
+  - `docs/progress.md` (snapshot + report)
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (78/78)
+  - ruff: `yes`
+  - mypy: `yes`
+- Next task:
+  - MVP-027 — Write basic e2e tests (catalog, card, player)
 
 ---
 

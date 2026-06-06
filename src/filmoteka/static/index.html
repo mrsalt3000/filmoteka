@@ -13,7 +13,27 @@
   --text2: #888;
   --accent: #e50914;
   --radius: 8px;
+  --play-btn-text: #fff;
 }
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f5f5;
+    --surface: #fff;
+    --surface2: #e8e8e8;
+    --text: #1a1a1a;
+    --text2: #777;
+  }
+}
+
+.light-theme {
+  --bg: #f5f5f5;
+  --surface: #fff;
+  --surface2: #e8e8e8;
+  --text: #1a1a1a;
+  --text2: #777;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
 a { color: var(--accent); text-decoration: none; }
@@ -22,6 +42,8 @@ nav { display: flex; align-items: center; gap: 1rem; padding: 1rem 2rem; backgro
 nav h1 { font-size: 1.25rem; }
 nav input { flex: 1; max-width: 400px; padding: .5rem .75rem; border: 1px solid var(--surface2); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-size: .9rem; }
 nav input::placeholder { color: var(--text2); }
+#theme-btn { background: none; border: 1px solid var(--text2); color: var(--text); border-radius: var(--radius); padding: .35rem .6rem; cursor: pointer; font-size: 1rem; line-height: 1; }
+#theme-btn:hover { border-color: var(--text); }
 .page { padding: 1.5rem 2rem; }
 .film-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
 .film-card { background: var(--surface); border-radius: var(--radius); padding: 1.25rem; cursor: pointer; transition: transform .15s, background .15s; }
@@ -35,7 +57,7 @@ nav input::placeholder { color: var(--text2); }
 .detail .section h3 { font-size: 1rem; margin-bottom: .5rem; color: var(--accent); }
 .detail .section ul { list-style: none; }
 .detail .section li { font-size: .9rem; margin-bottom: .25rem; }
-.detail .play-btn { display: inline-block; padding: .6rem 1.5rem; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 1rem; cursor: pointer; }
+.detail .play-btn { display: inline-block; padding: .6rem 1.5rem; background: var(--accent); color: var(--play-btn-text); border: none; border-radius: var(--radius); font-size: 1rem; cursor: pointer; }
 .detail .play-btn:hover { opacity: .9; }
 .player-page video { width: 100%; max-height: 80vh; background: #000; border-radius: var(--radius); }
 .back { display: inline-block; margin-bottom: 1rem; color: var(--text2); cursor: pointer; }
@@ -49,10 +71,30 @@ nav input::placeholder { color: var(--text2); }
 <nav>
   <h1><a href="#list" onclick="navigate('list')">🎬 Filmoteka</a></h1>
   <input id="search" type="text" placeholder="Search films…" oninput="onSearch(event)">
+  <button id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
 </nav>
 <div id="app" class="page"></div>
 
 <script>
+// ── Theme ──────────────────────────────────────────────────────────
+function getTheme() {
+  return localStorage.getItem('filmoteka-theme') ||
+    (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+}
+
+function setTheme(theme) {
+  document.documentElement.classList.toggle('light-theme', theme === 'light');
+  document.getElementById('theme-btn').textContent = theme === 'light' ? '☀️' : '🌙';
+  localStorage.setItem('filmoteka-theme', theme);
+}
+
+function toggleTheme() {
+  setTheme(getTheme() === 'light' ? 'dark' : 'light');
+}
+
+// Apply theme before render
+setTheme(getTheme());
+
 // ── Router ─────────────────────────────────────────────────────────
 function navigate(hash) {
   location.hash = `#${hash}`;
@@ -110,7 +152,6 @@ async function renderFilm(el, id) {
   const f = await api(`/films/${id}`);
   const genres = f.genres.map(g => esc(g.name)).join(', ') || '—';
   const persons = f.persons.map(p => `${esc(p.name)} (${esc(p.role)})`).join(', ') || '—';
-  // Use the first edition's first media file for playback
   const firstMedia = f.editions[0]?.media_files?.[0];
 
   el.innerHTML = `
