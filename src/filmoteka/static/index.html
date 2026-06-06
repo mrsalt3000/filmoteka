@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Filmoteka</title>
+<style>
+:root {
+  --bg: #0f0f0f;
+  --surface: #1a1a1a;
+  --surface2: #252525;
+  --text: #e0e0e0;
+  --text2: #888;
+  --accent: #e50914;
+  --radius: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+nav { display: flex; align-items: center; gap: 1rem; padding: 1rem 2rem; background: var(--surface); position: sticky; top: 0; z-index: 10; }
+nav h1 { font-size: 1.25rem; }
+nav input { flex: 1; max-width: 400px; padding: .5rem .75rem; border: 1px solid var(--surface2); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-size: .9rem; }
+nav input::placeholder { color: var(--text2); }
+.page { padding: 1.5rem 2rem; }
+.film-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+.film-card { background: var(--surface); border-radius: var(--radius); padding: 1.25rem; cursor: pointer; transition: transform .15s, background .15s; }
+.film-card:hover { transform: translateY(-2px); background: var(--surface2); }
+.film-card h3 { font-size: 1rem; margin-bottom: .25rem; }
+.film-card .year { color: var(--text2); font-size: .85rem; }
+.detail { max-width: 720px; }
+.detail h2 { font-size: 1.5rem; margin-bottom: .5rem; }
+.detail .meta { color: var(--text2); margin-bottom: 1rem; }
+.detail .section { margin-bottom: 1.5rem; }
+.detail .section h3 { font-size: 1rem; margin-bottom: .5rem; color: var(--accent); }
+.detail .section ul { list-style: none; }
+.detail .section li { font-size: .9rem; margin-bottom: .25rem; }
+.detail .play-btn { display: inline-block; padding: .6rem 1.5rem; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 1rem; cursor: pointer; }
+.detail .play-btn:hover { opacity: .9; }
+.player-page video { width: 100%; max-height: 80vh; background: #000; border-radius: var(--radius); }
+.back { display: inline-block; margin-bottom: 1rem; color: var(--text2); cursor: pointer; }
+.back:hover { color: var(--text); }
+.spinner { text-align: center; padding: 3rem; color: var(--text2); }
+.error { color: var(--accent); padding: 1rem; }
+.empty { color: var(--text2); padding: 2rem; text-align: center; }
+</style>
+</head>
+<body>
+<nav>
+  <h1><a href="#list" onclick="navigate('list')">🎬 Filmoteka</a></h1>
+  <input id="search" type="text" placeholder="Search films…" oninput="onSearch(event)">
+</nav>
+<div id="app" class="page"></div>
+
+<script>
+// ── Router ─────────────────────────────────────────────────────────
+function navigate(hash) {
+  location.hash = `#${hash}`;
+  render();
+}
+
+function currentRoute() {
+  const h = location.hash.slice(1) || 'list';
+  const parts = h.split('/');
+  return { view: parts[0], id: parts[1], mediaId: parts[2] };
+}
+
+// ── Data fetching ───────────────────────────────────────────────────
+async function api(path) {
+  const resp = await fetch(path);
+  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+  return resp.json();
+}
+
+// ── Render logic ────────────────────────────────────────────────────
+async function render() {
+  const el = document.getElementById('app');
+  const route = currentRoute();
+  try {
+    if (route.view === 'film' && route.id) {
+      await renderFilm(el, route.id);
+    } else if (route.view === 'play' && route.mediaId) {
+      renderPlayer(el, route.mediaId);
+    } else {
+      await renderList(el);
+    }
+  } catch (e) {
+    el.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+  }
+}
+
+async function renderList(el) {
+  const q = document.getElementById('search').value;
+  const params = new URLSearchParams({ limit: '50' });
+  if (q) params.set('q', q);
+  const data = await api(`/films?${params}`);
+  if (data.items.length === 0) {
+    el.innerHTML = `<div class="empty">${q ? 'No films match your search.' : 'Library is empty.'}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="film-grid">${data.items.map(f => `
+    <div class="film-card" onclick="navigate('film/${f.id}')">
+      <h3>${esc(f.title)}</h3>
+      <div class="year">${f.year || '—'}</div>
+    </div>
+  `).join('')}</div>`;
+}
+
+async function renderFilm(el, id) {
+  const f = await api(`/films/${id}`);
+  const genres = f.genres.map(g => esc(g.name)).join(', ') || '—';
+  const persons = f.persons.map(p => `${esc(p.name)} (${esc(p.role)})`).join(', ') || '—';
+  // Use the first edition's first media file for playback
+  const firstMedia = f.editions[0]?.media_files?.[0];
+
+  el.innerHTML = `
+    <div class="back" onclick="navigate('list')">← Back to list</div>
+    <div class="detail">
+      <h2>${esc(f.title)}</h2>
+      <div class="meta">${f.year || '—'}${f.description ? ' · ' + esc(f.description) : ''}</div>
+      ${firstMedia ? `<button class="play-btn" onclick="navigate('play/${firstMedia.id}')">▶ Play</button>` : ''}
+      <div class="section" style="margin-top:1.5rem">
+        <h3>Genres</h3><p>${genres}</p>
+      </div>
+      <div class="section">
+        <h3>Cast & Crew</h3><p>${persons}</p>
+      </div>
+      <div class="section">
+        <h3>Editions</h3>
+        <ul>${f.editions.map(e => `
+          <li>${esc(e.edition_name || e.quality || 'Edition')}
+            ${e.media_files.map(m => esc(m.codec || '')).filter(Boolean).join(', ')}
+          </li>
+        `).join('')}</ul>
+      </div>
+    </div>`;
+}
+
+function renderPlayer(el, mediaId) {
+  const src = `/media/${mediaId}/stream`;
+  el.innerHTML = `
+    <div class="back" onclick="history.back()">← Back</div>
+    <div class="player-page">
+      <video controls autoplay preload="metadata">
+        <source src="${src}" type="video/mp4">
+        Your browser does not support video playback.
+      </video>
+    </div>`;
+}
+
+function onSearch(e) {
+  if (currentRoute().view === 'list') render();
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s ?? '';
+  return d.innerHTML;
+}
+
+// ── Init ────────────────────────────────────────────────────────────
+window.addEventListener('hashchange', render);
+render();
+</script>
+</body>
+</html>

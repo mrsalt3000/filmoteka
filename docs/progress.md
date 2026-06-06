@@ -20,7 +20,7 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-024`
+- Last completed task: `MVP-025`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
@@ -34,7 +34,30 @@
 - None
 
 ### Next recommended tasks
-1. MVP-025 — Implement minimal browser frontend (films list)
+1. MVP-026 — Implement light and dark theme
+
+---
+
+## Task Report: MVP-025 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал минимальный браузерный фронтенд — одностраничное приложение на ванильном HTML/CSS/JS с hash-роутингом. Три вьюхи: список фильмов (с поиском), карточка фильма (жанры, персоны, издания, кнопка Play), видеоплеер (встроенный `<video>` с стримингом через `/media/{id}/stream`). Файлы статики (`index.html`) сервятся через FastAPI, SPA роутинг через catch-all `/{path:path}` → `FileResponse(index.html)`.
+- Changed files:
+  - `src/filmoteka/static/index.html` (new — SPA frontend)
+  - `src/filmoteka/app.py` (+ статика, catch-all SPA роутинг)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 50 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 78/78 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (78/78)
+  - ruff: `yes`
+  - mypy: `yes`
+- Next task:
+  - MVP-026 — Implement light and dark theme
 
 ---
 

@@ -1,4 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from filmoteka.api.admin import router as admin_router
 from filmoteka.api.auth import router as auth_router
@@ -17,6 +21,26 @@ def create_app() -> FastAPI:
     app.include_router(catalog_router)
     app.include_router(media_router)
     app.include_router(users_router)
+
+    static_dir = Path(__file__).resolve().parent / "static"
+    if static_dir.is_dir():
+        index = static_dir / "index.html"
+        app.mount(
+            "/static",
+            StaticFiles(directory=str(static_dir)),
+            name="static",
+        )
+
+        # Serve index.html for root and SPA catch-all
+        @app.get("/")
+        async def serve_root() -> FileResponse:
+            return FileResponse(str(index))
+
+        @app.get("/{full_path:path}")
+        async def serve_spa(full_path: str) -> FileResponse:
+            # Don't interfere with API paths — FastAPI checks these last
+            return FileResponse(str(index))
+
     return app
 
 
