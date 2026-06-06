@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-013`
+- Last completed task: `MVP-014`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `61%`
+- MVP: `64%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,33 @@
 - None
 
 ### Next recommended tasks
-1. MVP-014 — Implement import idempotency
+1. MVP-015 — Write unit and integration tests for import
+
+---
+
+## Task Report: MVP-014 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал идемпотентность `scan_downloads()`. Перед созданием кандидатов выполняется `_existing_candidate_paths()` — запрос к БД по файлам под downloads_root. Файлы, у которых уже есть кандидат с не-error статусом, пропускаются. Кандидаты со статусом `error` пересоздаются при повторном сканировании. 3 integration-теста: повторный запуск не создаёт дубликатов, перезапуск после ошибки, частично новые файлы.
+- Changed files:
+  - `src/filmoteka/domain/importing/scan.py` (+ `_existing_candidate_paths()`, изменён `scan_downloads()` с фильтрацией)
+  - `tests/integration/test_importing.py` (+ TestScanIdempotent — 3 integration-теста)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 40 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 103/103 passed
+  - `.venv/bin/pytest -m integration -v` — 34/34 passed
+- Checks:
+  - pytest unit: `yes` (103/103)
+  - pytest integration: `yes` (34/34)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Запрос `_existing_candidate_paths` выполняется на каждый `scan_downloads` — при большом количестве записей в БД может быть медленным. Для MVP некритично.
+  - Проверка только по пути — если файл удалён и создан заново с тем же именем, будет пропущен.
+- Next task:
+  - MVP-015 — Write unit and integration tests for import
 
 ---
 

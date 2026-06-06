@@ -27,8 +27,11 @@ def scan_downloads(
 ) -> ImportRun:
     """Scan ``config.paths.downloads_root`` and create an ``ImportRun``.
 
+    Idempotent: files that already have an ``ImportCandidate`` with a
+    non-error status are skipped so repeated scans do not create duplicates.
+
     Returns a persisted ``ImportRun`` with file_count set to the number of
-    matching video files found, each represented as an ``ImportCandidate``.
+    new candidates created.
     """
     root = config.paths.downloads_root
     extensions = config.import_.extensions
@@ -43,6 +46,9 @@ def scan_downloads(
     db.flush()  # get an id
 
     files = _collect_files(root, extensions)
+    existing = _existing_candidate_paths(db, root, skip_status=CANDIDATE_ERROR)
+    new_files = [f for f in files if str(f) not in existing]
+
     candidates = [
         ImportCandidate(
             import_run_id=run.id,
@@ -50,15 +56,33 @@ def scan_downloads(
             size=f.stat().st_size,
             status=CANDIDATE_PENDING,
         )
-        for f in files
+        for f in new_files
     ]
     db.add_all(candidates)
-    run.file_count = len(files)
+    run.file_count = len(new_files)
     run.finished_at = datetime.now()
     run.status = "completed"
     db.flush()
 
     return run
+
+
+def _existing_candidate_paths(
+    db: Session,
+    root: Path,
+    skip_status: str | None = None,
+) -> set[str]:
+    """Return file paths from the DB that are under *root*.
+
+    If *skip_status* is set, candidates with that status are excluded from
+    the result (so they can be re-scanned).
+    """
+    query = db.query(ImportCandidate.file_path).filter(
+        ImportCandidate.file_path.startswith(str(root))
+    )
+    if skip_status:
+        query = query.filter(ImportCandidate.status != skip_status)
+    return {row[0] for row in query.all()}
 
 
 def probe_candidates(

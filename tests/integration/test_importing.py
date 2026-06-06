@@ -112,6 +112,81 @@ class TestScanDownloads:
         assert candidates[1].import_run_id == run.id
 
 
+class TestScanIdempotent:
+    """scan_downloads — repeated calls must not create duplicates."""
+
+    def test_second_scan_creates_no_new_candidates(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        (tmp_path / "film.mp4").touch()
+        config = _make_config(tmp_path)
+
+        # First scan
+        run1 = scan_downloads(config, db_session)
+        assert run1.file_count == 1
+
+        # Second scan — same files, should find nothing new
+        run2 = scan_downloads(config, db_session)
+        assert run2.file_count == 0
+
+        # Total candidates should still be 1
+        total = (
+            db_session.query(ImportCandidate)
+            .count()
+        )
+        assert total == 1
+
+    def test_scan_after_error_allows_retry(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        video = tmp_path / "film.mp4"
+        video.touch()
+        config = _make_config(tmp_path)
+
+        # First scan
+        run1 = scan_downloads(config, db_session)
+        # Manually set candidate to error
+        c = (
+            db_session.query(ImportCandidate)
+            .filter(ImportCandidate.import_run_id == run1.id)
+            .one()
+        )
+        c.status = CANDIDATE_ERROR
+        db_session.flush()
+
+        # Second scan — file is still there, status was error → should re-create
+        run2 = scan_downloads(config, db_session)
+        assert run2.file_count == 1
+
+        total = (
+            db_session.query(ImportCandidate)
+            .count()
+        )
+        # Original + new = 2 (new run, new candidate)
+        assert total == 2
+
+    def test_scan_partial_new_files(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        (tmp_path / "existing.mp4").touch()
+        config = _make_config(tmp_path)
+
+        run1 = scan_downloads(config, db_session)
+        assert run1.file_count == 1
+
+        # Add a new file
+        (tmp_path / "new_film.mkv").touch()
+
+        run2 = scan_downloads(config, db_session)
+        assert run2.file_count == 1  # only the new file
+
+        total = (
+            db_session.query(ImportCandidate)
+            .count()
+        )
+        assert total == 2  # 1 from first run + 1 from second
+
+
 class TestProbeCandidates:
     """probe_candidates — end-to-end with real DB and real media file."""
 
