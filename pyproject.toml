@@ -34,7 +34,7 @@ where = ["src"]
 include = ["filmoteka*"]
 
 [tool.setuptools.package-data]
-filmoteka = ["py.typed"]
+filmoteka = ["py.typed", "static/*"]
 
 [project.scripts]
 filmoteka = "filmoteka.main:main"

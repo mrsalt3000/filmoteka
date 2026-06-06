@@ -15,6 +15,19 @@
 
 ---
 
+## Task Report: FIX-002 — 2026-06-06
+
+- Status: `done`
+- Summary: SPA фронтенд не отдавался через `http://localhost` (nginx → api). Причина: `pip install .` копирует только `.py` файлы в site-packages, а `static/index.html` не был включён в package-data. Функция `create_app()` проверяла `static_dir.is_dir()`, которая была `False` в установленном пакете, поэтому корневой роут `/` и SPA catch-all не регистрировались. Добавил `"static/*"` в `[tool.setuptools.package-data]` в `pyproject.toml`.
+- Changed files:
+  - `pyproject.toml` — added `"static/*"` to `filmoteka` package-data
+- Checks:
+  - docker compose: `yes` (nginx + api, обе порта 80 и 8000 отдают SPA с 200)
+- Next task:
+  - V1-001 — Plan V1 features
+
+---
+
 ## Task Report: FIX-001 — 2026-06-06
 
 - Status: `done`
