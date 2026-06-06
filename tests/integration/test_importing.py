@@ -12,6 +12,7 @@ from filmoteka.domain.importing.layout import layout_file
 from filmoteka.domain.importing.models import (
     CANDIDATE_ERROR,
     CANDIDATE_IMPORTED,
+    CANDIDATE_PENDING,
     CANDIDATE_PROBED,
     ImportCandidate,
     ImportRun,
@@ -387,3 +388,51 @@ class TestLayoutFile:
         # DB path should be absolute and point to an existing file
         assert Path(c.file_path).exists()
         assert target.as_posix() in c.file_path
+
+
+class TestFullPipeline:
+    """End-to-end import pipeline: scan → probe → layout with real file."""
+
+    def test_scan_probe_layout_flow(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        downloads = tmp_path / "downloads"
+        target = tmp_path / "library"
+        downloads.mkdir()
+
+        video = downloads / "The.Matrix.1999.1080p.mkv"
+        _make_test_video(video)
+
+        config = _make_config(downloads, target_root=str(target))
+
+        # 1. Scan
+        run = scan_downloads(config, db_session)
+        assert run.file_count == 1
+
+        candidates = (
+            db_session.query(ImportCandidate)
+            .filter(ImportCandidate.import_run_id == run.id)
+            .all()
+        )
+        assert len(candidates) == 1
+        assert candidates[0].status == CANDIDATE_PENDING
+
+        # 2. Probe
+        probe_candidates(candidates, db_session)
+        db_session.refresh(candidates[0])
+        assert candidates[0].status == CANDIDATE_PROBED
+        assert candidates[0].width is not None
+        assert candidates[0].duration_secs is not None
+
+        # 3. Layout
+        layout_file(candidates[0], config, db_session)
+        db_session.refresh(candidates[0])
+        assert candidates[0].status == CANDIDATE_IMPORTED
+
+        # Source file should be gone
+        assert not video.exists()
+        # Target file should exist with probe data preserved
+        final = Path(candidates[0].file_path)
+        assert final.exists()
+        assert "The Matrix (1999)" in final.parts
+        assert final.suffix == ".mkv"

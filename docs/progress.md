@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-014`
+- Last completed task: `MVP-015`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `64%`
+- MVP: `68%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,32 @@
 - None
 
 ### Next recommended tasks
-1. MVP-015 — Write unit and integration tests for import
+1. MVP-016 — Implement film list API
+
+---
+
+## Task Report: MVP-015 — 2026-06-06
+
+- Status: `done`
+- Summary: Добавил недостающие тесты импорта. Unit: `probe_candidates` с mocked ffprobe — пропуск не-pending, смешанные успех/ошибка (2 теста). Integration: полный pipeline scan → probe → layout с реальным медиафайлом и БД — проверка всех этапов и конечного состояния (1 тест).
+- Changed files:
+  - `tests/unit/test_scan.py` (+ TestProbeCandidates — 2 unit-теста)
+  - `tests/integration/test_importing.py` (+ TestFullPipeline — 1 integration-тест)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 40 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 35/35 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (35/35)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Полный pipeline-тест занимает ~2 сек из-за ffmpeg генерации — приемлемо для integration
+- Next task:
+  - MVP-016 — Implement film list API
 
 ---
 
