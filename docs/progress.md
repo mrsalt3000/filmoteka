@@ -18,15 +18,15 @@
 ## Current Project Snapshot
 
 ### Current phase
-- Phase: `mvp`
+- Phase: `mvp` ✅ **COMPLETE**
 - Active task: `NONE`
-- Last completed task: `MVP-026`
+- Last completed task: `MVP-027`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `100%`
+- MVP: `100%` ✅
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,29 @@
 - None
 
 ### Next recommended tasks
-1. MVP-027 — Write basic e2e tests (catalog, card, player)
+1. V1-001 — Plan V1 features
+
+---
+
+## Task Report: MVP-027 — 2026-06-06
+
+- Status: `done`
+- Summary: Написал 6 e2e-тестов, покрывающих основные пользовательские сценарии: загрузка каталога, список фильмов, карточка фильма со связанными данными (жанры, персоны, издания, медиафайлы), полный lifecycle просмотра (регистрация → старт → state → прогресс → история), проверка аутентификации на всех watch endpoints.
+- Changed files:
+  - `tests/integration/test_e2e_flows.py` (new — 6 e2e-тестов)
+  - `docs/progress.md` (snapshot + report — MVP complete)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 51 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 84/84 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (84/84)
+  - ruff: `yes`
+  - mypy: `yes`
+- Next task:
+  - V1-001 — Plan V1 features
 
 ---
 
