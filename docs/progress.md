@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-011`
+- Last completed task: `MVP-012`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `54%`
+- MVP: `57%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,33 @@
 - None
 
 ### Next recommended tasks
-1. MVP-012 — Probe pipeline integration: wire probe_candidates into the scan flow
+1. MVP-013 — Layout file in target library (copy/move + update DB path)
+
+---
+
+## Task Report: MVP-012 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал `parse_filename()` — базовый парсер имени файла, извлекающий title, year и quality. Алгоритм: удаляет все известные quality-маркеры (1080p/2160p/4K/WEB-DL/WEBRip/BluRay/BDRip/HDTV и т.д.), затем ищет 4-значный год (1900-2099) в очищенном имени, остаток — title (разделители заменяются на пробелы). 21 unit-тест: типовые имена (точки, подчёркивания, дефисы, скобки, русский язык), краевые случаи (пустой stem, год вне диапазона, спецсимволы, TV-эпизоды), иммутабельность dataclass.
+- Changed files:
+  - `src/filmoteka/infrastructure/filename_parser.py` (new — filename parser)
+  - `tests/unit/test_filename_parser.py` (new — 21 unit-тестов)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 38 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 89/89 passed
+  - `.venv/bin/pytest -m integration -v` — 28/28 passed
+- Checks:
+  - pytest unit: `yes` (89/89)
+  - pytest integration: `yes` (28/28)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Парсер не знает контекст — название фильма с цифрами (напр. "Room 2015") может быть ошибочно распарсено как год
+  - Список quality-маркеров конечный — экзотические релиз-группы могут остаться в title
+- Next task:
+  - MVP-013 — Layout file in target library (copy/move + update DB path)
 
 ---
 
