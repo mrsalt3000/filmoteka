@@ -9,7 +9,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from filmoteka.app import create_app
-from filmoteka.domain.catalog.models import Film
+from filmoteka.domain.catalog.models import (
+    Film,
+    Genre,
+    MediaFile,
+    MovieEdition,
+    Person,
+)
 from filmoteka.infrastructure.database import get_db
 
 pytestmark = pytest.mark.integration
@@ -123,3 +129,112 @@ class TestListFilms:
     def test_skip_negative_rejected(self, client: TestClient) -> None:
         resp = client.get("/films?skip=-1")
         assert resp.status_code == 422
+
+
+class TestGetFilm:
+    """GET /films/{id}"""
+
+    def test_not_found(self, client: TestClient) -> None:
+        resp = client.get("/films/99999")
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Film not found"
+
+    def test_bare_film(self, client: TestClient, db_session: Session) -> None:
+        film = Film(title="Solo Film", year=2005, description="A test film")
+        db_session.add(film)
+        db_session.commit()
+
+        resp = client.get(f"/films/{film.id}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["title"] == "Solo Film"
+        assert body["year"] == 2005
+        assert body["description"] == "A test film"
+        assert body["genres"] == []
+        assert body["persons"] == []
+        assert body["editions"] == []
+
+    def test_with_genres(self, client: TestClient, db_session: Session) -> None:
+        g1 = Genre(name="Sci-Fi", slug="sci-fi")
+        g2 = Genre(name="Action", slug="action")
+        film = Film(title="Multi-Genre", year=2020, genres=[g1, g2])
+        db_session.add(film)
+        db_session.commit()
+
+        resp = client.get(f"/films/{film.id}")
+        body = resp.json()
+        assert len(body["genres"]) == 2
+        slugs = {g["slug"] for g in body["genres"]}
+        assert slugs == {"sci-fi", "action"}
+
+    def test_with_persons(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        actor = Person(name="Jane Doe")
+        director = Person(name="John Smith")
+        db_session.add_all([actor, director])
+        db_session.flush()
+
+        film = Film(title="Starring...", year=2021)
+        db_session.add(film)
+        db_session.flush()
+
+        # Insert into the association table with explicit roles
+        from filmoteka.domain.catalog.models import film_person
+
+        db_session.execute(
+            film_person.insert().values(
+                [
+                    {"film_id": film.id, "person_id": actor.id, "role": "actor"},
+                    {"film_id": film.id, "person_id": director.id, "role": "director"},
+                ]
+            )
+        )
+        db_session.commit()
+
+        resp = client.get(f"/films/{film.id}")
+        body = resp.json()
+        assert len(body["persons"]) == 2
+        roles = {(p["name"], p["role"]) for p in body["persons"]}
+        assert ("Jane Doe", "actor") in roles
+        assert ("John Smith", "director") in roles
+
+    def test_with_editions_and_media(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        film = Film(title="With Files", year=2022)
+        db_session.add(film)
+        db_session.flush()
+
+        edition = MovieEdition(
+            film_id=film.id,
+            edition_name="Director's Cut",
+            quality="1080p",
+            language="en",
+        )
+        db_session.add(edition)
+        db_session.flush()
+
+        media = MediaFile(
+            edition_id=edition.id,
+            file_path="/media/library/2022/With Files (2022)/film.mkv",
+            file_size=1_000_000_000,
+            duration_secs=7200.0,
+            width=1920,
+            height=1080,
+            codec="h264",
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        resp = client.get(f"/films/{film.id}")
+        body = resp.json()
+        assert len(body["editions"]) == 1
+        ed = body["editions"][0]
+        assert ed["edition_name"] == "Director's Cut"
+        assert ed["quality"] == "1080p"
+        assert len(ed["media_files"]) == 1
+        mf = ed["media_files"][0]
+        assert mf["file_path"] == media.file_path
+        assert mf["width"] == 1920
+        assert mf["codec"] == "h264"

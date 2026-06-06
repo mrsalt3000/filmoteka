@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-016`
+- Last completed task: `MVP-017`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `71%`
+- MVP: `75%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,33 @@
 - None
 
 ### Next recommended tasks
-1. MVP-017 — Implement film card API (single film + related data)
+1. MVP-018 — Implement media file serving endpoint for playback
+
+---
+
+## Task Report: MVP-017 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал `GET /films/{film_id}` — карточка фильма с полными связанными данными: жанры, персоны (с ролью из film_person), издания с медиафайлами и техатрибутами. Создал Pydantic-схемы (GenreOut, PersonOut, MediaFileOut, EditionOut, FilmDetailOut). 5 integration-тестов: 404, пустой фильм, с жанрами, с персонами, с изданиями и медиафайлами.
+- Changed files:
+  - `src/filmoteka/api/schemas/catalog.py` (+ GenreOut, PersonOut, MediaFileOut, EditionOut, FilmDetailOut)
+  - `src/filmoteka/api/catalog.py` (+ GET /films/{id}, joinedload, person-role query)
+  - `tests/integration/test_catalog.py` (+ TestGetFilm — 5 integration-тестов)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 43 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 48/48 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (48/48)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Role из film_person получается отдельным запросом — N+1 нет, но два запроса на карточку. Для MVP норм.
+- Next task:
+  - MVP-018 — Implement media file serving endpoint for playback
 
 ---
 
