@@ -225,7 +225,7 @@ migrations/
 - как проверяли;
 - какой результат;
 - какие хвосты остались;
-- какая следующая задача рекомендуется.
+- какая следующая задача рекомендуется — обязательно номер (TASK-ID) и краткое описание из `agent-tasklist.md`.
 
 ### 7. Commit and push
 
@@ -527,7 +527,7 @@ Design doc не должен быть огромным. Достаточно:
 4. **Checks run**
 5. **Result**
 6. **Risks / follow-ups**
-7. **Recommended next task** — обязательно с номером задачи (TASK-ID), например `MVP-009 — ...`
+7. **Recommended next task** — обязательно с номером задачи (TASK-ID) и кратким описанием из `agent-tasklist.md`, например `MVP-009 — Import metadata enrichment via filename parsing`
 
 ---
 
