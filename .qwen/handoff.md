@@ -1,65 +1,37 @@
-# Handoff — 2026-06-05
+# Handoff — 2026-06-06
 
 ## Stopped at
 
-- Phase: `initialization` — **100%**
-- Last completed task: **INIT-015**
-- Branch: `main` (up to date with `origin/main`)
-- All 9 tests pass, ruff & mypy clean
+- Phase: `mvp` — **50%**
+- Last completed task: **MVP-010**
+- Branch: `main` (up to date with `origin/main`), HEAD `5dbada9`
+- 57 unit tests pass, 25 integration tests pass, ruff & mypy clean
 
 ## Changed files (this session)
 
 ```
-pyproject.toml
-.env.example
-.gitignore
-.dockerignore
-docker-compose.yml
-docker/Dockerfile.api
-docker/Dockerfile.worker
-docker/nginx/default.conf
-src/filmoteka/app.py
-src/filmoteka/main.py
-src/filmoteka/api/health.py
-src/filmoteka/infrastructure/settings.py
-src/filmoteka/infrastructure/library_config.py
-tests/conftest.py
-tests/unit/conftest.py
-tests/unit/test_health.py
-tests/unit/test_smoke.py
-specs/library.yaml
-agents.md
+src/filmoteka/domain/importing/models.py
+src/filmoteka/domain/importing/scan.py
+migrations/versions/0322c3ea4703_add_import_candidates_table.py
+tests/unit/test_scan.py
+tests/integration/test_importing.py
 docs/progress.md
+.qwen/handoff.md
 ```
 
-Removed:
-```
-src/filmoteka/api/.gitkeep
-src/filmoteka/domain/.gitkeep
-src/filmoteka/infrastructure/.gitkeep
-src/filmoteka/tasks/.gitkeep
-tests/unit/.gitkeep
-tests/integration/.gitkeep
-tests/e2e/.gitkeep
-docker/.gitkeep
-specs/.gitkeep
-```
+## First things to verify on next run
 
-## First thing to verify on next run
-
-1. `git status` — only `.qwen/settings.json` should be dirty (pre-existing tool config)
-2. `git log --oneline -1` — should show `4f06878 test: add comprehensive smoke tests`
-3. `.venv/bin/pytest tests/ -v` — 9/9 passed
+1. `git status` — only `.qwen/settings.json` should be dirty
+2. `.venv/bin/pytest tests/unit/ -v` — 57/57 passed
+3. `.venv/bin/pytest -m integration -v` — 25/25 passed (requires `docker compose up -d db`)
 4. `.venv/bin/ruff check src/ tests/` — all checks passed
 5. `.venv/bin/mypy src/ tests/` — success
 
 ## Next recommended step
 
-**MVP-001** — Подключить SQLAlchemy и Alembic:
+**MVP-011** — Technical probe: duration, resolution, codecs
 
-- Создать database engine и session factory (`src/filmoteka/infrastructure/database.py`)
-- Настроить Alembic (`alembic init`, `alembic.ini`)
-- Первая миграция (пустая, для проверки)
-- Smoke test: engine import + `alembic current`
-
-После MVP-001: MVP-002 (core models: Film, Person, Genre) → MVP-003 (миграции).
+- External CLI (ffprobe) wrapper for media file analysis
+- Update ImportCandidate or media_file schema with probe results
+- Store probe data (duration, resolution, codecs, subtitle/audio count)
+- Unit + integration tests

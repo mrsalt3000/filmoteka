@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from filmoteka.infrastructure.database import Base
 
@@ -21,8 +21,41 @@ class ImportRun(Base):
     )
     file_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    candidates: Mapped[list[ImportCandidate]] = relationship(
+        back_populates="import_run", cascade="all, delete-orphan"
+    )
+
     def __repr__(self) -> str:
         return (
             f"<ImportRun id={self.id} status={self.status!r}"
             f" files={self.file_count}>"
+        )
+
+
+# Import candidate statuses
+CANDIDATE_PENDING = "pending"
+CANDIDATE_PROBED = "probed"
+CANDIDATE_IMPORTED = "imported"
+CANDIDATE_ERROR = "error"
+
+
+class ImportCandidate(Base):
+    __tablename__ = "import_candidates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    import_run_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("import_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=CANDIDATE_PENDING
+    )
+
+    import_run: Mapped[ImportRun] = relationship(back_populates="candidates")
+
+    def __repr__(self) -> str:
+        return (
+            f"<ImportCandidate id={self.id} run={self.import_run_id}"
+            f" status={self.status!r} path={self.file_path!r}>"
         )

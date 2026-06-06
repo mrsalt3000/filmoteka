@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-009`
+- Last completed task: `MVP-010`
 - Current branch: `main`
-- Last updated: `2026-06-05`
+- Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `45%`
+- MVP: `50%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,37 @@
 - None
 
 ### Next recommended tasks
-1. MVP-010 — ImportCandidate модель и создание кандидатов при сканировании
+1. MVP-011 — Technical probe: duration, resolution, codecs
+
+---
+
+## Task Report: MVP-010 — 2026-06-06
+
+- Status: `done`
+- Summary: Создал ImportCandidate модель (id, import_run_id FK CASCADE, file_path, size, status), статусные константы (pending/probed/imported/error), миграцию для import_candidates. Обновил scan_downloads() — теперь создаёт ImportCandidate для каждого найденного файла с размером из stat и статусом pending. 4 новых unit-теста (создание, repr, кастомный статус, relationship) + 2 новых integration теста (создание кандидатов в БД, cascade delete при удалении ImportRun).
+- Changed files:
+  - `src/filmoteka/domain/importing/models.py` (+ ImportCandidate, статусные константы, relationship на ImportRun)
+  - `src/filmoteka/domain/importing/scan.py` (+ bulk create ImportCandidate при сканировании)
+  - `migrations/versions/0322c3ea4703_add_import_candidates_table.py` (new)
+  - `tests/unit/test_scan.py` (+ TestImportCandidateModel — 4 теста)
+  - `tests/integration/test_importing.py` (+ 2 теста: создание кандидатов, cascade delete)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 34 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 57/57 passed
+  - `.venv/bin/pytest -m integration -v` — 25/25 passed
+  - `alembic upgrade head && alembic downgrade -1 && alembic upgrade head` — round-trip OK
+- Checks:
+  - pytest unit: `yes` (57/57)
+  - pytest integration: `yes` (25/25)
+  - ruff: `yes`
+  - mypy: `yes`
+  - alembic upgrade/downgrade: `yes`
+- Risks:
+  - Python-level default для status не работает в SQLAlchemy (default — Column-level, не __init__), но все места создания ImportCandidate передают статус явно — не проблема
+- Next task:
+  - MVP-011 — Technical probe: duration, resolution, codecs
 
 ---
 

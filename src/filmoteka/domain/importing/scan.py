@@ -7,7 +7,11 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from filmoteka.domain.importing.models import ImportRun
+from filmoteka.domain.importing.models import (
+    CANDIDATE_PENDING,
+    ImportCandidate,
+    ImportRun,
+)
 from filmoteka.infrastructure.library_config import LibraryConfig
 
 
@@ -18,7 +22,7 @@ def scan_downloads(
     """Scan ``config.paths.downloads_root`` and create an ``ImportRun``.
 
     Returns a persisted ``ImportRun`` with file_count set to the number of
-    matching video files found.
+    matching video files found, each represented as an ``ImportCandidate``.
     """
     root = config.paths.downloads_root
     extensions = config.import_.extensions
@@ -33,6 +37,16 @@ def scan_downloads(
     db.flush()  # get an id
 
     files = _collect_files(root, extensions)
+    candidates = [
+        ImportCandidate(
+            import_run_id=run.id,
+            file_path=str(f),
+            size=f.stat().st_size,
+            status=CANDIDATE_PENDING,
+        )
+        for f in files
+    ]
+    db.add_all(candidates)
     run.file_count = len(files)
     run.finished_at = datetime.now()
     run.status = "completed"
