@@ -222,6 +222,18 @@ class TestWatchState:
         assert body["last_position"] == 300.0
         assert body["finished"] is False
 
+    def test_media_not_found_returns_false(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register_user(client, "nomedi", "pass")
+
+        resp = client.get(
+            "/media/99999/watch/state",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["has_state"] is False
+
     def test_no_state_when_finished(
         self, client: TestClient, db_session: Session
     ) -> None:
@@ -341,6 +353,58 @@ class TestUpdateProgress:
         watch = db_session.get(WatchEvent, event_id)
         assert watch is not None
         assert watch.last_position == 123.45
+
+    def test_update_position_zero(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _auth_token(client)
+        media = self._create_media(db_session)
+
+        resp_start = client.post(
+            f"/media/{media.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        event_id = resp_start.json()["watch_event_id"]
+
+        # Set position to 300 first, then reset to 0
+        client.patch(
+            f"/media/{media.id}/watch/{event_id}/progress",
+            json={"position": 300.0},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        resp = client.patch(
+            f"/media/{media.id}/watch/{event_id}/progress",
+            json={"position": 0.0},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        watch = db_session.get(WatchEvent, event_id)
+        assert watch is not None
+        assert watch.last_position == 0.0
+
+    def test_update_negative_position(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _auth_token(client)
+        media = self._create_media(db_session)
+
+        resp_start = client.post(
+            f"/media/{media.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        event_id = resp_start.json()["watch_event_id"]
+
+        resp = client.patch(
+            f"/media/{media.id}/watch/{event_id}/progress",
+            json={"position": -5.0},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        watch = db_session.get(WatchEvent, event_id)
+        assert watch is not None
+        assert watch.last_position == -5.0
 
     # ------------------------------------------------------------------
     # Helpers

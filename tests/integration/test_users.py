@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from filmoteka.app import create_app
 from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
+from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
 
 pytestmark = pytest.mark.integration
@@ -125,6 +126,43 @@ class TestWatchHistory:
         # Most recent first
         assert body["items"][0]["film_title"] == "Second"
         assert body["items"][1]["film_title"] == "First"
+
+    def test_mix_finished_and_unfinished(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "mixed")
+        media1 = _make_media(db_session, film_title="Watched", file_path="/tmp/w1.mkv")
+        media2 = _make_media(db_session, film_title="Partial", file_path="/tmp/w2.mkv")
+
+        # Start both
+        r1 = client.post(
+            f"/media/{media1.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()
+        client.post(
+            f"/media/{media2.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()
+
+        # Finish the first one
+        event1 = db_session.get(WatchEvent, r1["watch_event_id"])
+        assert event1 is not None
+        event1.finished = True
+        db_session.commit()
+
+        # History should contain both
+        resp = client.get(
+            "/me/watch/history",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        body = resp.json()
+        assert body["total"] == 2
+        finished_items = [i for i in body["items"] if i["finished"]]
+        unfinished_items = [i for i in body["items"] if not i["finished"]]
+        assert len(finished_items) == 1
+        assert len(unfinished_items) == 1
+        assert finished_items[0]["film_title"] == "Watched"
+        assert unfinished_items[0]["film_title"] == "Partial"
 
     def test_other_user_not_visible(
         self, client: TestClient, db_session: Session

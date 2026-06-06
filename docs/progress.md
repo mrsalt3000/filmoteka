@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-022`
+- Last completed task: `MVP-023`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `92%`
+- MVP: `96%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,30 @@
 - None
 
 ### Next recommended tasks
-1. MVP-023 — Write integration tests for watch endpoints
+1. MVP-024 — Implement basic full-text search by title
+
+---
+
+## Task Report: MVP-023 — 2026-06-06
+
+- Status: `done`
+- Summary: Добавил 4 новых integration-теста на watch endpoints: watch_state для несуществующего media (has_state: false), update progress с position=0 (сброс), update progress с отрицательной позицией, history со смесью finished/unfinished событий. Все watch endpoints теперь покрыты: start (4), state (5), progress (6), history (7) = 22 теста.
+- Changed files:
+  - `tests/integration/test_media.py` (+ 3 теста: watch_state media not found, update_position_zero, update_negative_position)
+  - `tests/integration/test_users.py` (+ 1 тест: mix_finished_and_unfinished)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 50 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 74/74 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (74/74)
+  - ruff: `yes`
+  - mypy: `yes`
+- Next task:
+  - MVP-024 — Implement basic full-text search by title
 
 ---
 
