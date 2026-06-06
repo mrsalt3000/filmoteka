@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-015`
+- Last completed task: `MVP-016`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `68%`
+- MVP: `71%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,34 @@
 - None
 
 ### Next recommended tasks
-1. MVP-016 — Implement film list API
+1. MVP-017 — Implement film card API (single film + related data)
+
+---
+
+## Task Report: MVP-016 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал `GET /films` — список фильмов с пагинацией (`skip`, `limit`) и фильтрацией по году (`year`). Создал Pydantic-схемы (`FilmOut`, `FilmListResponse`), роутер catalog, подключил в `app.py`. 8 integration-тестов: пустой список, один/несколько фильмов, фильтрация, пагинация, сортировка по created_at desc, валидация limit/skip.
+- Changed files:
+  - `src/filmoteka/api/schemas/catalog.py` (new — FilmOut, FilmListResponse)
+  - `src/filmoteka/api/catalog.py` (new — GET /films)
+  - `src/filmoteka/app.py` (+ catalog_router)
+  - `tests/integration/test_catalog.py` (new — 8 integration-тестов)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 43 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 43/43 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (43/43)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Нет аутентификации на /films — список публичный. Для MVP норм.
+- Next task:
+  - MVP-017 — Implement film card API (single film + related data)
 
 ---
 
