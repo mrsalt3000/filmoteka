@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-017`
+- Last completed task: `MVP-018`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `75%`
+- MVP: `79%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,33 @@
 - None
 
 ### Next recommended tasks
-1. MVP-018 — Implement media file serving endpoint for playback
+1. MVP-019 — Implement watch start and watch_event recording
+
+---
+
+## Task Report: MVP-018 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал `GET /media/{media_id}/stream` — endpoint для потоковой выдачи медиафайла через `FileResponse` с поддержкой Range-заголовков (seeking). 404 если media_id не найден или файл отсутствует на диске. 4 integration-теста: 404, файл не на диске, успешная выдача, Range-запрос (206 Partial Content).
+- Changed files:
+  - `src/filmoteka/api/media.py` (new — GET /media/{id}/stream)
+  - `src/filmoteka/app.py` (+ media_router)
+  - `tests/integration/test_media.py` (new — 4 integration-теста)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 45 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 52/52 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (52/52)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - `media_type` захардкожен как `video/mp4` — для других форматов (mkv, avi) может быть неверным.
+- Next task:
+  - MVP-019 — Implement watch start and watch_event recording
 
 ---
 
