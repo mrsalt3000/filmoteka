@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-012`
+- Last completed task: `MVP-013`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `57%`
+- MVP: `61%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,34 @@
 - None
 
 ### Next recommended tasks
-1. MVP-013 — Layout file in target library (copy/move + update DB path)
+1. MVP-014 — Implement import idempotency
+
+---
+
+## Task Report: MVP-013 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал `layout_file()` — перемещение отсканированного файла из downloads в целевую библиотеку. Целевой путь: `<target_root>/<year>/<title> (<year>)/<filename>`. При отсутствии года: `unknown/<title>/`. Автоматическое разрешение коллизий имён (суффикс `(1)`, `(2)` и т.д.). Санитизация имени (удаление недопустимых символов). 14 unit-тестов (генерация путей, sanitise, unique_path, ошибки) + 3 integration-теста (реальное перемещение файла с обновлением пути в БД, проверка года/без года, верификация DB-пути).
+- Changed files:
+  - `src/filmoteka/domain/importing/layout.py` (new — layout_file, _target_dir, _sanitise, _unique_path, LayoutError)
+  - `tests/unit/test_layout.py` (new — 14 unit-тестов)
+  - `tests/integration/test_importing.py` (+ TestLayoutFile — 3 integration-теста)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 40 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 103/103 passed
+  - `.venv/bin/pytest -m integration -v` — 31/31 passed
+- Checks:
+  - pytest unit: `yes` (103/103)
+  - pytest integration: `yes` (31/31)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Перемещение (shutil.move) — не атомарно с записью в БД. При сбое между move и flush файл может быть потерян в обоих местах.
+  - Sanitisation может обрезать значимые символы в нелатинских языках (тест на русский есть, но другие не покрыты).
+- Next task:
+  - MVP-014 — Implement import idempotency
 
 ---
 

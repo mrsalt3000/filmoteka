@@ -8,8 +8,10 @@ from pathlib import Path
 import pytest
 from sqlalchemy.orm import Session
 
+from filmoteka.domain.importing.layout import layout_file
 from filmoteka.domain.importing.models import (
     CANDIDATE_ERROR,
+    CANDIDATE_IMPORTED,
     CANDIDATE_PROBED,
     ImportCandidate,
     ImportRun,
@@ -20,9 +22,15 @@ from filmoteka.infrastructure.library_config import LibraryConfig
 pytestmark = pytest.mark.integration
 
 
-def _make_config(downloads_root: Path) -> LibraryConfig:
+def _make_config(
+    downloads_root: Path,
+    target_root: str | None = None,
+) -> LibraryConfig:
     return LibraryConfig.model_validate({
-        "paths": {"downloads_root": str(downloads_root), "target_root": "/media/library"},
+        "paths": {
+            "downloads_root": str(downloads_root),
+            "target_root": target_root or "/media/library",
+        },
         "import": {"extensions": [".mp4", ".mkv"], "max_file_size_gb": 50},
         "organization": "by_year",
     })
@@ -212,3 +220,95 @@ class TestCandidateCascadeDelete:
             .count()
         )
         assert candidates_after == 0
+
+
+class TestLayoutFile:
+    """layout_file — move file to target library with real DB."""
+
+    def test_move_file_with_year(self, db_session: Session, tmp_path: Path) -> None:
+        downloads = tmp_path / "downloads"
+        target = tmp_path / "library"
+        downloads.mkdir()
+
+        video = downloads / "The.Matrix.1999.1080p.mkv"
+        video.write_text("fake video content")
+
+        config = _make_config(downloads, target_root=str(target))
+        run = scan_downloads(config, db_session)
+        db_session.refresh(run)
+
+        candidates = (
+            db_session.query(ImportCandidate)
+            .filter(ImportCandidate.import_run_id == run.id)
+            .all()
+        )
+        assert len(candidates) == 1
+        c = candidates[0]
+
+        layout_file(c, config, db_session)
+        db_session.refresh(c)
+
+        assert c.status == CANDIDATE_IMPORTED
+        # File should no longer be at source
+        assert not video.exists()
+        # File should be at the new path
+        new_path = Path(c.file_path)
+        assert new_path.exists()
+        assert new_path.read_text() == "fake video content"
+        # Path should follow the year layout
+        assert "1999" in new_path.parts
+        assert "The Matrix (1999)" in new_path.parts
+
+    def test_move_file_without_year(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        downloads = tmp_path / "downloads"
+        target = tmp_path / "library"
+        downloads.mkdir()
+
+        video = downloads / "Some Movie.mkv"
+        video.write_text("content")
+
+        config = _make_config(downloads, target_root=str(target))
+        run = scan_downloads(config, db_session)
+        db_session.refresh(run)
+
+        candidates = (
+            db_session.query(ImportCandidate)
+            .filter(ImportCandidate.import_run_id == run.id)
+            .all()
+        )
+        c = candidates[0]
+
+        layout_file(c, config, db_session)
+        db_session.refresh(c)
+
+        assert c.status == CANDIDATE_IMPORTED
+        new_path = Path(c.file_path)
+        assert new_path.exists()
+        assert "unknown" in new_path.parts
+
+    def test_move_updates_db_path(self, db_session: Session, tmp_path: Path) -> None:
+        downloads = tmp_path / "downloads"
+        target = tmp_path / "library"
+        downloads.mkdir()
+        (downloads / "Avatar.2009.2160p.mkv").write_text("data")
+
+        config = _make_config(downloads, target_root=str(target))
+        run = scan_downloads(config, db_session)
+        db_session.refresh(run)
+
+        c = (
+            db_session.query(ImportCandidate)
+            .filter(ImportCandidate.import_run_id == run.id)
+            .one()
+        )
+        old_path = c.file_path
+
+        layout_file(c, config, db_session)
+        db_session.refresh(c)
+
+        assert c.file_path != old_path
+        # DB path should be absolute and point to an existing file
+        assert Path(c.file_path).exists()
+        assert target.as_posix() in c.file_path
