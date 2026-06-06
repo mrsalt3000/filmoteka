@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-021`
+- Last completed task: `MVP-022`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `88%`
+- MVP: `92%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,32 @@
 - None
 
 ### Next recommended tasks
-1. MVP-022 — Implement watch history
+1. MVP-023 — Write integration tests for watch endpoints
+
+---
+
+## Task Report: MVP-022 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал `GET /me/watch/history` — история просмотров текущего пользователя. Возвращает список WatchEvent с информацией о фильме (film_id, title, year) через joins: WatchEvent → MediaFile → MovieEdition → Film. Пагинация (skip/limit). Создал новый роутер `users.py` и схемы WatchHistoryItem/WatchHistoryResponse. 6 integration-тестов: 401, пустая история, одна запись, несколько (порядок DESC), изоляция пользователей, пагинация.
+- Changed files:
+  - `src/filmoteka/api/schemas/watch.py` (+ WatchHistoryItem, WatchHistoryResponse)
+  - `src/filmoteka/api/users.py` (new — GET /me/watch/history)
+  - `src/filmoteka/app.py` (+ users_router)
+  - `tests/integration/test_users.py` (new — 6 integration-тестов)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 50 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 70/70 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (70/70)
+  - ruff: `yes`
+  - mypy: `yes`
+- Next task:
+  - MVP-023 — Write integration tests for watch endpoints
 
 ---
 

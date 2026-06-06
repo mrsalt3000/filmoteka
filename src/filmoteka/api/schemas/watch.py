@@ -26,3 +26,19 @@ class WatchStateResponse(BaseModel):
     started_at: datetime | None = None
     last_position: float | None = None
     finished: bool | None = None
+
+
+class WatchHistoryItem(BaseModel):
+    watch_event_id: int
+    media_file_id: int
+    film_id: int
+    film_title: str
+    film_year: int | None = None
+    started_at: datetime
+    last_position: float
+    finished: bool
+
+
+class WatchHistoryResponse(BaseModel):
+    items: list[WatchHistoryItem]
+    total: int
