@@ -130,6 +130,59 @@ class TestListFilms:
         resp = client.get("/films?skip=-1")
         assert resp.status_code == 422
 
+    def test_search_by_partial_title(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        db_session.add_all([
+            Film(title="The Matrix", year=1999),
+            Film(title="The Matrix Reloaded", year=2003),
+            Film(title="Inception", year=2010),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?q=matrix")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        titles = {f["title"] for f in body["items"]}
+        assert titles == {"The Matrix", "The Matrix Reloaded"}
+
+    def test_search_case_insensitive(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        db_session.add(Film(title="Interstellar", year=2014))
+        db_session.commit()
+
+        resp = client.get("/films?q=INTER")
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 1
+
+    def test_search_empty_result(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        db_session.add(Film(title="Something", year=2020))
+        db_session.commit()
+
+        resp = client.get("/films?q=zzzzz")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 0
+        assert body["items"] == []
+
+    def test_search_with_year_filter(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        db_session.add_all([
+            Film(title="The Matrix", year=1999),
+            Film(title="The Matrix Reloaded", year=2003),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?q=matrix&year=2003")
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "The Matrix Reloaded"
+
 
 class TestGetFilm:
     """GET /films/{id}"""

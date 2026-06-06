@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-023`
+- Last completed task: `MVP-024`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `96%`
+- MVP: `100%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,30 @@
 - None
 
 ### Next recommended tasks
-1. MVP-024 — Implement basic full-text search by title
+1. MVP-025 — Implement minimal browser frontend (films list)
+
+---
+
+## Task Report: MVP-024 — 2026-06-06
+
+- Status: `done`
+- Summary: Добавил параметр `q` в `GET /films` — поиск по части названия (case-insensitive ILIKE). Комбинируется с существующей фильтрацией по `year`. 4 integration-теста: частичное совпадение, регистронезависимость, пустой результат, q + year.
+- Changed files:
+  - `src/filmoteka/api/catalog.py` (+ q параметр в list_films)
+  - `tests/integration/test_catalog.py` (+ 4 search integration-теста)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 50 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 78/78 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (78/78)
+  - ruff: `yes`
+  - mypy: `yes`
+- Next task:
+  - MVP-025 — Implement minimal browser frontend (films list)
 
 ---
 

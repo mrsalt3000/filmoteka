@@ -33,10 +33,15 @@ def list_films(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     year: int | None = Query(None),
+    q: str | None = Query(None, min_length=1),
     db: Session = Depends(get_db),
 ) -> FilmListResponse:
-    """Return a paginated list of films, optionally filtered by year."""
+    """Return a paginated list of films, optionally filtered by year or
+    full-text search on title (case-insensitive)."""
     query = db.query(Film)
+
+    if q:
+        query = query.filter(Film.title.ilike(f"%{q}%"))
 
     if year is not None:
         query = query.filter(Film.year == year)
