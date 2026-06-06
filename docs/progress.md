@@ -15,6 +15,21 @@
 
 ---
 
+## Task Report: FIX-001 — 2026-06-06
+
+- Status: `done`
+- Summary: Починил `docker compose up` — сервис api не мог подключиться к PostgreSQL из-за того, что `alembic.ini` содержал hardcoded `sqlalchemy.url` с хостом `localhost`, а `migrations/env.py` выбирал это значение вместо env-переменной `DATABASE_URL` из `docker-compose.yml` (где хост корректно указан как `db`). Поменял приоритет: теперь `settings.database_url` (env var) используется первой, `alembic.ini` — fallback.
+- Changed files:
+  - `migrations/env.py` — swapped `or` operands: env var takes precedence over config file
+- Commands run:
+  - `docker compose up --build -d` — api container healthy, all 9 migrations ran, uvicorn started
+- Checks:
+  - docker compose: `yes` (api healthy, healthcheck 200 OK)
+- Next task:
+  - V1-001 — Plan V1 features
+
+---
+
 ## Current Project Snapshot
 
 ### Current phase

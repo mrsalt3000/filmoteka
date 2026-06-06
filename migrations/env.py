@@ -16,9 +16,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# Env var (settings.database_url) takes precedence over alembic.ini default.
+# This ensures the Docker Compose DATABASE_URL with the `db` hostname is used.
 config.set_main_option(
     "sqlalchemy.url",
-    config.get_main_option("sqlalchemy.url") or settings.database_url,
+    settings.database_url or config.get_main_option("sqlalchemy.url"),
 )
 
 target_metadata = Base.metadata
