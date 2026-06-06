@@ -11,7 +11,11 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from filmoteka.api.auth import _get_current_user
-from filmoteka.api.schemas.watch import WatchProgressRequest, WatchStartResponse
+from filmoteka.api.schemas.watch import (
+    WatchProgressRequest,
+    WatchStartResponse,
+    WatchStateResponse,
+)
 from filmoteka.domain.access.models import User
 from filmoteka.domain.catalog.models import MediaFile
 from filmoteka.domain.watching.models import WatchEvent
@@ -47,6 +51,39 @@ def stream_media(
         path=path,
         filename=path.name,
         media_type="video/mp4",
+    )
+
+
+@router.get("/{media_id}/watch/state", response_model=WatchStateResponse)
+def watch_state(
+    media_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> WatchStateResponse:
+    """Return the current watch state for a media file.
+
+    If an unfinished ``WatchEvent`` exists, returns it with the last
+    position so the client can offer resume.  No side effects.
+    """
+    event = (
+        db.query(WatchEvent)
+        .filter(
+            WatchEvent.media_file_id == media_id,
+            WatchEvent.user_id == current_user.id,
+            WatchEvent.finished == False,  # noqa: E712
+        )
+        .first()
+    )
+    if event is None:
+        return WatchStateResponse(has_state=False)
+
+    return WatchStateResponse(
+        has_state=True,
+        watch_event_id=event.id,
+        media_file_id=event.media_file_id,
+        started_at=event.started_at,
+        last_position=event.last_position,
+        finished=event.finished,
     )
 
 

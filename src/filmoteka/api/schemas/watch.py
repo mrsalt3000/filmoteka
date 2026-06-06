@@ -17,3 +17,12 @@ class WatchStartResponse(BaseModel):
 
 class WatchProgressRequest(BaseModel):
     position: float
+
+
+class WatchStateResponse(BaseModel):
+    has_state: bool
+    watch_event_id: int | None = None
+    media_file_id: int | None = None
+    started_at: datetime | None = None
+    last_position: float | None = None
+    finished: bool | None = None

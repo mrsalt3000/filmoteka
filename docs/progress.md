@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-020`
+- Last completed task: `MVP-021`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `85%`
+- MVP: `88%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,31 @@
 - None
 
 ### Next recommended tasks
-1. MVP-021 — Implement resume playback
+1. MVP-022 — Implement watch history
+
+---
+
+## Task Report: MVP-021 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал `GET /media/{media_id}/watch/state` — проверка точки возобновления просмотра без побочных эффектов. Возвращает `{has_state: true/false}` + last_position при наличии незавершённого WatchEvent. Завершённые события (finished=true) не возвращаются. 4 integration-теста: 401, нет состояния, есть состояние с позицией, finished → has_state: false.
+- Changed files:
+  - `src/filmoteka/api/schemas/watch.py` (+ WatchStateResponse)
+  - `src/filmoteka/api/media.py` (+ GET /media/{id}/watch/state)
+  - `tests/integration/test_media.py` (+ TestWatchState — 4 integration-теста)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 48 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 64/64 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (64/64)
+  - ruff: `yes`
+  - mypy: `yes`
+- Next task:
+  - MVP-022 — Implement watch history
 
 ---
 

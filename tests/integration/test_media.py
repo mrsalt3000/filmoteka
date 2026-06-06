@@ -169,6 +169,104 @@ class TestWatchStart:
         assert resp2.json()["watch_event_id"] == event_id_1
 
 
+class TestWatchState:
+    """GET /media/{id}/watch/state"""
+
+    def test_requires_auth(self, client: TestClient) -> None:
+        resp = client.get("/media/1/watch/state")
+        assert resp.status_code == 401
+
+    def test_no_state(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register_user(client, "nostate", "pass")
+        media = self._create_media(db_session)
+
+        resp = client.get(
+            f"/media/{media.id}/watch/state",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["has_state"] is False
+
+    def test_returns_unfinished_event(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register_user(client, "resume", "pass")
+        media = self._create_media(db_session)
+
+        # Start watch
+        start_resp = client.post(
+            f"/media/{media.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        event_id = start_resp.json()["watch_event_id"]
+
+        # Update position
+        client.patch(
+            f"/media/{media.id}/watch/{event_id}/progress",
+            json={"position": 300.0},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # Check state — should return the event with position
+        resp = client.get(
+            f"/media/{media.id}/watch/state",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["has_state"] is True
+        assert body["watch_event_id"] == event_id
+        assert body["last_position"] == 300.0
+        assert body["finished"] is False
+
+    def test_no_state_when_finished(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register_user(client, "doneuser", "pass")
+        media = self._create_media(db_session)
+
+        # Start watch
+        start_resp = client.post(
+            f"/media/{media.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        event_id = start_resp.json()["watch_event_id"]
+
+        # Mark as finished
+        event = db_session.get(WatchEvent, event_id)
+        assert event is not None
+        event.finished = True
+        db_session.commit()
+
+        # State should be empty
+        resp = client.get(
+            f"/media/{media.id}/watch/state",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        body = resp.json()
+        assert body["has_state"] is False
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _create_media(db_session: Session) -> MediaFile:
+        film = Film(title="State Test", year=2020)
+        db_session.add(film)
+        db_session.flush()
+        edition = MovieEdition(film_id=film.id)
+        db_session.add(edition)
+        db_session.flush()
+        media = MediaFile(edition_id=edition.id, file_path="/tmp/s.mkv", file_size=100)
+        db_session.add(media)
+        db_session.commit()
+        return media
+
+
 class TestUpdateProgress:
     """PATCH /media/{id}/watch/{watch_event_id}/progress"""
 
