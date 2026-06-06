@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 from sqlalchemy.orm import Session
 
-from filmoteka.domain.importing.models import ImportCandidate, ImportRun
-from filmoteka.domain.importing.scan import scan_downloads
+from filmoteka.domain.importing.models import (
+    CANDIDATE_ERROR,
+    CANDIDATE_PROBED,
+    ImportCandidate,
+    ImportRun,
+)
+from filmoteka.domain.importing.scan import probe_candidates, scan_downloads
 from filmoteka.infrastructure.library_config import LibraryConfig
 
 pytestmark = pytest.mark.integration
@@ -20,6 +26,28 @@ def _make_config(downloads_root: Path) -> LibraryConfig:
         "import": {"extensions": [".mp4", ".mkv"], "max_file_size_gb": 50},
         "organization": "by_year",
     })
+
+
+def _make_test_video(path: Path) -> None:
+    """Generate a tiny valid MP4 with one video + one audio stream."""
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f", "lavfi",
+            "-i", "testsrc=duration=1:size=32x24:rate=1",
+            "-f", "lavfi",
+            "-i", "anullsrc=r=44100:cl=mono",
+            "-shortest",
+            "-c:v", "libx264",
+            "-c:a", "aac",
+            "-pix_fmt", "yuv420p",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
 
 
 class TestScanDownloads:
@@ -74,6 +102,92 @@ class TestScanDownloads:
         assert candidates[1].file_path == str(tmp_path / "subdir" / "nested.mkv")
         assert candidates[1].size == 200
         assert candidates[1].import_run_id == run.id
+
+
+class TestProbeCandidates:
+    """probe_candidates — end-to-end with real DB and real media file."""
+
+    def test_probe_success(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        (tmp_path / "film.mp4").touch()
+        config = _make_config(tmp_path)
+        run = scan_downloads(config, db_session)
+        db_session.refresh(run)
+
+        candidates = (
+            db_session.query(ImportCandidate)
+            .filter(ImportCandidate.import_run_id == run.id)
+            .all()
+        )
+        assert len(candidates) == 1
+
+        # Replace the empty file with a real video
+        _make_test_video(Path(candidates[0].file_path))
+
+        probe_candidates(candidates, db_session)
+        db_session.refresh(candidates[0])
+
+        c = candidates[0]
+        assert c.status == CANDIDATE_PROBED
+        assert c.probed_at is not None
+        assert c.codec is not None
+        assert c.width is not None and c.width > 0
+        assert c.height is not None and c.height > 0
+        assert c.audio_codec is not None
+
+    def test_probe_missing_file(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        (tmp_path / "film.mp4").touch()
+        config = _make_config(tmp_path)
+        run = scan_downloads(config, db_session)
+        db_session.refresh(run)
+
+        candidates = (
+            db_session.query(ImportCandidate)
+            .filter(ImportCandidate.import_run_id == run.id)
+            .all()
+        )
+
+        # Delete the file so probe fails
+        Path(candidates[0].file_path).unlink()
+
+        probe_candidates(candidates, db_session)
+        db_session.refresh(candidates[0])
+
+        assert candidates[0].status == CANDIDATE_ERROR
+        assert candidates[0].probed_at is None
+
+    def test_probe_skips_already_probed(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        (tmp_path / "film.mp4").touch()
+        config = _make_config(tmp_path)
+        run = scan_downloads(config, db_session)
+        db_session.refresh(run)
+
+        candidates = (
+            db_session.query(ImportCandidate)
+            .filter(ImportCandidate.import_run_id == run.id)
+            .all()
+        )
+        _make_test_video(Path(candidates[0].file_path))
+
+        # First probe — should succeed
+        probe_candidates(candidates, db_session)
+        db_session.refresh(candidates[0])
+        assert candidates[0].status == CANDIDATE_PROBED
+        first_probed_at = candidates[0].probed_at
+
+        # Second probe — should skip because status is already probed
+        probe_candidates(candidates, db_session)
+        db_session.refresh(candidates[0])
+        assert candidates[0].probed_at == first_probed_at
+
+
+class TestCandidateCascadeDelete:
+    """Cascade delete of ImportCandidate when ImportRun is removed."""
 
     def test_candidate_cascade_delete(
         self, db_session: Session, tmp_path: Path

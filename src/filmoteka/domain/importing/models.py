@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from filmoteka.infrastructure.database import Base
@@ -51,6 +51,16 @@ class ImportCandidate(Base):
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default=CANDIDATE_PENDING
     )
+
+    # Probe results — populated by ffprobe after scan
+    probed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    duration_secs: Mapped[float | None] = mapped_column(Float, nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    codec: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    audio_codec: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    audio_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    subtitle_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     import_run: Mapped[ImportRun] = relationship(back_populates="candidates")
 

@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-010`
+- Last completed task: `MVP-011`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `50%`
+- MVP: `54%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,37 @@
 - None
 
 ### Next recommended tasks
-1. MVP-011 — Technical probe: duration, resolution, codecs
+1. MVP-012 — Probe pipeline integration: wire probe_candidates into the scan flow
+
+---
+
+## Task Report: MVP-011 — 2026-06-06
+
+- Status: `done`
+- Summary: Создал ffprobe wrapper (`MediaProbeResult`, `probe_media()`) для анализа медиафайлов — извлекает длительность, разрешение, кодеки, количество аудио- и субтитр-дорожек. Добавил 8 колонок probe-результатов в ImportCandidate (`probed_at`, `duration_secs`, `width`, `height`, `codec`, `audio_codec`, `audio_count`, `subtitle_count`) + миграцию. Реализовал `probe_candidates()` — обходит список кандидатов, запускает ffprobe и заполняет результат. 10 unit-тестов (парсинг JSON, ошибки: файл не найден, ffprobe не установлен, timeout, ненулевой exit, некорректный JSON, иммутабельность) + 3 integration-теста (успешный probe, отсутствующий файл → error, повторный пропуск уже probed).
+- Changed files:
+  - `src/filmoteka/infrastructure/media_probe.py` (new — ffprobe wrapper)
+  - `src/filmoteka/domain/importing/models.py` (+ 8 probe-колонок в ImportCandidate)
+  - `src/filmoteka/domain/importing/scan.py` (+ `probe_candidates()`, импорты CANDIDATE_ERROR/probe_media)
+  - `migrations/versions/d4a7fb449f2b_add_probe_columns_to_import_candidates.py` (new)
+  - `tests/unit/test_media_probe.py` (new — 10 unit-тестов)
+  - `tests/integration/test_importing.py` (+ 3 integration-теста для probe)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 36 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 68/68 passed
+  - `.venv/bin/pytest -m integration -v` — 28/28 passed
+- Checks:
+  - pytest unit: `yes` (68/68)
+  - pytest integration: `yes` (28/28)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Ubuntu ffmpeg 8.0.1 — совместимость с другими дистрибутивами не проверялась
+  - subprocess timeout 60s — для очень больших файлов может не хватить
+- Next task:
+  - MVP-012 — Probe pipeline integration: wire probe_candidates into the scan flow
 
 ---
 

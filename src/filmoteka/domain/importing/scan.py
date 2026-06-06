@@ -8,11 +8,17 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from filmoteka.domain.importing.models import (
+    CANDIDATE_ERROR,
     CANDIDATE_PENDING,
+    CANDIDATE_PROBED,
     ImportCandidate,
     ImportRun,
 )
 from filmoteka.infrastructure.library_config import LibraryConfig
+from filmoteka.infrastructure.media_probe import (
+    MediaProbeError,
+    probe_media,
+)
 
 
 def scan_downloads(
@@ -53,6 +59,39 @@ def scan_downloads(
     db.flush()
 
     return run
+
+
+def probe_candidates(
+    candidates: list[ImportCandidate],
+    db: Session,
+) -> None:
+    """Run ffprobe on each pending candidate and store results.
+
+    Candidates that probe successfully are set to ``CANDIDATE_PROBED``.
+    Candidates that fail get status ``CANDIDATE_ERROR``.
+    """
+    for candidate in candidates:
+        if candidate.status != CANDIDATE_PENDING:
+            continue
+
+        path = Path(candidate.file_path)
+        try:
+            result = probe_media(path)
+        except MediaProbeError:
+            candidate.status = CANDIDATE_ERROR
+            db.flush()
+            continue
+
+        candidate.probed_at = datetime.now()
+        candidate.duration_secs = result.duration_secs
+        candidate.width = result.width
+        candidate.height = result.height
+        candidate.codec = result.codec
+        candidate.audio_codec = result.audio_codec
+        candidate.audio_count = result.audio_count
+        candidate.subtitle_count = result.subtitle_count
+        candidate.status = CANDIDATE_PROBED
+        db.flush()
 
 
 def _collect_files(root: Path, extensions: list[str]) -> list[Path]:
