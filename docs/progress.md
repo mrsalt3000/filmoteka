@@ -20,13 +20,13 @@
 ### Current phase
 - Phase: `mvp`
 - Active task: `NONE`
-- Last completed task: `MVP-018`
+- Last completed task: `MVP-019`
 - Current branch: `main`
 - Last updated: `2026-06-06`
 
 ### Overall status
 - Initialization: `100%`
-- MVP: `79%`
+- MVP: `82%`
 - V1: `0%`
 - V2: `0%`
 
@@ -34,7 +34,36 @@
 - None
 
 ### Next recommended tasks
-1. MVP-019 — Implement watch start and watch_event recording
+1. MVP-020 — Implement playback progress saving (playback_states)
+
+---
+
+## Task Report: MVP-019 — 2026-06-06
+
+- Status: `done`
+- Summary: Реализовал `POST /media/{media_id}/watch/start` — старт просмотра с аутентификацией. Создал модель `WatchEvent` (media_file_id, user_id, started_at, last_position, finished) + миграцию. При повторном вызове для того же пользователя и файла возвращается существующий незавершённый WatchEvent (resume). 4 integration-теста: без токена (401), несуществующий media (404), успешный старт, resume.
+- Changed files:
+  - `src/filmoteka/domain/watching/__init__.py` (new)
+  - `src/filmoteka/domain/watching/models.py` (new — WatchEvent model)
+  - `src/filmoteka/api/schemas/watch.py` (new — WatchStartResponse)
+  - `src/filmoteka/api/media.py` (+ POST /media/{id}/watch/start)
+  - `migrations/versions/a1b2c3d4e5f6_add_watch_events_table.py` (new)
+  - `tests/integration/test_media.py` (+ TestWatchStart — 4 integration-теста)
+  - `docs/progress.md` (snapshot + report)
+- Commands run:
+  - `.venv/bin/ruff check src/ tests/` — all checks passed
+  - `.venv/bin/mypy src/ tests/` — success, 47 source files
+  - `.venv/bin/pytest tests/unit/ -v` — 105/105 passed
+  - `.venv/bin/pytest -m integration -v` — 56/56 passed
+- Checks:
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (56/56)
+  - ruff: `yes`
+  - mypy: `yes`
+- Risks:
+  - Нет механизма автоматической финализации — WatchEvent остаётся unfinished до явного вызова.
+- Next task:
+  - MVP-020 — Implement playback progress saving (playback_states)
 
 ---
 
