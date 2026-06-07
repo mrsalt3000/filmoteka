@@ -161,6 +161,6 @@ def update_progress(
         )
 
     event.last_position = body.position
-    db.flush()
+    db.commit()
 
     return {"status": "ok"}
