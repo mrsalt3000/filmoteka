@@ -15,6 +15,20 @@
 
 ---
 
+## Task Report: V1-027 — 2026-06-07
+
+- Status: `done`
+- Summary: Добавил admin-страницу во фронтенд с аутентификацией и кнопкой импорта. В `index.html`: login-форма (POST /auth/login), токен в localStorage, проверка роли через /auth/me, ссылка "Admin" в навбаре только для admin, админ-страница (#admin) с кнопкой "Scan library", confirm-диалог, спиннер, import report.
+- Changed files:
+  - `src/filmoteka/static/index.html` (+ login/logout, auth state, admin page, scan button + report)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (90/90)
+- Next task:
+  - V1-002 — Implement external metadata providers layer
+
 ## Task Report: V1-001 — 2026-06-07
 
 - Status: `done`

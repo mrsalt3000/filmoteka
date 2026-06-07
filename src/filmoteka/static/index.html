@@ -38,12 +38,14 @@
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-nav { display: flex; align-items: center; gap: 1rem; padding: 1rem 2rem; background: var(--surface); position: sticky; top: 0; z-index: 10; }
-nav h1 { font-size: 1.25rem; }
-nav input { flex: 1; max-width: 400px; padding: .5rem .75rem; border: 1px solid var(--surface2); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-size: .9rem; }
+nav { display: flex; align-items: center; gap: 1rem; padding: 1rem 2rem; background: var(--surface); position: sticky; top: 0; z-index: 10; flex-wrap: wrap; }
+nav h1 { font-size: 1.25rem; white-space: nowrap; }
+nav input { flex: 1; min-width: 140px; max-width: 400px; padding: .5rem .75rem; border: 1px solid var(--surface2); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-size: .9rem; }
 nav input::placeholder { color: var(--text2); }
-#theme-btn { background: none; border: 1px solid var(--text2); color: var(--text); border-radius: var(--radius); padding: .35rem .6rem; cursor: pointer; font-size: 1rem; line-height: 1; }
-#theme-btn:hover { border-color: var(--text); }
+.nav-btn { background: none; border: 1px solid var(--text2); color: var(--text); border-radius: var(--radius); padding: .35rem .6rem; cursor: pointer; font-size: .9rem; line-height: 1; white-space: nowrap; }
+.nav-btn:hover { border-color: var(--text); }
+.nav-link { color: var(--text2); cursor: pointer; font-size: .9rem; white-space: nowrap; }
+.nav-link:hover { color: var(--text); }
 .page { padding: 1.5rem 2rem; }
 .film-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
 .film-card { background: var(--surface); border-radius: var(--radius); padding: 1.25rem; cursor: pointer; transition: transform .15s, background .15s; }
@@ -65,13 +67,41 @@ nav input::placeholder { color: var(--text2); }
 .spinner { text-align: center; padding: 3rem; color: var(--text2); }
 .error { color: var(--accent); padding: 1rem; }
 .empty { color: var(--text2); padding: 2rem; text-align: center; }
+
+/* ── Login form ─────────────────────────────── */
+.login-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 20; }
+.login-box { background: var(--surface); padding: 2rem; border-radius: var(--radius); width: 320px; display: flex; flex-direction: column; gap: .75rem; }
+.login-box h2 { font-size: 1.1rem; }
+.login-box input { padding: .5rem .75rem; border: 1px solid var(--surface2); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-size: .9rem; }
+.login-box button { padding: .5rem; border: none; border-radius: var(--radius); background: var(--accent); color: #fff; font-size: .9rem; cursor: pointer; }
+.login-box button:hover { opacity: .9; }
+.login-box .login-error { color: var(--accent); font-size: .85rem; }
+.login-box .login-cancel { background: none; border: 1px solid var(--text2); color: var(--text); }
+
+/* ── Admin page ─────────────────────────────── */
+.admin-page { max-width: 600px; }
+.admin-page h2 { margin-bottom: 1rem; }
+.admin-page .scan-btn { padding: .75rem 2rem; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 1rem; cursor: pointer; }
+.admin-page .scan-btn:hover { opacity: .9; }
+.admin-page .scan-btn:disabled { opacity: .5; cursor: not-allowed; }
+.admin-report { margin-top: 1.5rem; background: var(--surface); border-radius: var(--radius); padding: 1.25rem; }
+.admin-report h3 { font-size: 1rem; margin-bottom: .75rem; }
+.admin-report table { width: 100%; border-collapse: collapse; }
+.admin-report td { padding: .35rem .5rem; font-size: .9rem; }
+.admin-report td:first-child { color: var(--text2); }
+.admin-report .report-errors { margin-top: .75rem; }
+.admin-report .report-errors li { color: var(--accent); font-size: .85rem; }
 </style>
 </head>
 <body>
-<nav>
+<nav id="navbar">
   <h1><a href="#list" onclick="navigate('list')">🎬 Filmoteka</a></h1>
   <input id="search" type="text" placeholder="Search films…" oninput="onSearch(event)">
-  <button id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+  <a class="nav-link" id="admin-link" href="#admin" onclick="navigate('admin')" style="display:none">Admin</a>
+  <span class="nav-link" id="login-btn" onclick="showLogin()">Log in</span>
+  <span class="nav-link" id="user-label" style="display:none"></span>
+  <span class="nav-link" id="logout-btn" style="display:none" onclick="handleLogout()">Log out</span>
+  <button class="nav-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
 </nav>
 <div id="app" class="page"></div>
 
@@ -92,8 +122,105 @@ function toggleTheme() {
   setTheme(getTheme() === 'light' ? 'dark' : 'light');
 }
 
-// Apply theme before render
 setTheme(getTheme());
+
+// ── Auth state ─────────────────────────────────────────────────────
+const TOKEN_KEY = 'filmoteka-token';
+let currentUser = null;
+
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
+function clearToken() { localStorage.removeItem(TOKEN_KEY); currentUser = null; }
+
+async function loadUser() {
+  const token = getToken();
+  if (!token) { currentUser = null; renderNav(); return; }
+  try {
+    const resp = await fetch('/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+    if (!resp.ok) { clearToken(); renderNav(); return; }
+    currentUser = await resp.json();
+  } catch {
+    clearToken();
+  }
+  renderNav();
+}
+
+function renderNav() {
+  const loginBtn = document.getElementById('login-btn');
+  const userLabel = document.getElementById('user-label');
+  const logoutBtn = document.getElementById('logout-btn');
+  const adminLink = document.getElementById('admin-link');
+
+  if (currentUser) {
+    loginBtn.style.display = 'none';
+    userLabel.style.display = 'inline';
+    userLabel.textContent = currentUser.username;
+    logoutBtn.style.display = 'inline';
+    adminLink.style.display = currentUser.role === 'admin' ? 'inline' : 'none';
+  } else {
+    loginBtn.style.display = 'inline';
+    userLabel.style.display = 'none';
+    logoutBtn.style.display = 'none';
+    adminLink.style.display = 'none';
+  }
+}
+
+// ── Login ──────────────────────────────────────────────────────────
+function showLogin() {
+  const overlay = document.createElement('div');
+  overlay.className = 'login-overlay';
+  overlay.id = 'login-overlay';
+  overlay.innerHTML = `
+    <div class="login-box">
+      <h2>Log in</h2>
+      <input id="login-username" type="text" placeholder="Username" autocomplete="username">
+      <input id="login-password" type="password" placeholder="Password" autocomplete="current-password">
+      <div class="login-error" id="login-error"></div>
+      <button onclick="handleLogin()">Log in</button>
+      <button class="login-cancel" onclick="closeLogin()">Cancel</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('login-username').focus();
+
+  overlay.addEventListener('keydown', function onKey(e) {
+    if (e.key === 'Escape') closeLogin();
+    if (e.key === 'Enter') handleLogin();
+  });
+}
+
+function closeLogin() {
+  const el = document.getElementById('login-overlay');
+  if (el) el.remove();
+}
+
+async function handleLogin() {
+  const username = document.getElementById('login-username').value;
+  const password = document.getElementById('login-password').value;
+  const errorEl = document.getElementById('login-error');
+  errorEl.textContent = '';
+  try {
+    const resp = await fetch('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!resp.ok) throw new Error('Invalid username or password');
+    const data = await resp.json();
+    setToken(data.access_token);
+    closeLogin();
+    await loadUser();
+    render();
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
+}
+
+async function handleLogout() {
+  clearToken();
+  renderNav();
+  if (currentRoute().view === 'admin') navigate('list');
+  else render();
+}
 
 // ── Router ─────────────────────────────────────────────────────────
 function navigate(hash) {
@@ -114,6 +241,15 @@ async function api(path) {
   return resp.json();
 }
 
+async function apiAuth(path, method, body) {
+  const token = getToken();
+  const opts = { method: method || 'GET', headers: { Authorization: `Bearer ${token}` } };
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const resp = await fetch(path, opts);
+  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+  return resp.json();
+}
+
 // ── Render logic ────────────────────────────────────────────────────
 async function render() {
   const el = document.getElementById('app');
@@ -123,6 +259,8 @@ async function render() {
       await renderFilm(el, route.id);
     } else if (route.view === 'play' && route.mediaId) {
       renderPlayer(el, route.mediaId);
+    } else if (route.view === 'admin') {
+      await renderAdmin(el);
     } else {
       await renderList(el);
     }
@@ -189,10 +327,68 @@ function renderPlayer(el, mediaId) {
     </div>`;
 }
 
+// ── Admin page ──────────────────────────────────────────────────────
+async function renderAdmin(el) {
+  if (!currentUser || currentUser.role !== 'admin') {
+    el.innerHTML = `<div class="error">Access denied. Admin privileges required.</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="back" onclick="navigate('list')">← Back to list</div>
+    <div class="admin-page">
+      <h2>Admin Panel</h2>
+      <p style="color:var(--text2);margin-bottom:1rem">Scan the downloads directory to import new media files into the library.</p>
+      <button class="scan-btn" id="scan-btn" onclick="runScan()">🔍 Scan library</button>
+      <div id="scan-report"></div>
+    </div>`;
+}
+
+async function runScan() {
+  const btn = document.getElementById('scan-btn');
+  const reportEl = document.getElementById('scan-report');
+  if (!btn || !reportEl) return;
+
+  if (!confirm('Start library scan? This will scan the downloads directory and import new files.')) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Scanning…';
+  reportEl.innerHTML = '<div class="spinner">Scanning…</div>';
+
+  try {
+    const report = await apiAuth('/admin/import/scan', 'POST');
+    reportEl.innerHTML = buildReportHTML(report);
+  } catch (e) {
+    reportEl.innerHTML = `<div class="error">Scan failed: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔍 Scan library';
+  }
+}
+
+function buildReportHTML(report) {
+  const errors = report.errors || [];
+  return `<div class="admin-report">
+    <h3>Scan Report</h3>
+    <table>
+      <tr><td>Files found</td><td>${report.files_found}</td></tr>
+      <tr><td>Files probed</td><td>${report.files_probed}</td></tr>
+      <tr><td>Files laid out</td><td>${report.files_laid_out}</td></tr>
+      <tr><td>Films created</td><td>${report.films_created}</td></tr>
+    </table>
+    ${errors.length > 0 ? `
+      <div class="report-errors">
+        <strong>Errors (${errors.length})</strong>
+        <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+      </div>` : ''}
+  </div>`;
+}
+
+// ── Search ──────────────────────────────────────────────────────────
 function onSearch(e) {
   if (currentRoute().view === 'list') render();
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────
 function esc(s) {
   const d = document.createElement('div');
   d.textContent = s ?? '';
@@ -201,7 +397,7 @@ function esc(s) {
 
 // ── Init ────────────────────────────────────────────────────────────
 window.addEventListener('hashchange', render);
-render();
+loadUser().then(() => render());
 </script>
 </body>
 </html>
