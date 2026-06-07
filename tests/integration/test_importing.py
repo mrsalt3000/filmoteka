@@ -472,6 +472,10 @@ class TestPipelineBridge:
         assert media_files[0].duration_secs is not None
         assert media_files[0].width is not None
 
+        # Poster enrichment gracefully skipped (no TMDB_API_KEY in tests)
+        assert films[0].poster_url is None
+        assert films[0].poster_source is None
+
     def test_pipeline_dedup_skips_existing_film(
         self, db_session: Session, tmp_path: Path
     ) -> None:

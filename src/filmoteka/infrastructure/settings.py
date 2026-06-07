@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     downloads_root: Path | None = None
     library_root: Path | None = None
 
+    # External metadata providers
+    tmdb_api_key: str | None = None
+
     version: str = "0.1.0"
 
 

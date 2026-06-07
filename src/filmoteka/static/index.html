@@ -50,9 +50,17 @@ nav input::placeholder { color: var(--text2); }
 .film-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
 .film-card { background: var(--surface); border-radius: var(--radius); padding: 1.25rem; cursor: pointer; transition: transform .15s, background .15s; }
 .film-card:hover { transform: translateY(-2px); background: var(--surface2); }
+.film-card .poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; border-radius: calc(var(--radius) - 2px); margin-bottom: .75rem; background: var(--surface2); }
+.film-card .poster[src=""], .film-card .poster:not([src]) { display: none; }
+.film-card .poster-placeholder { width: 100%; aspect-ratio: 2/3; border-radius: calc(var(--radius) - 2px); margin-bottom: .75rem; background: var(--surface2); display: flex; align-items: center; justify-content: center; color: var(--text2); font-size: 2rem; }
 .film-card h3 { font-size: 1rem; margin-bottom: .25rem; }
 .film-card .year { color: var(--text2); font-size: .85rem; }
 .detail { max-width: 720px; }
+.detail-layout { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
+.detail-poster { flex: 0 0 200px; }
+.detail-poster img { width: 100%; aspect-ratio: 2/3; object-fit: cover; border-radius: var(--radius); background: var(--surface2); }
+.detail-poster .poster-placeholder { width: 100%; aspect-ratio: 2/3; border-radius: var(--radius); background: var(--surface2); display: flex; align-items: center; justify-content: center; color: var(--text2); font-size: 3rem; }
+.detail-info { flex: 1; min-width: 0; }
 .detail h2 { font-size: 1.5rem; margin-bottom: .5rem; }
 .detail .meta { color: var(--text2); margin-bottom: 1rem; }
 .detail .section { margin-bottom: 1.5rem; }
@@ -285,6 +293,9 @@ async function renderList(el) {
   }
   el.innerHTML = `<div class="film-grid">${data.items.map(f => `
     <div class="film-card" onclick="navigate('film/${f.id}')">
+      ${f.poster_url
+        ? `<img class="poster" src="${esc(f.poster_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+        : `<div class="poster-placeholder">🎬</div>`}
       <h3>${esc(f.title)}</h3>
       <div class="year">${f.year || '—'}</div>
     </div>
@@ -318,10 +329,19 @@ async function renderFilm(el, id) {
   el.innerHTML = `
     <div class="back" onclick="navigate('list')">← Back to list</div>
     <div class="detail">
-      <h2>${esc(f.title)}</h2>
-      <div class="meta">${f.year || '—'}${f.description ? ' · ' + esc(f.description) : ''}</div>
-      ${playBtnHtml}
-      <div class="section" style="margin-top:1.5rem">
+      <div class="detail-layout">
+        <div class="detail-poster">
+          ${f.poster_url
+            ? `<img src="${esc(f.poster_url)}" alt="${esc(f.title)}" onerror="this.style.display='none'">`
+            : `<div class="poster-placeholder">🎬</div>`}
+        </div>
+        <div class="detail-info">
+          <h2>${esc(f.title)}</h2>
+          <div class="meta">${f.year || '—'}${f.description ? ' · ' + esc(f.description) : ''}</div>
+          ${playBtnHtml}
+        </div>
+      </div>
+      <div class="section">
         <h3>Genres</h3><p>${genres}</p>
       </div>
       <div class="section">

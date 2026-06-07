@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 from filmoteka.domain.access import models as access_models  # noqa: F401
 from filmoteka.domain.catalog import models as catalog_models  # noqa: F401
 from filmoteka.domain.importing import models as importing_models  # noqa: F401
+from filmoteka.domain.watching import models as watching_models  # noqa: F401
 from filmoteka.infrastructure.database import Base
 from filmoteka.infrastructure.settings import settings
 

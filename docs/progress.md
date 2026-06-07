@@ -15,6 +15,33 @@
 
 ---
 
+## Task Report: V1-003 — 2026-06-07
+
+- Status: `done`
+- Summary: Реализовал поиск постеров через TMDb API. При импорте фильма (`_bridge_to_catalog`) выполняется поиск постера по title+year через TMDb API. Результат сохраняется в `Film.poster_url` и `Film.poster_source`. В API-схемы (`FilmOut`, `FilmDetailOut`) добавлено поле `poster_url`. Во фронтенде постер отображается в списке фильмов (grid) и на карточке фильма (detail), с CSS fallback-плейсхолдером при отсутствии или ошибке загрузки. `TMDB_API_KEY` опционален — если не задан, импорт идёт без постеров (graceful degradation).
+- Changed files:
+  - `src/filmoteka/infrastructure/settings.py` (+ `tmdb_api_key`)
+  - `.env.example` (+ `TMDB_API_KEY`)
+  - `src/filmoteka/domain/catalog/models.py` (+ `poster_url`, `poster_source` on Film)
+  - `migrations/versions/c1784ebef74d_add_poster_url_and_poster_source_to_.py` (new — migration)
+  - `migrations/env.py` (+ watching_models import for autogenerate)
+  - `src/filmoteka/infrastructure/metadata_providers.py` (new — TMDbClient)
+  - `src/filmoteka/domain/importing/pipeline.py` (+ poster enrichment in bridge)
+  - `src/filmoteka/api/schemas/catalog.py` (+ `poster_url` in FilmOut, FilmDetailOut)
+  - `src/filmoteka/static/index.html` (+ poster img in renderList/renderFilm, CSS)
+  - `tests/unit/test_metadata_providers.py` (new — 8 mocked TMDb tests)
+  - `tests/integration/test_importing.py` (+ poster assertion in bridge test)
+  - `tests/integration/test_catalog.py` (+ `poster_url` assertions in list/detail tests)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (136/136)
+  - pytest integration: `yes` (91/91)
+- Next task:
+  - V1-031 — Implement MKV playback support (или V1-035 — Continue button in grid)
+
+---
+
 ## Task Report: V1-037 — 2026-06-07
 
 - Status: `done`

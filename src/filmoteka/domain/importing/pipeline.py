@@ -21,6 +21,8 @@ from filmoteka.domain.importing.models import (
 from filmoteka.domain.importing.scan import probe_candidates, scan_downloads
 from filmoteka.infrastructure.filename_parser import parse_filename
 from filmoteka.infrastructure.library_config import LibraryConfig
+from filmoteka.infrastructure.metadata_providers import tmdb_search_poster
+from filmoteka.infrastructure.settings import settings
 
 
 def _ffprobe_available() -> bool:
@@ -102,6 +104,12 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
         )
         db.add(film)
         db.flush()
+
+    # --- Poster enrichment (best-effort) ---
+    if film.poster_url is None and settings.tmdb_api_key:
+        result = tmdb_search_poster(parsed.title, parsed.year, settings.tmdb_api_key)
+        if result is not None:
+            film.poster_url, film.poster_source = result
 
     # --- MovieEdition ---
     edition = _find_or_create_edition(

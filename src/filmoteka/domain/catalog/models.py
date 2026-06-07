@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Column,
     Float,
     ForeignKey,
@@ -71,6 +72,8 @@ class Film(Base):
     title: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    poster_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    poster_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         default=datetime.now, onupdate=datetime.now
@@ -148,7 +151,7 @@ class MediaFile(Base):
     file_path: Mapped[str] = mapped_column(
         String(1024), nullable=False, unique=True
     )
-    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     duration_secs: Mapped[float | None] = mapped_column(Float, nullable=True)
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)

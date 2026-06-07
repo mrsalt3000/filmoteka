@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from filmoteka.infrastructure.database import Base
@@ -47,7 +47,7 @@ class ImportCandidate(Base):
         Integer, ForeignKey("import_runs.id", ondelete="CASCADE"), nullable=False
     )
     file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
-    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default=CANDIDATE_PENDING
     )
