@@ -15,6 +15,22 @@
 
 ---
 
+## Task Report: V1-002 — 2026-06-07
+
+- Status: `done`
+- Summary: Обогатил карточку фильма из имени файла. В `ParsedFilename` добавлены `language` и `edition_type`. Парсер извлекает язык (RUS, DUB, Original, ENG, Multi, SUB и др.) и тип издания (Director's Cut, Extended, Unrated, Remastered и др.) из имени файла. Эти поля прокидываются в `MovieEdition.language` и `MovieEdition.edition_name` при bridge-шаге. 15 новых unit-тестов на парсинг языка/издания.
+- Changed files:
+  - `src/filmoteka/infrastructure/filename_parser.py` (+ language/edition extraction)
+  - `src/filmoteka/domain/importing/pipeline.py` (+ language/edition в MovieEdition)
+  - `tests/unit/test_filename_parser.py` (+ 15 тестов)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (120/120)
+  - pytest integration: `yes` (91/91)
+- Next task:
+  - V1-003 — Implement poster search
+
 ## Task Report: V1-029 — 2026-06-07
 
 - Status: `done`

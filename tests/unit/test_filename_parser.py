@@ -143,14 +143,105 @@ class TestParsedFilenameDataclass:
     """ParsedFilename is a frozen dataclass."""
 
     def test_immutable(self) -> None:
-        p = ParsedFilename(title="Test", year=2024, quality="1080p")
+        p = ParsedFilename(
+            title="Test", year=2024, quality="1080p",
+            language=None, edition_type=None,
+        )
         with pytest.raises(AttributeError):
             p.title = "Changed"  # type: ignore[misc]
 
     def test_repr(self) -> None:
-        p = ParsedFilename(title="Test", year=2024, quality="1080p")
+        p = ParsedFilename(
+            title="Test", year=2024, quality="1080p",
+            language="RUS", edition_type="Extended.Cut",
+        )
         r = repr(p)
         assert "ParsedFilename" in r
         assert "Test" in r
         assert "2024" in r
         assert "1080p" in r
+        assert "RUS" in r
+        assert "Extended.Cut" in r
+
+
+class TestLanguageExtraction:
+    """Language markers in filenames."""
+
+    def test_russian_language(self) -> None:
+        r = _p("The.Matrix.1999.1080p.RUS.mkv")
+        assert r.title == "The Matrix"
+        assert r.language == "RUS"
+
+    def test_original_language(self) -> None:
+        r = _p("The.Matrix.1999.1080p.Original.mkv")
+        assert r.title == "The Matrix"
+        assert r.language == "Original"
+
+    def test_dubbed(self) -> None:
+        r = _p("The.Matrix.1999.1080p.DUB.mkv")
+        assert r.title == "The Matrix"
+        assert r.language == "DUB"
+
+    def test_english_audio(self) -> None:
+        r = _p("The.Matrix.1999.1080p.ENG.mkv")
+        assert r.title == "The Matrix"
+        assert r.language == "ENG"
+
+    def test_multi_language(self) -> None:
+        r = _p("The.Matrix.1999.1080p.Multi.mkv")
+        assert r.title == "The Matrix"
+        assert r.language == "Multi"
+
+    def test_no_language_marker(self) -> None:
+        r = _p("The.Matrix.1999.1080p.mkv")
+        assert r.language is None
+
+    def test_language_spanish(self) -> None:
+        r = _p("The.Matrix.1999.1080p.SPA.mkv")
+        assert r.title == "The Matrix"
+        assert r.language == "SPA"
+
+    def test_subtitles_marker(self) -> None:
+        r = _p("The.Matrix.1999.1080p.SUB.mkv")
+        assert r.title == "The Matrix"
+        assert r.language == "SUB"
+
+    def test_rus_not_confused_with_filename_part(self) -> None:
+        r = _p("Отель.RUS.2023.1080p.mkv")
+        # "RUS" after a dot — should be treated as a language marker
+        assert r.language == "RUS"
+        assert r.title == "Отель"
+        assert r.year == 2023
+
+
+class TestEditionExtraction:
+    """Edition markers in filenames."""
+
+    def test_directors_cut(self) -> None:
+        r = _p("Blade.Runner.1982.Directors.Cut.1080p.mkv")
+        assert r.title == "Blade Runner"
+        assert r.edition_type == "Directors.Cut"
+
+    def test_extended_cut(self) -> None:
+        r = _p("Lord.of.the.Rings.2001.Extended.Cut.1080p.mkv")
+        assert r.title == "Lord of the Rings"
+        assert r.edition_type == "Extended.Cut"
+
+    def test_theatrical(self) -> None:
+        r = _p("Avatar.2009.Theatrical.1080p.mkv")
+        assert r.title == "Avatar"
+        assert r.edition_type == "Theatrical"
+
+    def test_unrated(self) -> None:
+        r = _p("Movie.2022.1080p.Unrated.mkv")
+        assert r.title == "Movie"
+        assert r.edition_type == "Unrated"
+
+    def test_no_edition(self) -> None:
+        r = _p("The.Matrix.1999.1080p.mkv")
+        assert r.edition_type is None
+
+    def test_remastered(self) -> None:
+        r = _p("Toy.Story.1995.Remastered.1080p.mkv")
+        assert r.title == "Toy Story"
+        assert r.edition_type == "Remastered"

@@ -104,7 +104,13 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
         db.flush()
 
     # --- MovieEdition ---
-    edition = _find_or_create_edition(db, film.id, parsed.quality)
+    edition = _find_or_create_edition(
+        db,
+        film.id,
+        parsed.quality,
+        parsed.language,
+        parsed.edition_type,
+    )
 
     # --- MediaFile ---
     media = MediaFile(
@@ -135,32 +141,28 @@ def _find_or_create_edition(
     db: Session,
     film_id: int,
     quality: str | None,
+    language: str | None = None,
+    edition_name: str | None = None,
 ) -> MovieEdition:
-    """Find existing ``MovieEdition`` or create a new one."""
-    if quality is not None:
-        existing = (
-            db.query(MovieEdition)
-            .filter(
-                MovieEdition.film_id == film_id,
-                MovieEdition.quality == quality,
-            )
-            .first()
-        )
-    else:
-        existing = (
-            db.query(MovieEdition)
-            .filter(
-                MovieEdition.film_id == film_id,
-                MovieEdition.quality.is_(None),
-            )
-            .first()
+    """Find existing ``MovieEdition`` or create a new one.
+
+    Dedup matches on ``film_id + quality + edition_name + language``.
+    """
+    query = db.query(MovieEdition).filter(
+        MovieEdition.film_id == film_id,
+        MovieEdition.quality == quality,
+        MovieEdition.edition_name == edition_name,
+        MovieEdition.language == language,
     )
+    existing = query.first()
     if existing is not None:
         return existing
 
     edition = MovieEdition(
         film_id=film_id,
         quality=quality,
+        edition_name=edition_name,
+        language=language,
     )
     db.add(edition)
     db.flush()
