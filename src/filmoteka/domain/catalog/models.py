@@ -74,6 +74,7 @@ class Film(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     poster_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     poster_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    kinopoisk_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         default=datetime.now, onupdate=datetime.now

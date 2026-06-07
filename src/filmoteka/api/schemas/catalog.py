@@ -16,6 +16,7 @@ class FilmOut(BaseModel):
     title: str
     year: int | None = None
     poster_url: str | None = None
+    kinopoisk_url: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -75,6 +76,7 @@ class FilmDetailOut(BaseModel):
     year: int | None = None
     description: str | None = None
     poster_url: str | None = None
+    kinopoisk_url: str | None = None
     created_at: datetime
     genres: list[GenreOut] = []
     persons: list[PersonOut] = []

@@ -476,6 +476,9 @@ class TestPipelineBridge:
         assert films[0].poster_url is None
         assert films[0].poster_source is None
 
+        # Kinopoisk enrichment gracefully skipped (no TMDB_API_KEY in tests)
+        assert films[0].kinopoisk_url is None
+
     def test_pipeline_dedup_skips_existing_film(
         self, db_session: Session, tmp_path: Path
     ) -> None:

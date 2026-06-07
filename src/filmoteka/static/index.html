@@ -63,6 +63,7 @@ nav input::placeholder { color: var(--text2); }
 .detail-info { flex: 1; min-width: 0; }
 .detail h2 { font-size: 1.5rem; margin-bottom: .5rem; }
 .detail .meta { color: var(--text2); margin-bottom: 1rem; }
+.detail .external-link { display: inline-block; margin-bottom: .75rem; font-size: .9rem; color: var(--accent); }
 .detail .section { margin-bottom: 1.5rem; }
 .detail .section h3 { font-size: 1rem; margin-bottom: .5rem; color: var(--accent); }
 .detail .section ul { list-style: none; }
@@ -338,6 +339,7 @@ async function renderFilm(el, id) {
         <div class="detail-info">
           <h2>${esc(f.title)}</h2>
           <div class="meta">${f.year || '—'}${f.description ? ' · ' + esc(f.description) : ''}</div>
+          ${f.kinopoisk_url ? `<a class="external-link" href="${esc(f.kinopoisk_url)}" target="_blank" rel="noopener">View on Kinopoisk →</a>` : ''}
           ${playBtnHtml}
         </div>
       </div>

@@ -21,7 +21,10 @@ from filmoteka.domain.importing.models import (
 from filmoteka.domain.importing.scan import probe_candidates, scan_downloads
 from filmoteka.infrastructure.filename_parser import parse_filename
 from filmoteka.infrastructure.library_config import LibraryConfig
-from filmoteka.infrastructure.metadata_providers import tmdb_search_poster
+from filmoteka.infrastructure.metadata_providers import (
+    tmdb_find_kinopoisk_url,
+    tmdb_search_poster,
+)
 from filmoteka.infrastructure.settings import settings
 
 
@@ -110,6 +113,12 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
         result = tmdb_search_poster(parsed.title, parsed.year, settings.tmdb_api_key)
         if result is not None:
             film.poster_url, film.poster_source = result
+
+    # --- Kinopoisk link enrichment (best-effort) ---
+    if film.kinopoisk_url is None and settings.tmdb_api_key:
+        url = tmdb_find_kinopoisk_url(parsed.title, parsed.year, settings.tmdb_api_key)
+        if url is not None:
+            film.kinopoisk_url = url
 
     # --- MovieEdition ---
     edition = _find_or_create_edition(

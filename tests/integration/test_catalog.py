@@ -52,8 +52,9 @@ class TestListFilms:
         assert body["items"][0]["year"] == 1999
         assert "id" in body["items"][0]
         assert "created_at" in body["items"][0]
-        # poster_url is exposed in the list response
+        # poster_url and kinopoisk_url are exposed in the list response
         assert body["items"][0]["poster_url"] is None
+        assert body["items"][0]["kinopoisk_url"] is None
 
     def test_multiple_films(self, client: TestClient, db_session: Session) -> None:
         db_session.add_all([
@@ -209,6 +210,7 @@ class TestGetFilm:
         assert body["persons"] == []
         assert body["editions"] == []
         assert body["poster_url"] is None
+        assert body["kinopoisk_url"] is None
 
     def test_with_genres(self, client: TestClient, db_session: Session) -> None:
         g1 = Genre(name="Sci-Fi", slug="sci-fi")

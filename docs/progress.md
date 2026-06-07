@@ -15,6 +15,30 @@
 
 ---
 
+## Task Report: V1-004 — 2026-06-07
+
+- Status: `done`
+- Summary: Реализовал поиск ссылок на Kinopoisk через TMDb external_ids. В metadata_providers добавлен общий вспомогательный слой (`_tmdb_api_get`, `_tmdb_search_first`), функция `tmdb_find_kinopoisk_url()`. В bridge-шаге после постера выполняется поиск Kinopoisk URL через TMDb movie ID → external_ids (kp_id). `kinopoisk_url` сохранён на Film, возвращается в API и отображается как ссылка "View on Kinopoisk →" на карточке фильма. `TMDB_API_KEY` опционален — без него ссылки не ищутся.
+- Changed files:
+  - `src/filmoteka/infrastructure/metadata_providers.py` (refactor: + `_tmdb_api_get`, `_tmdb_search_first`, `tmdb_find_kinopoisk_url`; poster uses shared helpers)
+  - `src/filmoteka/domain/catalog/models.py` (+ `kinopoisk_url` on Film)
+  - `migrations/versions/04572a67037e_add_kinopoisk_url_to_films.py` (new — migration)
+  - `src/filmoteka/domain/importing/pipeline.py` (+ Kinopoisk enrichment step)
+  - `src/filmoteka/api/schemas/catalog.py` (+ `kinopoisk_url` in FilmOut, FilmDetailOut)
+  - `src/filmoteka/static/index.html` (+ "View on Kinopoisk →" link in detail, CSS)
+  - `tests/unit/test_metadata_providers.py` (+ TestTmdbFindKinopoiskUrl — 6 tests)
+  - `tests/integration/test_importing.py` (+ `kinopoisk_url` assertion)
+  - `tests/integration/test_catalog.py` (+ `kinopoisk_url` assertions)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (134/134)
+  - pytest integration: `yes` (91/91)
+- Next task:
+  - V1-031 — Implement MKV playback support (или V1-035 — Continue button in grid)
+
+---
+
 ## Task Report: V1-003 — 2026-06-07
 
 - Status: `done`
