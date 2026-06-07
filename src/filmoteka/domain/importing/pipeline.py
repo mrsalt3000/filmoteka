@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -10,12 +11,18 @@ from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
 from filmoteka.domain.importing.layout import layout_file
 from filmoteka.domain.importing.models import (
     CANDIDATE_IMPORTED,
+    CANDIDATE_PENDING,
     CANDIDATE_PROBED,
     ImportCandidate,
 )
 from filmoteka.domain.importing.scan import probe_candidates, scan_downloads
 from filmoteka.infrastructure.filename_parser import parse_filename
 from filmoteka.infrastructure.library_config import LibraryConfig
+
+
+def _ffprobe_available() -> bool:
+    """Return ``True`` if ``ffprobe`` is found on ``PATH``."""
+    return shutil.which("ffprobe") is not None
 
 
 def run_import(config: LibraryConfig, db: Session) -> ImportReport:
@@ -45,19 +52,23 @@ def run_import(config: LibraryConfig, db: Session) -> ImportReport:
     if not candidates:
         return report
 
-    # 2. Probe — run ffprobe on all pending candidates
-    probe_candidates(candidates, db)
-    for c in candidates:
-        db.refresh(c)
+    # 2. Probe — run ffprobe on all pending candidates (best-effort).
+    # If ffprobe is not installed (e.g. Windows without ffmpeg), skip probe
+    # entirely so layout and bridge can still proceed.
+    if _ffprobe_available():
+        probe_candidates(candidates, db)
+        for c in candidates:
+            db.refresh(c)
 
     probed = [c for c in candidates if c.status == CANDIDATE_PROBED]
     report.files_probed = len(probed)
 
-    if not probed:
-        return report
+    # Layout proceeds with probed candidates; if no probe ran (no ffprobe),
+    # fall back to the original pending candidates.
+    to_layout = probed or [c for c in candidates if c.status == CANDIDATE_PENDING]
 
-    # 3. Layout — move each probed file to the target library
-    for c in probed:
+    # 3. Layout — move each file to the target library
+    for c in to_layout:
         try:
             layout_file(c, config, db)
         except Exception as exc:

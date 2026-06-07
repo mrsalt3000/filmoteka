@@ -15,6 +15,20 @@
 
 ---
 
+## Task Report: FIX-003 — 2026-06-07
+
+- Status: `done`
+- Summary: Починил импорт на Windows без ffmpeg. Пайплайн стопорился на probe — если ffprobe не установлен, все кандидаты получали CANDIDATE_ERROR, layout и bridge не запускались. Теперь probe выполняется только если ffprobe найден в PATH; иначе candidates остаются PENDING и layout/bridge работают без probe-данных.
+- Changed files:
+  - `src/filmoteka/domain/importing/pipeline.py` (+ _ffprobe_available(), probe пропускается без ffprobe; layout на pending)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (90/90)
+- Next task:
+  - V1-002 — Implement external metadata providers layer
+
 ## Task Report: V1-028 — 2026-06-07
 
 - Status: `done`
