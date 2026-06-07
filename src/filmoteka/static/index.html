@@ -263,8 +263,8 @@ async function render() {
   try {
     if (route.view === 'film' && route.id) {
       await renderFilm(el, route.id);
-    } else if (route.view === 'play' && route.mediaId) {
-      await renderPlayer(el, route.mediaId);
+    } else if (route.view === 'play' && route.id) {
+      await renderPlayer(el, route.id);
     } else if (route.view === 'admin') {
       await renderAdmin(el);
     } else {
