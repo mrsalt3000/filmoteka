@@ -1,4 +1,8 @@
-"""Import pipeline orchestrator — scan, probe, layout, and bridge to catalog."""
+"""Import pipeline orchestrator — scan, probe, and bridge to catalog.
+
+Files are indexed in-place: the library directory is scanned and catalog
+entries are created without moving or copying any files.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +12,6 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
-from filmoteka.domain.importing.layout import layout_file
 from filmoteka.domain.importing.models import (
     CANDIDATE_IMPORTED,
     CANDIDATE_PENDING,
@@ -26,21 +29,17 @@ def _ffprobe_available() -> bool:
 
 
 def run_import(config: LibraryConfig, db: Session) -> ImportReport:
-    """Run the full import pipeline: scan → probe → layout → bridge.
+    """Run the import pipeline: scan → probe → bridge (no file copying).
 
-    Returns an ``ImportReport`` summarising what happened.
+    Files are indexed in-place from ``config.paths.target_root``.
+    Catalog entries (Film, MovieEdition, MediaFile) are created directly.
     """
-    # 1. Scan — discover new files
+    # 1. Scan — discover new files in the library directory
     run = scan_downloads(config, db)
     db.refresh(run)
 
     report = ImportReport(
         files_found=run.file_count,
-        files_probed=0,
-        files_laid_out=0,
-        films_created=0,
-        films_skipped=0,
-        errors=[],
     )
 
     candidates: list[ImportCandidate] = (
@@ -53,8 +52,7 @@ def run_import(config: LibraryConfig, db: Session) -> ImportReport:
         return report
 
     # 2. Probe — run ffprobe on all pending candidates (best-effort).
-    # If ffprobe is not installed (e.g. Windows without ffmpeg), skip probe
-    # entirely so layout and bridge can still proceed.
+    # If ffprobe is not available (e.g. Windows without ffmpeg), skip.
     if _ffprobe_available():
         probe_candidates(candidates, db)
         for c in candidates:
@@ -63,34 +61,15 @@ def run_import(config: LibraryConfig, db: Session) -> ImportReport:
     probed = [c for c in candidates if c.status == CANDIDATE_PROBED]
     report.files_probed = len(probed)
 
-    # Layout proceeds with probed candidates; if no probe ran (no ffprobe),
-    # fall back to the original pending candidates.
-    to_layout = probed or [c for c in candidates if c.status == CANDIDATE_PENDING]
+    # Candidates to bridge: probed ones, or pending ones if probe didn't run.
+    to_bridge = probed or [c for c in candidates if c.status == CANDIDATE_PENDING]
 
-    # 3. Layout — move each file to the target library
-    for c in to_layout:
-        try:
-            layout_file(c, config, db)
-        except Exception as exc:
-            report.errors.append(f"layout failed for {c.file_path}: {exc}")
-            continue
-
-    db.flush()
-
-    # 4. Bridge — create catalog entries for successfully laid-out files
-    imported = (
-        db.query(ImportCandidate)
-        .filter(
-            ImportCandidate.import_run_id == run.id,
-            ImportCandidate.status == CANDIDATE_IMPORTED,
-        )
-        .all()
-    )
-    report.files_laid_out = len(imported)
-
-    for c in imported:
+    # 3. Bridge — create catalog entries directly (no file copy).
+    for c in to_bridge:
         try:
             _bridge_to_catalog(c, db)
+            c.status = CANDIDATE_IMPORTED
+            report.files_indexed += 1
             report.films_created += 1
         except Exception as exc:
             report.errors.append(f"bridge failed for {c.file_path}: {exc}")
@@ -200,24 +179,21 @@ class ImportReport:
         self,
         files_found: int = 0,
         files_probed: int = 0,
-        files_laid_out: int = 0,
+        files_indexed: int = 0,
         films_created: int = 0,
-        films_skipped: int = 0,
         errors: list[str] | None = None,
     ) -> None:
         self.files_found = files_found
         self.files_probed = files_probed
-        self.files_laid_out = files_laid_out
+        self.files_indexed = files_indexed
         self.films_created = films_created
-        self.films_skipped = films_skipped
         self.errors = errors or []
 
     def to_dict(self) -> dict[str, object]:
         return {
             "files_found": self.files_found,
             "files_probed": self.files_probed,
-            "files_laid_out": self.files_laid_out,
+            "files_indexed": self.files_indexed,
             "films_created": self.films_created,
-            "films_skipped": self.films_skipped,
             "errors": self.errors,
         }

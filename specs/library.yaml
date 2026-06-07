@@ -4,9 +4,10 @@
 # Secrets and environment-specific values belong in .env, not here.
 
 paths:
-  # Directory where new video files appear (e.g. browser downloads, torrents)
+  # Root directory of the media library — scanned during import.
+  # Files are indexed in-place; nothing is copied or moved.
   downloads_root: /media/downloads
-  # Directory where the library organises files after import
+  # Library root — this is where media files live and where import scans.
   target_root: /media/library
 
 import:

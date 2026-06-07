@@ -15,6 +15,23 @@
 
 ---
 
+## Task Report: V1-029 — 2026-06-07
+
+- Status: `done`
+- Summary: Изменил импорт — теперь он только индексирует файлы без копирования. `scan_downloads()` сканирует `target_root` вместо `downloads_root`. Из pipeline удалён layout-шаг (move), bridge создаёт Film/MovieEdition/MediaFile прямо из отсканированных файлов. ImportReport: `files_laid_out` заменён на `files_indexed`.
+- Changed files:
+  - `src/filmoteka/domain/importing/scan.py` — scan использует `target_root`
+  - `src/filmoteka/domain/importing/pipeline.py` — убран layout, bridge напрямую после probe
+  - `specs/library.yaml` — обновлены комментарии путей
+  - `tests/integration/test_importing.py` — тесты обновлены под новую логику
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (91/91)
+- Next task:
+  - V1-002 — Implement external metadata providers layer
+
 ## Task Report: FIX-003 — 2026-06-07
 
 - Status: `done`

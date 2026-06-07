@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -20,20 +21,23 @@ from filmoteka.infrastructure.media_probe import (
     probe_media,
 )
 
+_logger = logging.getLogger(__name__)
+
 
 def scan_downloads(
     config: LibraryConfig,
     db: Session,
 ) -> ImportRun:
-    """Scan ``config.paths.downloads_root`` and create an ``ImportRun``.
+    """Scan ``config.paths.target_root`` and create an ``ImportRun``.
 
+    Files are indexed in-place — no file copying occurs during import.
     Idempotent: files that already have an ``ImportCandidate`` with a
     non-error status are skipped so repeated scans do not create duplicates.
 
     Returns a persisted ``ImportRun`` with file_count set to the number of
     new candidates created.
     """
-    root = config.paths.downloads_root
+    root = config.paths.target_root
     extensions = config.import_.extensions
 
     if not root.is_dir():
@@ -49,6 +53,15 @@ def scan_downloads(
     existing = _existing_candidate_paths(db, root, skip_status=CANDIDATE_ERROR)
     new_files = [f for f in files if str(f) not in existing]
 
+    # Enforce max file size
+    max_bytes = config.import_.max_file_size_gb * 1024**3
+    oversized = [f for f in new_files if f.stat().st_size > max_bytes]
+    for f in oversized:
+        _logger.warning("Skipping oversized file (%d GB > %d GB): %s",
+                        f.stat().st_size / 1024**3,
+                        config.import_.max_file_size_gb, f)
+    filtered = [f for f in new_files if f.stat().st_size <= max_bytes]
+
     candidates = [
         ImportCandidate(
             import_run_id=run.id,
@@ -56,10 +69,10 @@ def scan_downloads(
             size=f.stat().st_size,
             status=CANDIDATE_PENDING,
         )
-        for f in new_files
+        for f in filtered
     ]
     db.add_all(candidates)
-    run.file_count = len(new_files)
+    run.file_count = len(filtered)
     run.finished_at = datetime.now()
     run.status = "completed"
     db.flush()

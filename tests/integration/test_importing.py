@@ -24,13 +24,12 @@ pytestmark = pytest.mark.integration
 
 
 def _make_config(
-    downloads_root: Path,
-    target_root: str | None = None,
+    root: Path,
 ) -> LibraryConfig:
     return LibraryConfig.model_validate({
         "paths": {
-            "downloads_root": str(downloads_root),
-            "target_root": target_root or "/media/library",
+            "downloads_root": str(root),
+            "target_root": str(root),
         },
         "import": {"extensions": [".mp4", ".mkv"], "max_file_size_gb": 50},
         "organization": "by_year",
@@ -299,17 +298,15 @@ class TestCandidateCascadeDelete:
 
 
 class TestLayoutFile:
-    """layout_file — move file to target library with real DB."""
+    """layout_file — move file within the library directory."""
 
     def test_move_file_with_year(self, db_session: Session, tmp_path: Path) -> None:
-        downloads = tmp_path / "downloads"
-        target = tmp_path / "library"
-        downloads.mkdir()
+        root = tmp_path
 
-        video = downloads / "The.Matrix.1999.1080p.mkv"
+        video = root / "The.Matrix.1999.1080p.mkv"
         video.write_text("fake video content")
 
-        config = _make_config(downloads, target_root=str(target))
+        config = _make_config(root)
         run = scan_downloads(config, db_session)
         db_session.refresh(run)
 
@@ -338,14 +335,12 @@ class TestLayoutFile:
     def test_move_file_without_year(
         self, db_session: Session, tmp_path: Path
     ) -> None:
-        downloads = tmp_path / "downloads"
-        target = tmp_path / "library"
-        downloads.mkdir()
+        root = tmp_path
 
-        video = downloads / "Some Movie.mkv"
+        video = root / "Some Movie.mkv"
         video.write_text("content")
 
-        config = _make_config(downloads, target_root=str(target))
+        config = _make_config(root)
         run = scan_downloads(config, db_session)
         db_session.refresh(run)
 
@@ -365,12 +360,10 @@ class TestLayoutFile:
         assert "unknown" in new_path.parts
 
     def test_move_updates_db_path(self, db_session: Session, tmp_path: Path) -> None:
-        downloads = tmp_path / "downloads"
-        target = tmp_path / "library"
-        downloads.mkdir()
-        (downloads / "Avatar.2009.2160p.mkv").write_text("data")
+        root = tmp_path
+        (root / "Avatar.2009.2160p.mkv").write_text("data")
 
-        config = _make_config(downloads, target_root=str(target))
+        config = _make_config(root)
         run = scan_downloads(config, db_session)
         db_session.refresh(run)
 
@@ -387,23 +380,20 @@ class TestLayoutFile:
         assert c.file_path != old_path
         # DB path should be absolute and point to an existing file
         assert Path(c.file_path).exists()
-        assert target.as_posix() in c.file_path
 
 
 class TestFullPipeline:
-    """End-to-end import pipeline: scan → probe → layout with real file."""
+    """End-to-end import pipeline: scan → probe → layout with real file (old workflow)."""
 
     def test_scan_probe_layout_flow(
         self, db_session: Session, tmp_path: Path
     ) -> None:
-        downloads = tmp_path / "downloads"
-        target = tmp_path / "library"
-        downloads.mkdir()
+        root = tmp_path
 
-        video = downloads / "The.Matrix.1999.1080p.mkv"
+        video = root / "The.Matrix.1999.1080p.mkv"
         _make_test_video(video)
 
-        config = _make_config(downloads, target_root=str(target))
+        config = _make_config(root)
 
         # 1. Scan
         run = scan_downloads(config, db_session)
@@ -439,7 +429,7 @@ class TestFullPipeline:
 
 
 class TestPipelineBridge:
-    """End-to-end import pipeline with catalog bridge: scan → probe → layout → Film."""
+    """End-to-end import pipeline (index-only): scan → probe → bridge."""
 
     def test_full_pipeline_creates_film(
         self, db_session: Session, tmp_path: Path
@@ -447,25 +437,24 @@ class TestPipelineBridge:
         from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
         from filmoteka.domain.importing.pipeline import run_import
 
-        downloads = tmp_path / "downloads"
-        target = tmp_path / "library"
-        downloads.mkdir()
+        root = tmp_path
 
-        video = downloads / "The.Matrix.1999.1080p.mkv"
+        video = root / "The.Matrix.1999.1080p.mkv"
         _make_test_video(video)
 
-        config = _make_config(downloads, target_root=str(target))
+        config = _make_config(root)
 
-        # Run the full pipeline
         report = run_import(config, db_session)
 
         assert report.files_found == 1
         assert report.files_probed == 1
-        assert report.files_laid_out == 1
+        assert report.files_indexed == 1
         assert report.films_created == 1
         assert report.errors == []
 
-        # Verify catalog entries
+        # File stays in place (no copy)
+        assert video.exists()
+
         films = db_session.query(Film).all()
         assert len(films) == 1
         assert films[0].title == "The Matrix"
@@ -479,6 +468,7 @@ class TestPipelineBridge:
         assert len(media_files) == 1
         assert media_files[0].edition_id == editions[0].id
         assert Path(media_files[0].file_path).exists()
+        # Probe data is present when ffprobe is available
         assert media_files[0].duration_secs is not None
         assert media_files[0].width is not None
 
@@ -488,25 +478,20 @@ class TestPipelineBridge:
         from filmoteka.domain.catalog.models import Film
         from filmoteka.domain.importing.pipeline import run_import
 
-        downloads = tmp_path / "downloads"
-        target = tmp_path / "library"
-        downloads.mkdir()
+        root = tmp_path
 
-        video = downloads / "The.Matrix.1999.1080p.mkv"
+        video = root / "The.Matrix.1999.1080p.mkv"
         _make_test_video(video)
 
-        config = _make_config(downloads, target_root=str(target))
+        config = _make_config(root)
 
-        # First run — creates the film
         run1 = run_import(config, db_session)
         assert run1.films_created == 1
         assert run1.files_found == 1
 
-        # Second run — same file, should be skipped by idempotent scan
         run2 = run_import(config, db_session)
         assert run2.files_found == 0
 
-        # Only one Film row
         films = db_session.query(Film).all()
         assert len(films) == 1
 
@@ -516,14 +501,12 @@ class TestPipelineBridge:
         from filmoteka.domain.catalog.models import Film
         from filmoteka.domain.importing.pipeline import run_import
 
-        downloads = tmp_path / "downloads"
-        target = tmp_path / "library"
-        downloads.mkdir()
+        root = tmp_path
 
-        video = downloads / "Some Movie.mkv"
+        video = root / "Some Movie.mkv"
         _make_test_video(video)
 
-        config = _make_config(downloads, target_root=str(target))
+        config = _make_config(root)
 
         report = run_import(config, db_session)
 
