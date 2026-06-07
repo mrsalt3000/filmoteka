@@ -91,6 +91,12 @@ nav input::placeholder { color: var(--text2); }
 .admin-report td:first-child { color: var(--text2); }
 .admin-report .report-errors { margin-top: .75rem; }
 .admin-report .report-errors li { color: var(--accent); font-size: .85rem; }
+
+/* ── Player error ────────────────────────────── */
+.play-error { text-align: center; padding: 3rem 1rem; }
+.play-error .icon { font-size: 3rem; margin-bottom: .5rem; }
+.play-error .msg { font-size: 1.1rem; margin-bottom: .25rem; }
+.play-error .detail { color: var(--text2); font-size: .85rem; }
 </style>
 </head>
 <body>
@@ -258,7 +264,7 @@ async function render() {
     if (route.view === 'film' && route.id) {
       await renderFilm(el, route.id);
     } else if (route.view === 'play' && route.mediaId) {
-      renderPlayer(el, route.mediaId);
+      await renderPlayer(el, route.mediaId);
     } else if (route.view === 'admin') {
       await renderAdmin(el);
     } else {
@@ -315,16 +321,86 @@ async function renderFilm(el, id) {
     </div>`;
 }
 
-function renderPlayer(el, mediaId) {
+async function renderPlayer(el, mediaId) {
   const src = `/media/${mediaId}/stream`;
+
+  // Check stream availability before showing the video element
+  let status = 200;
+  let statusText = '';
+  try {
+    const resp = await fetch(src, { method: 'HEAD' });
+    status = resp.status;
+    statusText = resp.statusText;
+  } catch {
+    el.innerHTML = `
+      <div class="back" onclick="navigate('list')">← Back to list</div>
+      <div class="play-error">
+        <div class="icon">⚠️</div>
+        <div class="msg">Could not load video</div>
+        <div class="detail">Check that the server is running and try again.</div>
+      </div>`;
+    return;
+  }
+
+  if (status === 404) {
+    el.innerHTML = `
+      <div class="back" onclick="navigate('list')">← Back to list</div>
+      <div class="play-error">
+        <div class="icon">🔍</div>
+        <div class="msg">Video file not found</div>
+        <div class="detail">The media file may have been moved or deleted.</div>
+      </div>`;
+    return;
+  }
+
+  if (status === 401 || status === 403) {
+    el.innerHTML = `
+      <div class="back" onclick="navigate('list')">← Back to list</div>
+      <div class="play-error">
+        <div class="icon">🔒</div>
+        <div class="msg">Access denied</div>
+        <div class="detail">Please log in and try again.</div>
+      </div>`;
+    return;
+  }
+
+  if (status >= 500) {
+    el.innerHTML = `
+      <div class="back" onclick="navigate('list')">← Back to list</div>
+      <div class="play-error">
+        <div class="icon">⚠️</div>
+        <div class="msg">Server error</div>
+        <div class="detail">${esc(status)} ${esc(statusText)}</div>
+      </div>`;
+    return;
+  }
+
+  // Status OK — render the video player with an error fallback
   el.innerHTML = `
     <div class="back" onclick="history.back()">← Back</div>
     <div class="player-page">
-      <video controls autoplay preload="metadata">
-        <source src="${src}" type="video/mp4">
+      <video id="player-video" controls autoplay preload="metadata">
+        <source src="${src}">
         Your browser does not support video playback.
       </video>
+      <div id="player-error" class="play-error" style="display:none">
+        <div class="icon">🎬</div>
+        <div class="msg">Cannot play this video</div>
+        <div class="detail">The format may not be supported by your browser. Try downloading the file instead.</div>
+      </div>
     </div>`;
+
+  // Attach error handler after element is in DOM
+  const video = document.getElementById('player-video');
+  if (video) {
+    video.addEventListener('error', function () {
+      const errorEl = document.getElementById('player-error');
+      if (errorEl) {
+        video.style.display = 'none';
+        errorEl.style.display = 'block';
+      }
+    });
+  }
 }
 
 // ── Admin page ──────────────────────────────────────────────────────

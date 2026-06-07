@@ -15,6 +15,20 @@
 
 ---
 
+## Task Report: V1-030 — 2026-06-07
+
+- Status: `done`
+- Summary: Добавил отображение ошибок в плеере. Перед показом `<video>` выполняется HEAD-запрос к stream-эндпоинту. По статусу ответа показываются сообщения: 404 → "Video file not found", 401/403 → "Access denied", 500 → "Server error", сетевая ошибка → "Could not load video". На `<video>` добавлен `onerror`-обработчик на случай, если HEAD прошёл, но браузер не может воспроизвести формат.
+- Changed files:
+  - `src/filmoteka/static/index.html` (+ play-error CSS, async renderPlayer с HEAD-проверкой и onerror)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (120/120)
+  - pytest integration: `yes` (91/91)
+- Next task:
+  - V1-003 — Implement poster search
+
 ## Task Report: V1-002 — 2026-06-07
 
 - Status: `done`
