@@ -15,6 +15,64 @@
 
 ---
 
+## Task Report: V1-037 — 2026-06-07
+
+- Status: `done`
+- Summary: Починил сохранение прогресса просмотра — `db.flush()` заменён на `db.commit()` в `PATCH /media/{id}/watch/{watch_event_id}/progress`. Ранее `flush()` писал в транзакцию, которая откатывалась при закрытии сессии, и `last_position` никогда не сохранялся.
+- Changed files:
+  - `src/filmoteka/api/media.py` — `db.flush()` → `db.commit()`
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (120/120)
+  - pytest integration: `yes` (91/91)
+- Next task:
+  - V1-003 — Implement poster search
+
+## Task Report: V1-034 — 2026-06-07
+
+- Status: `done`
+- Summary: Подключил resume playback во фронтенде. `POST /watch/start` при нажатии Play, seek на `last_position` через `loadedmetadata`, сохранение прогресса каждые 10 сек, финальное сохранение при `hashchange`, кнопка "Continue (MM:SS)" на карточке фильма вместо Play при наличии незавершённого просмотра.
+- Changed files:
+  - `src/filmoteka/static/index.html` (+ renderFilm: watch/state → Continue button; renderPlayer: watch/start + progress interval + hashchange save; formatTime helper)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (120/120)
+  - pytest integration: `yes` (91/91)
+- Next task:
+  - V1-035 — Add watch/continue button to film grid
+
+## Task Report: V1-033 — 2026-06-07
+
+- Status: `done`
+- Summary: Починил повторный запуск плеера — убран лишний `render()` из `navigate()` (hashchange и так его триггерит), добавлен `cache: 'no-cache'` в HEAD-запрос renderPlayer.
+- Changed files:
+  - `src/filmoteka/static/index.html` — убран render() из navigate(), cache: no-cache в HEAD
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (120/120)
+  - pytest integration: `yes` (91/91)
+- Next task:
+  - V1-034 — Resume playback in frontend
+
+## Task Report: V1-032 — 2026-06-07
+
+- Status: `done`
+- Summary: Починил роутинг плеера — `currentRoute()` кладёт media_id в `route.id` (parts[1]), а `render()` проверял `route.mediaId` (parts[2] → всегда undefined). Заменил `route.mediaId` на `route.id`.
+- Changed files:
+  - `src/filmoteka/static/index.html` — `route.mediaId` → `route.id`
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (120/120)
+  - pytest integration: `yes` (91/91)
+- Next task:
+  - V1-033 — Fix second play not working
+
+## Task Report: V1-031 — не начата
+
 ## Task Report: V1-030 — 2026-06-07
 
 - Status: `done`
