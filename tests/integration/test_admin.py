@@ -105,12 +105,12 @@ class TestAdminHealth:
 
 
 class TestAdminImportScan:
-    """POST /admin/import/scan — role enforcement + pipeline trigger."""
+    """POST /admin/import/scan — background scan, role enforcement."""
 
     def test_admin_can_trigger_scan(
         self, client: TestClient, db_session: Session, tmp_path: Path
     ) -> None:
-        """Create an admin user and a test video, then trigger import."""
+        """POST triggers a background scan and returns 202."""
         token = _create_user(client, "import_admin", "pass")
         user_id = _get_user_id(db_session, "import_admin")
         db_session.execute(
@@ -119,20 +119,35 @@ class TestAdminImportScan:
         )
         db_session.commit()
 
-        # Place a test video in the downloads dir
-        video = tmp_path / "The.Matrix.1999.1080p.mkv"
-        video.write_text("fake video content")
-
         resp = client.post(
             "/admin/import/scan",
             headers={"Authorization": f"Bearer {token}"},
         )
+        assert resp.status_code == 202
+        body = resp.json()
+        assert body["status"] == "running"
+        assert body["task_id"] == "import-scan"
+
+    def test_admin_can_poll_status(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """GET /admin/import/status returns task state."""
+        token = _create_user(client, "import_admin2", "pass")
+        user_id = _get_user_id(db_session, "import_admin2")
+        db_session.execute(
+            text("UPDATE users SET role = 'admin' WHERE id = :uid"),
+            {"uid": user_id},
+        )
+        db_session.commit()
+
+        resp = client.get(
+            "/admin/import/status",
+            headers={"Authorization": f"Bearer {token}"},
+        )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["files_found"] == 1
-        assert body["files_probed"] == 0  # no ffprobe — fake file
-        assert body["films_created"] == 0  # no probe → no layout → no bridge
-        assert body["errors"] == []
+        assert body["task_id"] == "import-scan"
+        assert body["status"] in ("idle", "running", "completed", "failed")
 
     def test_regular_user_gets_403(
         self, client: TestClient

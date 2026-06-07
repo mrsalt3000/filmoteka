@@ -352,10 +352,15 @@ async function runScan() {
 
   btn.disabled = true;
   btn.textContent = '⏳ Scanning…';
-  reportEl.innerHTML = '<div class="spinner">Scanning…</div>';
+  reportEl.innerHTML = '<div class="spinner">Starting scan…</div>';
 
   try {
-    const report = await apiAuth('/admin/import/scan', 'POST');
+    // Start the scan — returns immediately (202)
+    await apiAuth('/admin/import/scan', 'POST');
+    reportEl.innerHTML = '<div class="spinner">Scanning library… this may take a few minutes for large files.</div>';
+
+    // Poll for completion
+    const report = await pollScanStatus();
     reportEl.innerHTML = buildReportHTML(report);
   } catch (e) {
     reportEl.innerHTML = `<div class="error">Scan failed: ${esc(e.message)}</div>`;
@@ -363,6 +368,17 @@ async function runScan() {
     btn.disabled = false;
     btn.textContent = '🔍 Scan library';
   }
+}
+
+async function pollScanStatus() {
+  for (let i = 0; i < 600; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const resp = await apiAuth('/admin/import/status');
+    if (resp.status === 'completed') return resp.report;
+    if (resp.status === 'failed') throw new Error(resp.error || 'Unknown error');
+    // still running — keep polling
+  }
+  throw new Error('Scan timed out after 20 minutes');
 }
 
 function buildReportHTML(report) {
