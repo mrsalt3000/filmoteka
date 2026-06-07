@@ -12,13 +12,38 @@ from filmoteka.api.catalog import router as catalog_router
 from filmoteka.api.health import router as health_router
 from filmoteka.api.media import router as media_router
 from filmoteka.api.users import router as users_router
+from filmoteka.domain.access.models import User
+from filmoteka.domain.access.service import hash_password
+from filmoteka.infrastructure.database import SessionLocal
 from filmoteka.infrastructure.library_config import load_library_config
 from filmoteka.infrastructure.settings import settings
 
 
+def seed_dev_admin() -> None:
+    """Create default admin user ``mrsalt3000`` / ``dev`` if not present.
+
+    Intended for local development — idempotent, safe to call on every startup.
+    """
+    db = SessionLocal()
+    try:
+        existing = db.query(User).filter(User.username == "mrsalt3000").first()
+        if existing is not None:
+            return
+
+        user = User(
+            username="mrsalt3000",
+            hashed_password=hash_password("dev"),
+            role="admin",
+        )
+        db.add(user)
+        db.commit()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Load library config on startup; store in app state."""
+    """Load library config and seed dev admin on startup."""
 
     spec_path = settings.library_spec_path
     if not spec_path.is_absolute():
@@ -30,6 +55,9 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         library_root=settings.library_root,
     )
     app.state.library_config = config
+
+    seed_dev_admin()
+
     yield
 
 

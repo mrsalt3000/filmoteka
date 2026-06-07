@@ -15,6 +15,20 @@
 
 ---
 
+## Task Report: V1-028 — 2026-06-07
+
+- Status: `done`
+- Summary: Добавил seed dev admin-пользователя (mrsalt3000/dev) в lifespan. При старте сервиса проверяется наличие пользователя mrsalt3000 — если нет, создаётся с хэшированным паролем "dev" и ролью admin. Идемпотентно.
+- Changed files:
+  - `src/filmoteka/app.py` (+ seed_dev_admin(), вызов в lifespan)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (90/90)
+- Next task:
+  - V1-002 — Implement external metadata providers layer
+
 ## Task Report: V1-027 — 2026-06-07
 
 - Status: `done`
