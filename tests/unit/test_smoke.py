@@ -73,4 +73,4 @@ class TestBootstrapBreaks:
         monkeypatch.delenv("FILMOTEKA_SECRET_KEY", raising=False)
 
         with pytest.raises(ValidationError):
-            Settings()  # type: ignore[call-arg]
+            Settings(_env_file=None)  # type: ignore[call-arg]

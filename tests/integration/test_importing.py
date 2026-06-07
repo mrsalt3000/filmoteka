@@ -436,3 +436,98 @@ class TestFullPipeline:
         assert final.exists()
         assert "The Matrix (1999)" in final.parts
         assert final.suffix == ".mkv"
+
+
+class TestPipelineBridge:
+    """End-to-end import pipeline with catalog bridge: scan → probe → layout → Film."""
+
+    def test_full_pipeline_creates_film(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
+        from filmoteka.domain.importing.pipeline import run_import
+
+        downloads = tmp_path / "downloads"
+        target = tmp_path / "library"
+        downloads.mkdir()
+
+        video = downloads / "The.Matrix.1999.1080p.mkv"
+        _make_test_video(video)
+
+        config = _make_config(downloads, target_root=str(target))
+
+        # Run the full pipeline
+        report = run_import(config, db_session)
+
+        assert report.files_found == 1
+        assert report.files_probed == 1
+        assert report.files_laid_out == 1
+        assert report.films_created == 1
+        assert report.errors == []
+
+        # Verify catalog entries
+        films = db_session.query(Film).all()
+        assert len(films) == 1
+        assert films[0].title == "The Matrix"
+        assert films[0].year == 1999
+
+        editions = db_session.query(MovieEdition).all()
+        assert len(editions) == 1
+        assert editions[0].film_id == films[0].id
+
+        media_files = db_session.query(MediaFile).all()
+        assert len(media_files) == 1
+        assert media_files[0].edition_id == editions[0].id
+        assert Path(media_files[0].file_path).exists()
+        assert media_files[0].duration_secs is not None
+        assert media_files[0].width is not None
+
+    def test_pipeline_dedup_skips_existing_film(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        from filmoteka.domain.catalog.models import Film
+        from filmoteka.domain.importing.pipeline import run_import
+
+        downloads = tmp_path / "downloads"
+        target = tmp_path / "library"
+        downloads.mkdir()
+
+        video = downloads / "The.Matrix.1999.1080p.mkv"
+        _make_test_video(video)
+
+        config = _make_config(downloads, target_root=str(target))
+
+        # First run — creates the film
+        run1 = run_import(config, db_session)
+        assert run1.films_created == 1
+        assert run1.files_found == 1
+
+        # Second run — same file, should be skipped by idempotent scan
+        run2 = run_import(config, db_session)
+        assert run2.files_found == 0
+
+        # Only one Film row
+        films = db_session.query(Film).all()
+        assert len(films) == 1
+
+    def test_pipeline_without_year_creates_film(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        from filmoteka.domain.catalog.models import Film
+        from filmoteka.domain.importing.pipeline import run_import
+
+        downloads = tmp_path / "downloads"
+        target = tmp_path / "library"
+        downloads.mkdir()
+
+        video = downloads / "Some Movie.mkv"
+        _make_test_video(video)
+
+        config = _make_config(downloads, target_root=str(target))
+
+        report = run_import(config, db_session)
+
+        assert report.films_created == 1
+        film = db_session.query(Film).one()
+        assert film.title == "Some Movie"
+        assert film.year is None

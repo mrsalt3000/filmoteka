@@ -45,6 +45,7 @@
 | ADR-012 | Metadata enrichment must degrade gracefully offline | accepted | 2026-06-03 |
 | ADR-013 | Keep project instructions in `AGENTS.md` | accepted | 2026-06-03 |
 | ADR-014 | Separate unit, integration, and e2e tests | accepted | 2026-06-03 |
+| ADR-015 | Import pipeline — wired end-to-end, bridge step, admin trigger | accepted | 2026-06-07 |
 
 ---
 
@@ -791,6 +792,71 @@ Enrichment и recommendations, зависящие от внешних серви
   - нужно следить, чтобы integration/e2e не заменяли unit tests
 - Neutral / follow-up:
   - обязательен тестовый runbook
+
+---
+
+## ADR-015: Import pipeline — wired end-to-end, bridge step, admin trigger
+
+- Status: `accepted`
+- Date: `2026-06-07`
+- Deciders:
+  - project owner
+  - coding agent
+- Related:
+  - Tasklist items: V1-001
+
+### Context
+MVP реализовал отдельные доменные функции импорта (scan → probe → layout) и каталога (Film, MovieEdition, MediaFile), но:
+- `scan_downloads()`, `probe_candidates()`, `layout_file()` ниоткуда не вызывались
+- не было bridge-шага ImportCandidate → Film/MovieEdition/MediaFile
+- `load_library_config()` не вызывалась — YAML-конфиг не использовался
+- не было API для триггера импорта
+- пути из `.env` (`DOWNLOADS_ROOT`, `LIBRARY_ROOT`) не читались
+
+### Decision
+Собрать сквозной импортный пайплайн:
+1. `Settings` читает `downloads_root`/`library_root` из `.env` (опционально, переопределяют `library.yaml`)
+2. `app.py` lifespan загружает `LibraryConfig` при старте
+3. `pipeline.py` — `run_import()` последовательно вызывает scan → probe → layout → bridge
+4. Bridge создаёт Film (dedup по title+year), MovieEdition (dedup по film_id+quality), MediaFile
+5. `POST /admin/import/scan` — защищённый endpoint для ручного запуска
+
+### Options considered
+1. **Single orchestrator with bridge** (выбрано)
+   - Pros:
+     - единая точка входа для всего пайплайна
+     - понятный flow
+     - easy to test end-to-end
+   - Cons:
+     - synchronous — не подходит для больших библиотек (будет выделено в background job в V1-023)
+
+2. **Раздельные admin endpoints** (scan / probe / layout / bridge по отдельности)
+   - Pros:
+     - максимальная гибкость
+   - Cons:
+     - нужна координация между вызовами
+     - больше API поверхности
+     - сложнее idempotency
+
+3. **Автоимпорт при старте**
+   - Pros:
+     - zero-touch
+   - Cons:
+     - блокирует старт при большой библиотеке
+     - нет контроля у пользователя
+   - (Отложено — можно сделать опционально позже)
+
+### Consequences
+- Positive:
+  - библиотека перестаёт быть пустой после вызова импорта
+  - понятный API для админа
+  - пути конфигурируются через `.env` для Windows/Linux
+- Negative:
+  - синхронный пайплайн — для большого количества файлов нужно выделять в background
+  - bridge-дедупликация простая (title+year) — для разных версий/качеств одного фильма нужна будет доработка в V2
+- Neutral / follow-up:
+  - V1-023: background jobs для импорта
+  - V2-009: advanced dedup
 
 ---
 

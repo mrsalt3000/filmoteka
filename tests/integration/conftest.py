@@ -9,6 +9,8 @@ import pytest
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session
 
+from filmoteka.infrastructure.settings import settings
+
 # Test database name (separate from the main filmoteka DB)
 TEST_DB_NAME = "filmoteka_test"
 
@@ -38,12 +40,17 @@ def _recreate_database() -> None:
 
 def _run_alembic_upgrade() -> None:
     """Run all migrations against the test database."""
+    from unittest.mock import patch
+
     from alembic.command import upgrade
     from alembic.config import Config
 
-    alembic_cfg = Config(PROJECT_ROOT / "alembic.ini")
-    alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
-    upgrade(alembic_cfg, "head")
+    # Override settings.database_url so env.py uses the test DB URL
+    # instead of reading from .env
+    with patch.object(settings, "database_url", TEST_DATABASE_URL):
+        alembic_cfg = Config(PROJECT_ROOT / "alembic.ini")
+        alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
+        upgrade(alembic_cfg, "head")
 
 
 # ---------------------------------------------------------------------------

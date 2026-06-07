@@ -15,6 +15,41 @@
 
 ---
 
+## Task Report: V1-001 — 2026-06-07
+
+- Status: `done`
+- Summary: Plan V1 features + wire up import pipeline. Сделал:
+  - V1 roadmap: зафиксировал приоритеты в `architecture-decisions.md`
+  - `Settings` — добавлены `downloads_root`/`library_root` из `.env`
+  - `LibraryConfig` — добавлен `with_overrides()` для переопределения путей из `.env`
+  - `pipeline.py` — оркестратор `run_import()`: scan → probe → layout → bridge (создание Film/MovieEdition/MediaFile)
+  - `app.py` — lifespan для загрузки `LibraryConfig` при старте
+  - `admin.py` — `POST /admin/import/scan` для ручного запуска импорта
+  - `dependencies.py` — `get_library_config` dependency
+  - `conftest.py` — починил поднятие тестовой БД (migrations/env.py переопределял URL через `settings.database_url`)
+- Changed files:
+  - `src/filmoteka/infrastructure/settings.py` (+ downloads_root, library_root)
+  - `src/filmoteka/infrastructure/library_config.py` (+ with_overrides)
+  - `src/filmoteka/domain/importing/pipeline.py` (new — orchestrator + bridge)
+  - `src/filmoteka/api/dependencies.py` (new — get_library_config)
+  - `src/filmoteka/api/admin.py` (+ POST /admin/import/scan)
+  - `src/filmoteka/app.py` (+ lifespan hook)
+  - `tests/integration/conftest.py` (fix: patch settings.database_url for test DB)
+  - `tests/integration/test_admin.py` (+ TestAdminImportScan — 3 tests)
+  - `tests/integration/test_importing.py` (+ TestPipelineBridge — 3 tests)
+  - `tests/unit/test_smoke.py` (fix: _env_file=None in negative test)
+  - `docs/architecture-decisions.md` (+ V1 roadmap)
+  - `docs/progress.md` (+ report)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (105/105)
+  - pytest integration: `yes` (90/90)
+- Next task:
+  - V1-002 — Implement external metadata providers layer
+
+---
+
 ## Task Report: FIX-002 — 2026-06-06
 
 - Status: `done`

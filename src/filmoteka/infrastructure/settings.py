@@ -12,6 +12,10 @@ class Settings(BaseSettings):
 
     library_spec_path: Path = Path("specs/library.yaml")
 
+    # Override roots from .env — these take precedence over library.yaml values.
+    downloads_root: Path | None = None
+    library_root: Path | None = None
+
     version: str = "0.1.0"
 
 
