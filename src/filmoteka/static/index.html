@@ -231,7 +231,6 @@ async function handleLogout() {
 // ── Router ─────────────────────────────────────────────────────────
 function navigate(hash) {
   location.hash = `#${hash}`;
-  render();
 }
 
 function currentRoute() {
@@ -328,7 +327,7 @@ async function renderPlayer(el, mediaId) {
   let status = 200;
   let statusText = '';
   try {
-    const resp = await fetch(src, { method: 'HEAD' });
+    const resp = await fetch(src, { method: 'HEAD', cache: 'no-cache' });
     status = resp.status;
     statusText = resp.statusText;
   } catch {
