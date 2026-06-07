@@ -297,12 +297,30 @@ async function renderFilm(el, id) {
   const persons = f.persons.map(p => `${esc(p.name)} (${esc(p.role)})`).join(', ') || '—';
   const firstMedia = f.editions[0]?.media_files?.[0];
 
+  // Check for resume state if logged in
+  let watchState = null;
+  if (currentUser && firstMedia) {
+    try {
+      watchState = await apiAuth(`/media/${firstMedia.id}/watch/state`);
+    } catch { /* ignore — show Play button */ }
+  }
+
+  let playBtnHtml = '';
+  if (firstMedia) {
+    if (watchState && watchState.has_state && watchState.last_position > 0) {
+      const pos = formatTime(watchState.last_position);
+      playBtnHtml = `<button class="play-btn" onclick="navigate('play/${firstMedia.id}')">▶ Continue (${pos})</button>`;
+    } else {
+      playBtnHtml = `<button class="play-btn" onclick="navigate('play/${firstMedia.id}')">▶ Play</button>`;
+    }
+  }
+
   el.innerHTML = `
     <div class="back" onclick="navigate('list')">← Back to list</div>
     <div class="detail">
       <h2>${esc(f.title)}</h2>
       <div class="meta">${f.year || '—'}${f.description ? ' · ' + esc(f.description) : ''}</div>
-      ${firstMedia ? `<button class="play-btn" onclick="navigate('play/${firstMedia.id}')">▶ Play</button>` : ''}
+      ${playBtnHtml}
       <div class="section" style="margin-top:1.5rem">
         <h3>Genres</h3><p>${genres}</p>
       </div>
@@ -326,6 +344,7 @@ async function renderPlayer(el, mediaId) {
   // Check stream availability before showing the video element
   let status = 200;
   let statusText = '';
+  let watchInfo = null;
   try {
     const resp = await fetch(src, { method: 'HEAD', cache: 'no-cache' });
     status = resp.status;
@@ -374,9 +393,19 @@ async function renderPlayer(el, mediaId) {
     return;
   }
 
-  // Status OK — render the video player with an error fallback
+  // Status OK — start watch and render the video player
+  let startPosition = 0;
+  let watchEventId = null;
+  if (currentUser) {
+    try {
+      const ws = await apiAuth(`/media/${mediaId}/watch/start`, 'POST');
+      watchEventId = ws.watch_event_id;
+      if (ws.last_position > 0) startPosition = ws.last_position;
+    } catch { /* play without watch tracking */ }
+  }
+
   el.innerHTML = `
-    <div class="back" onclick="history.back()">← Back</div>
+    <div class="back" onclick="navigate('list')">← Back to list</div>
     <div class="player-page">
       <video id="player-video" controls autoplay preload="metadata">
         <source src="${src}">
@@ -389,9 +418,31 @@ async function renderPlayer(el, mediaId) {
       </div>
     </div>`;
 
-  // Attach error handler after element is in DOM
   const video = document.getElementById('player-video');
   if (video) {
+    // Seek to resume position once metadata is loaded
+    if (startPosition > 0) {
+      video.addEventListener('loadedmetadata', function onMeta() {
+        video.currentTime = startPosition;
+        video.removeEventListener('loadedmetadata', onMeta);
+      }, { once: true });
+    }
+
+    // Save progress periodically
+    if (watchEventId) {
+      let progressInterval = setInterval(() => {
+        apiAuth(`/media/${mediaId}/watch/${watchEventId}/progress`, 'PATCH', { position: video.currentTime });
+      }, 10000);
+
+      // Save on navigation away
+      window.addEventListener('hashchange', function onHash() {
+        apiAuth(`/media/${mediaId}/watch/${watchEventId}/progress`, 'PATCH', { position: video.currentTime });
+        clearInterval(progressInterval);
+        window.removeEventListener('hashchange', onHash);
+      }, { once: true });
+    }
+
+    // Error fallback
     video.addEventListener('error', function () {
       const errorEl = document.getElementById('player-error');
       if (errorEl) {
@@ -484,6 +535,14 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = s ?? '';
   return d.innerHTML;
+}
+
+function formatTime(secs) {
+  if (secs == null || secs < 0) return '0:00';
+  const total = Math.floor(secs);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 // ── Init ────────────────────────────────────────────────────────────
