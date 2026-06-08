@@ -4,6 +4,25 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-035 — 2026-06-08
+
+- Status: `done`
+- Summary: Добавил индикатор прогресса просмотра на карточки фильмов в списке (grid view). Новый batch-эндпоинт `POST /media/watch/states-by-film` принимает список film_ids, для каждого находит первый MediaFile через editions и возвращает watch-state текущего пользователя (has_state, last_position, duration_secs, finished). Во фронтенде `renderList()` после загрузки списка batched-запросом получает состояния всех видимых фильмов и отображает: красный badge "▶ Continue" + прогресс-бар для незавершённых, зелёный badge "✓ Watched" для завершённых. Без авторизации прогресс не показывается.
+- Changed files:
+  - `src/filmoteka/api/schemas/watch.py` (+ FilmWatchState, FilmWatchStatesRequest, FilmWatchStatesResponse)
+  - `src/filmoteka/api/media.py` (+ POST /media/watch/states-by-film, import joinedload, import Film)
+  - `src/filmoteka/static/index.html` (+ renderList: batch fetch + badge+progress-bar per card; CSS: .poster-wrap, .watch-badge, .progress-track/fill)
+  - `tests/integration/test_media.py` (+ TestWatchStatesByFilm — 5 тестов: auth, empty, no-media, unfinished, mixed)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (134/134)
+  - pytest integration: `yes` (111/111, +5 новых)
+- Next task:
+  - V1-036 — Add progress bar on film detail page
+
+---
+
 ## Task Report: V1-005 — 2026-06-08
 
 - Status: `done`

@@ -42,3 +42,18 @@ class WatchHistoryItem(BaseModel):
 class WatchHistoryResponse(BaseModel):
     items: list[WatchHistoryItem]
     total: int
+
+
+class FilmWatchState(BaseModel):
+    has_state: bool
+    last_position: float | None = None
+    duration_secs: float | None = None
+    finished: bool | None = None
+
+
+class FilmWatchStatesRequest(BaseModel):
+    film_ids: list[int]
+
+
+class FilmWatchStatesResponse(BaseModel):
+    states: dict[str, FilmWatchState]

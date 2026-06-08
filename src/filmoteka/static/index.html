@@ -50,11 +50,17 @@ nav input::placeholder { color: var(--text2); }
 .film-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
 .film-card { background: var(--surface); border-radius: var(--radius); padding: 1.25rem; cursor: pointer; transition: transform .15s, background .15s; }
 .film-card:hover { transform: translateY(-2px); background: var(--surface2); }
-.film-card .poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; border-radius: calc(var(--radius) - 2px); margin-bottom: .75rem; background: var(--surface2); }
+.film-card .poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; border-radius: calc(var(--radius) - 2px); background: var(--surface2); display: block; }
 .film-card .poster[src=""], .film-card .poster:not([src]) { display: none; }
-.film-card .poster-placeholder { width: 100%; aspect-ratio: 2/3; border-radius: calc(var(--radius) - 2px); margin-bottom: .75rem; background: var(--surface2); display: flex; align-items: center; justify-content: center; color: var(--text2); font-size: 2rem; }
+.film-card .poster-placeholder { width: 100%; aspect-ratio: 2/3; border-radius: calc(var(--radius) - 2px); background: var(--surface2); display: flex; align-items: center; justify-content: center; color: var(--text2); font-size: 2rem; }
 .film-card h3 { font-size: 1rem; margin-bottom: .25rem; }
 .film-card .year { color: var(--text2); font-size: .85rem; }
+.film-card .poster-wrap { position: relative; margin-bottom: .75rem; }
+.film-card .watch-badge { position: absolute; bottom: .25rem; left: .25rem; right: .25rem; padding: .35rem .5rem; border-radius: calc(var(--radius) - 2px); font-size: .8rem; font-weight: 600; text-align: center; pointer-events: none; }
+.film-card .watch-badge.continue { background: var(--accent); color: var(--play-btn-text); }
+.film-card .watch-badge.watched { background: #2e7d32; color: #fff; }
+.film-card .progress-track { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--surface2); border-radius: 0 0 calc(var(--radius) - 2px) calc(var(--radius) - 2px); overflow: hidden; }
+.film-card .progress-fill { height: 100%; background: var(--accent); transition: width .3s; }
 .detail { max-width: 720px; }
 .detail-layout { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
 .detail-poster { flex: 0 0 200px; }
@@ -93,6 +99,13 @@ nav input::placeholder { color: var(--text2); }
 .admin-page .scan-btn { padding: .75rem 2rem; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 1rem; cursor: pointer; }
 .admin-page .scan-btn:hover { opacity: .9; }
 .admin-page .scan-btn:disabled { opacity: .5; cursor: not-allowed; }
+.admin-page .poster-section { margin-top: 2rem; border-top: 1px solid var(--surface2); padding-top: 1.5rem; }
+.admin-page .poster-section h3 { font-size: 1rem; margin-bottom: .75rem; }
+.admin-page .poster-section p { font-size: .85rem; color: var(--text2); margin-bottom: .75rem; }
+.admin-page .poster-btns { display: flex; gap: .75rem; flex-wrap: wrap; }
+.admin-page .poster-btn { padding: .6rem 1.25rem; background: var(--surface2); color: var(--text); border: 1px solid var(--text2); border-radius: var(--radius); font-size: .9rem; cursor: pointer; }
+.admin-page .poster-btn:hover { border-color: var(--text); }
+.admin-page .poster-btn:disabled { opacity: .5; cursor: not-allowed; }
 .admin-report { margin-top: 1.5rem; background: var(--surface); border-radius: var(--radius); padding: 1.25rem; }
 .admin-report h3 { font-size: 1rem; margin-bottom: .75rem; }
 .admin-report table { width: 100%; border-collapse: collapse; }
@@ -292,15 +305,43 @@ async function renderList(el) {
     el.innerHTML = `<div class="empty">${q ? 'No films match your search.' : 'Library is empty.'}</div>`;
     return;
   }
-  el.innerHTML = `<div class="film-grid">${data.items.map(f => `
+
+  // Batch-fetch watch states if logged in
+  let watchStates = {};
+  if (currentUser) {
+    const filmIds = data.items.map(f => f.id);
+    try {
+      const resp = await apiAuth('/media/watch/states-by-film', 'POST', { film_ids: filmIds });
+      watchStates = resp.states || {};
+    } catch { /* show grid without watch states */ }
+  }
+
+  el.innerHTML = `<div class="film-grid">${data.items.map(f => {
+    const st = watchStates[f.id];
+    let badgeHtml = '';
+    let progressHtml = '';
+    if (st && st.has_state) {
+      if (st.finished) {
+        badgeHtml = `<div class="watch-badge watched">✓ Watched</div>`;
+      } else if (st.last_position > 0 && st.duration_secs > 0) {
+        const pct = Math.min(100, Math.round((st.last_position / st.duration_secs) * 100));
+        progressHtml = `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>`;
+        badgeHtml = `<div class="watch-badge continue">▶ Continue</div>`;
+      }
+    }
+    return `
     <div class="film-card" onclick="navigate('film/${f.id}')">
-      ${f.poster_url
-        ? `<img class="poster" src="${esc(f.poster_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
-        : `<div class="poster-placeholder">🎬</div>`}
+      <div class="poster-wrap">
+        ${f.poster_url
+          ? `<img class="poster" src="${esc(f.poster_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+          : `<div class="poster-placeholder">🎬</div>`}
+        ${badgeHtml}
+        ${progressHtml}
+      </div>
       <h3>${esc(f.title)}</h3>
       <div class="year">${f.year || '—'}</div>
-    </div>
-  `).join('')}</div>`;
+    </div>`;
+  }).join('')}</div>`;
 }
 
 async function renderFilm(el, id) {
@@ -404,6 +445,17 @@ async function renderPlayer(el, mediaId) {
     return;
   }
 
+  if (status === 415) {
+    el.innerHTML = `
+      <div class="back" onclick="navigate('list')">← Back to list</div>
+      <div class="play-error">
+        <div class="icon">🎬</div>
+        <div class="msg">MKV format not supported</div>
+        <div class="detail">MKV files require ffmpeg on the server for playback. Try downloading the file instead.</div>
+      </div>`;
+    return;
+  }
+
   if (status >= 500) {
     el.innerHTML = `
       <div class="back" onclick="navigate('list')">← Back to list</div>
@@ -488,6 +540,16 @@ async function renderAdmin(el) {
       <p style="color:var(--text2);margin-bottom:1rem">Scan the downloads directory to import new media files into the library.</p>
       <button class="scan-btn" id="scan-btn" onclick="runScan()">🔍 Scan library</button>
       <div id="scan-report"></div>
+
+      <div class="poster-section">
+        <h3>Posters</h3>
+        <p>Fetch posters from TMDb. Existing posters are not affected unless you choose to refresh all.</p>
+        <div class="poster-btns">
+          <button class="poster-btn" id="fill-poster-btn" onclick="runFillPosters()">🖼 Fill missing posters</button>
+          <button class="poster-btn" id="refresh-poster-btn" onclick="runRefreshPosters()">🔄 Refresh all posters</button>
+        </div>
+        <div id="poster-report"></div>
+      </div>
     </div>`;
 }
 
@@ -538,6 +600,74 @@ function buildReportHTML(report) {
       <tr><td>Files probed</td><td>${report.files_probed}</td></tr>
       <tr><td>Files laid out</td><td>${report.files_laid_out}</td></tr>
       <tr><td>Films created</td><td>${report.films_created}</td></tr>
+    </table>
+    ${errors.length > 0 ? `
+      <div class="report-errors">
+        <strong>Errors (${errors.length})</strong>
+        <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+      </div>` : ''}
+  </div>`;
+}
+
+// ── Poster management ─────────────────────────────────────────────
+async function runFillPosters() {
+  await runPosterOp('fill-missing', '🖼 Fill missing posters');
+}
+
+async function runRefreshPosters() {
+  await runPosterOp('refresh-all', '🔄 Refresh all posters');
+}
+
+async function runPosterOp(mode, btnLabel) {
+  const btn = document.getElementById(mode === 'fill-missing' ? 'fill-poster-btn' : 'refresh-poster-btn');
+  const reportEl = document.getElementById('poster-report');
+  if (!btn || !reportEl) return;
+
+  const label = mode === 'fill-missing' ? 'Fill missing posters' : 'Refresh all posters';
+  if (!confirm(`Start "${label}"? This will query TMDb for each film.`)) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Working…';
+  reportEl.innerHTML = '<div class="spinner">Starting…</div>';
+
+  try {
+    const startResp = await apiAuth(`/admin/posters/${mode}`, 'POST');
+
+    if (startResp.status === 'error') {
+      reportEl.innerHTML = `<div class="error">${esc(startResp.error || 'Unknown error')}</div>`;
+      return;
+    }
+
+    reportEl.innerHTML = '<div class="spinner">Processing posters… this may take a moment.</div>';
+    const report = await pollPosterStatus();
+    reportEl.innerHTML = buildPosterReportHTML(report, label);
+  } catch (e) {
+    reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = btnLabel;
+  }
+}
+
+async function pollPosterStatus() {
+  for (let i = 0; i < 600; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const resp = await apiAuth('/admin/posters/status');
+    if (resp.status === 'completed') return resp.report;
+    if (resp.status === 'failed') throw new Error(resp.error || 'Unknown error');
+    if (resp.status === 'error') throw new Error(resp.error || 'TMDB_API_KEY not configured');
+  }
+  throw new Error('Poster operation timed out after 20 minutes');
+}
+
+function buildPosterReportHTML(report, label) {
+  const errors = report.errors || [];
+  return `<div class="admin-report">
+    <h3>${esc(label)} — Complete</h3>
+    <table>
+      <tr><td>Total films</td><td>${report.total}</td></tr>
+      <tr><td>Updated</td><td>${report.updated}</td></tr>
+      <tr><td>Skipped</td><td>${report.skipped}</td></tr>
     </table>
     ${errors.length > 0 ? `
       <div class="report-errors">

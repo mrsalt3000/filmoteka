@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -93,6 +94,69 @@ class TestStreamMedia:
         # FastAPI FileResponse returns 206 for valid Range requests
         assert resp.status_code == 206
         assert resp.content == b"56789"
+
+    def test_stream_webm_mime(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """.webm files get video/webm MIME type."""
+        video = tmp_path / "movie.webm"
+        video.write_bytes(b"fake webm")
+        media = self._create_media(db_session, str(video))
+
+        resp = client.get(f"/media/{media.id}/stream")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "video/webm"
+
+    def test_stream_avi_mime(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """.avi files get video/x-msvideo MIME type."""
+        video = tmp_path / "movie.avi"
+        video.write_bytes(b"fake avi")
+        media = self._create_media(db_session, str(video))
+
+        resp = client.get(f"/media/{media.id}/stream")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "video/x-msvideo"
+
+    def test_stream_mkv_without_ffmpeg_returns_415(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """MKV without ffmpeg returns 415."""
+        video = tmp_path / "movie.mkv"
+        video.write_bytes(b"fake mkv")
+        media = self._create_media(db_session, str(video))
+
+        with patch("filmoteka.api.media._ffmpeg_available", return_value=False):
+            resp = client.get(f"/media/{media.id}/stream")
+        assert resp.status_code == 415
+        assert "MKV" in resp.text
+
+    def test_head_mkv_without_ffmpeg_returns_415(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """HEAD for MKV without ffmpeg also returns 415."""
+        video = tmp_path / "movie.mkv"
+        video.write_bytes(b"fake mkv")
+        media = self._create_media(db_session, str(video))
+
+        with patch("filmoteka.api.media._ffmpeg_available", return_value=False):
+            resp = client.head(f"/media/{media.id}/stream")
+        assert resp.status_code == 415
+
+    def test_head_mkv_with_ffmpeg_returns_ok(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """HEAD for MKV with ffmpeg returns 200 and correct MIME."""
+        video = tmp_path / "movie.mkv"
+        video.write_bytes(b"fake mkv")
+        media = self._create_media(db_session, str(video))
+
+        with patch("filmoteka.api.media._ffmpeg_available", return_value=True):
+            resp = client.head(f"/media/{media.id}/stream")
+        assert resp.status_code == 200
+        # MIME is still video/x-matroska for the HEAD check
+        assert resp.headers["content-type"] == "video/x-matroska"
 
 
 class TestWatchStart:
@@ -433,6 +497,158 @@ class TestUpdateProgress:
         assert resp.status_code == 200
         event_id: int = resp.json()["watch_event_id"]
         return event_id
+
+
+class TestWatchStatesByFilm:
+    """POST /media/watch/states-by-film"""
+
+    def test_requires_auth(self, client: TestClient) -> None:
+        resp = client.post(
+            "/media/watch/states-by-film",
+            json={"film_ids": [1]},
+        )
+        assert resp.status_code == 401
+
+    def test_empty_list(self, client: TestClient) -> None:
+        token = _register_user(client, "emptyws", "pass")
+        resp = client.post(
+            "/media/watch/states-by-film",
+            json={"film_ids": []},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["states"] == {}
+
+    def test_no_media_no_state(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register_user(client, "nomedws", "pass")
+        film = Film(title="No Media", year=2020)
+        db_session.add(film)
+        db_session.commit()
+
+        resp = client.post(
+            "/media/watch/states-by-film",
+            json={"film_ids": [film.id]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["states"][str(film.id)]["has_state"] is False
+
+    def test_returns_unfinished_state(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register_user(client, "batchws", "pass")
+
+        # Create film with media
+        film = Film(title="Batch Test", year=2020)
+        db_session.add(film)
+        db_session.flush()
+        edition = MovieEdition(film_id=film.id)
+        db_session.add(edition)
+        db_session.flush()
+        media = MediaFile(
+            edition_id=edition.id,
+            file_path="/tmp/batch.mkv",
+            file_size=100,
+            duration_secs=7200.0,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        # Start watch and set some progress
+        start = client.post(
+            f"/media/{media.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        event_id = start.json()["watch_event_id"]
+        client.patch(
+            f"/media/{media.id}/watch/{event_id}/progress",
+            json={"position": 300.0},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # Batch fetch
+        resp = client.post(
+            "/media/watch/states-by-film",
+            json={"film_ids": [film.id]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        state = body["states"][str(film.id)]
+        assert state["has_state"] is True
+        assert state["last_position"] == 300.0
+        assert state["duration_secs"] == 7200.0
+        assert state["finished"] is False
+
+    def test_multiple_films_mixed_state(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register_user(client, "mixws", "pass")
+
+        def _make_film(title: str) -> tuple[Film, MediaFile]:
+            f = Film(title=title, year=2020)
+            db_session.add(f)
+            db_session.flush()
+            ed = MovieEdition(film_id=f.id)
+            db_session.add(ed)
+            db_session.flush()
+            m = MediaFile(
+                edition_id=ed.id,
+                file_path=f"/tmp/{title}.mkv",
+                file_size=100,
+                duration_secs=3600.0,
+            )
+            db_session.add(m)
+            db_session.flush()
+            return f, m
+
+        film_a, media_a = _make_film("Watched A")
+        film_b, media_b = _make_film("Watched B")
+        film_c, _ = _make_film("Unwatched C")
+        db_session.commit()
+
+        # Start watch for A and B
+        resp_a = client.post(
+            f"/media/{media_a.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        event_a = resp_a.json()["watch_event_id"]
+        client.patch(
+            f"/media/{media_a.id}/watch/{event_a}/progress",
+            json={"position": 100.0},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp_b = client.post(
+            f"/media/{media_b.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        event_b = resp_b.json()["watch_event_id"]
+        client.patch(
+            f"/media/{media_b.id}/watch/{event_b}/progress",
+            json={"position": 1800.0},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # Batch fetch
+        resp = client.post(
+            "/media/watch/states-by-film",
+            json={"film_ids": [film_a.id, film_b.id, film_c.id]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+
+        assert body["states"][str(film_a.id)]["has_state"] is True
+        assert body["states"][str(film_a.id)]["last_position"] == 100.0
+
+        assert body["states"][str(film_b.id)]["has_state"] is True
+        assert body["states"][str(film_b.id)]["last_position"] == 1800.0
+
+        assert body["states"][str(film_c.id)]["has_state"] is False
 
 
 def _register_user(client: TestClient, username: str, password: str) -> str:
