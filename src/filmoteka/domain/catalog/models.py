@@ -12,7 +12,9 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
+    DateTime,
     Float,
     ForeignKey,
     Integer,
@@ -75,6 +77,10 @@ class Film(Base):
     poster_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     poster_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
     kinopoisk_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    metadata_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    metadata_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    metadata_enriched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         default=datetime.now, onupdate=datetime.now

@@ -77,6 +77,7 @@ class FilmDetailOut(BaseModel):
     description: str | None = None
     poster_url: str | None = None
     kinopoisk_url: str | None = None
+    needs_review: bool = False
     created_at: datetime
     genres: list[GenreOut] = []
     persons: list[PersonOut] = []

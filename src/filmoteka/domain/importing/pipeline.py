@@ -7,6 +7,7 @@ entries are created without moving or copying any files.
 from __future__ import annotations
 
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -108,17 +109,38 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
         db.add(film)
         db.flush()
 
+    # --- Metadata quality: initial from filename ---
+    has_year = parsed.year is not None
+    film.metadata_source = "filename_parse"
+    film.metadata_confidence = 0.6 if has_year else 0.3
+    film.metadata_enriched_at = None
+    film.needs_review = False
+
     # --- Poster enrichment (best-effort) ---
+    poster_found = False
     if film.poster_url is None and settings.tmdb_api_key:
         result = tmdb_search_poster(parsed.title, parsed.year, settings.tmdb_api_key)
         if result is not None:
             film.poster_url, film.poster_source = result
+            poster_found = True
 
     # --- Kinopoisk link enrichment (best-effort) ---
+    kinopoisk_found = False
     if film.kinopoisk_url is None and settings.tmdb_api_key:
         url = tmdb_find_kinopoisk_url(parsed.title, parsed.year, settings.tmdb_api_key)
         if url is not None:
             film.kinopoisk_url = url
+            kinopoisk_found = True
+
+    # --- Metadata quality: upgrade if TMDb found anything ---
+    if settings.tmdb_api_key:
+        if poster_found or kinopoisk_found:
+            film.metadata_source = "tmdb"
+            film.metadata_confidence = 0.9
+            film.metadata_enriched_at = datetime.now()
+            film.needs_review = False
+        else:
+            film.needs_review = True
 
     # --- MovieEdition ---
     edition = _find_or_create_edition(

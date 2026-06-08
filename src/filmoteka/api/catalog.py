@@ -95,6 +95,7 @@ def get_film(
         title=film.title,
         year=film.year,
         description=film.description,
+        needs_review=film.needs_review,
         created_at=film.created_at,
         genres=[GenreOut.model_validate(g) for g in film.genres],
         persons=persons,

@@ -211,6 +211,7 @@ class TestGetFilm:
         assert body["editions"] == []
         assert body["poster_url"] is None
         assert body["kinopoisk_url"] is None
+        assert body["needs_review"] is False
 
     def test_with_genres(self, client: TestClient, db_session: Session) -> None:
         g1 = Genre(name="Sci-Fi", slug="sci-fi")
@@ -296,3 +297,25 @@ class TestGetFilm:
         assert mf["file_path"] == media.file_path
         assert mf["width"] == 1920
         assert mf["codec"] == "h264"
+
+    def test_needs_review_flag(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        film = Film(title="Suspicious", year=1999, needs_review=True)
+        db_session.add(film)
+        db_session.commit()
+
+        resp = client.get(f"/films/{film.id}")
+        assert resp.status_code == 200
+        assert resp.json()["needs_review"] is True
+
+    def test_bare_film_needs_review_default(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        film = Film(title="Clean", year=2000)
+        db_session.add(film)
+        db_session.commit()
+
+        resp = client.get(f"/films/{film.id}")
+        assert resp.status_code == 200
+        assert resp.json()["needs_review"] is False

@@ -3,7 +3,29 @@
 # Filmoteka — Progress Log
 
 > Этот файл ведёт агент.
->
+
+## Task Report: V1-005 — 2026-06-08
+
+- Status: `done`
+- Summary: Реализовал metadata quality pipeline. На Film добавлены 4 поля: `metadata_source`, `metadata_confidence`, `metadata_enriched_at`, `needs_review`. В bridge-шаге pipeline после filename parse проставляется `source="filename_parse"`, `confidence=0.6` (с годом) или `0.3` (без года). После TMDb-обогащения (poster или kinopoisk найдены) — апгрейд до `source="tmdb"`, `confidence=0.9`, `metadata_enriched_at=now`, `needs_review=False`. Если TMDb доступен, но ничего не нашёл — `needs_review=True`. `needs_review` экспортируется в `FilmDetailOut`.
+- Changed files:
+  - `src/filmoteka/domain/catalog/models.py` (+ 4 колонки: metadata_source, metadata_confidence, metadata_enriched_at, needs_review)
+  - `migrations/versions/1eacde9e15e5_add_metadata_quality_columns.py` (new — миграция)
+  - `src/filmoteka/domain/importing/pipeline.py` (+ проставление quality-полей в _bridge_to_catalog)
+  - `src/filmoteka/api/catalog.py` (+ needs_review в конструктор FilmDetailOut)
+  - `src/filmoteka/api/schemas/catalog.py` (+ needs_review в FilmDetailOut)
+  - `tests/integration/test_catalog.py` (+ test_needs_review_flag, test_bare_film_needs_review_default)
+  - `tests/integration/test_importing.py` (+ quality assertions в test_full_pipeline_creates_film и test_pipeline_without_year_creates_film)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (134/134)
+  - pytest integration: `yes` (106/106, +2 новых)
+- Next task:
+  - V1-035 — Add watch/continue button to film grid (frontend UX)
+
+---
+
 > Правила заполнения:
 > - После **каждой завершённой задачи** добавлять новую запись в начало файла.
 > - Одна запись = одна завершённая задача.
@@ -12,6 +34,42 @@
 > - Если задача заблокирована, ставить статус `blocked` и обязательно писать причину.
 > - Если поведение системы изменилось, агент обязан указать, какие тесты добавлены или обновлены.
 > - Если проверки не запускались, нужно явно написать почему.
+
+---
+
+## Task Report: V1-031 — 2026-06-08
+
+- Status: `done`
+- Summary: Реализовал поддержку MKV и других форматов в плеере. `media_type` теперь определяется динамически по расширению файла (mp4→`video/mp4`, webm→`video/webm`, mkv→`video/x-matroska`, avi→`video/x-msvideo` и т.д.). Для MKV: если `ffmpeg` найден в PATH — ремукс в MP4 на лету через `StreamingResponse` (stream copy, без перекодирования). Если ffmpeg недоступен — HTTP 415. HEAD-запросы обрабатываются отдельно, без запуска ffmpeg. Во фронтенде добавлена обработка 415 с сообщением "MKV format not supported". 5 новых integration-тестов.
+- Changed files:
+  - `src/filmoteka/api/media.py` (refactor: `_mime_type()`, `_ffmpeg_available()`, `_ffmpeg_remux_stream()`, `stream_media()` — `@router.api_route` с GET+HEAD, динамический MIME, ffmpeg-ремукс для MKV, 415 без ffmpeg)
+  - `src/filmoteka/static/index.html` (+ обработка status 415 в renderPlayer)
+  - `tests/integration/test_media.py` (+ 5 тестов: webm MIME, avi MIME, MKV без ffmpeg→415, HEAD MKV без ffmpeg→415, HEAD MKV с ffmpeg→200)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (134/134)
+  - pytest integration: `yes` (104/104, +5 новых)
+- Next task:
+  - V1-035 — Add watch/continue button to film grid (frontend UX)
+
+---
+
+## Task Report: V1-038 — 2026-06-08
+
+- Status: `done`
+- Summary: Добавил в админку две кнопки управления постерами. `POST /admin/posters/fill-missing` — заполняет постеры только у фильмов без `poster_url`. `POST /admin/posters/refresh-all` — перезапрашивает и заменяет постеры у всех фильмов. Оба эндпойнта работают в бэкграунд-треде с polling через `GET /admin/posters/status`. Без `TMDB_API_KEY` возвращают ошибку. Во фронтенде две кнопки с confirm-диалогом, спиннером, polling и отчётом (total/updated/skipped/errors). Использован существующий `tmdb_search_poster()`.
+- Changed files:
+  - `src/filmoteka/api/admin.py` (+ `POST /admin/posters/fill-missing`, `POST /admin/posters/refresh-all`, `GET /admin/posters/status`)
+  - `src/filmoteka/static/index.html` (+ CSS для poster-секции, две кнопки в renderAdmin, JS: `runFillPosters`/`runRefreshPosters`/`runPosterOp`/`pollPosterStatus`/`buildPosterReportHTML`)
+  - `tests/integration/test_admin.py` (+ `TestAdminPosters` — 8 тестов: auth, missing key, fill-missing, refresh-all)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (134/134)
+  - pytest integration: `yes` (99/99, +8 новых)
+- Next task:
+  - V1-031 — Implement MKV playback support (или V1-035 — Continue button in grid)
 
 ---
 
