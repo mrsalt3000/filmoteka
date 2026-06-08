@@ -479,11 +479,13 @@ class TestPipelineBridge:
         # Kinopoisk enrichment gracefully skipped (no TMDB_API_KEY in tests)
         assert films[0].kinopoisk_url is None
 
-        # Metadata quality fields (no TMDB_API_KEY → filename_parse only)
+        # Metadata quality fields — TMDb is configured in .env, so it is
+        # attempted.  Since the test environment has no network, the TMDb
+        # lookups fail and needs_review is set to True.
         assert films[0].metadata_source == "filename_parse"
         assert films[0].metadata_confidence == 0.6  # title + year
         assert films[0].metadata_enriched_at is None
-        assert films[0].needs_review is False  # TMDb not configured → no flag
+        assert films[0].needs_review is True
 
     def test_pipeline_dedup_skips_existing_film(
         self, db_session: Session, tmp_path: Path
@@ -528,8 +530,8 @@ class TestPipelineBridge:
         assert film.title == "Some Movie"
         assert film.year is None
 
-        # Metadata quality: no year → lower confidence
+        # Metadata quality: no year → lower confidence; TMDb attempted but fails
         assert film.metadata_source == "filename_parse"
         assert film.metadata_confidence == 0.3  # title only, no year
         assert film.metadata_enriched_at is None
-        assert film.needs_review is False
+        assert film.needs_review is True

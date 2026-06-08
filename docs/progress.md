@@ -4,6 +4,25 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-036 — 2026-06-08
+
+- Status: `done`
+- Summary: Добавил визуальный прогресс-бар на страницу карточки фильма (`#film/{id}`). Под кнопкой Play/Continue показывается: для незавершённого просмотра — прогресс-бар (отношение last_position к duration_secs) + подпись "MM:SS / HH:MM:SS"; для завершённого — зелёный badge "✓ Watched". Без просмотра или без duration_secs — ничего не показывается.
+- Changed files:
+  - `src/filmoteka/static/index.html` (+ renderFilm: прогресс-бар / watched-label под playBtn; CSS: .progress-wrap, .progress-track/fill, .progress-label, .watched-label)
+  - `tests/integration/test_importing.py` (fix: assertions под реальное поведение с TMDB_API_KEY в .env)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (134/134)
+  - pytest integration: `yes` (111/111)
+- Next task:
+  - V1-036 — Add progress bar on film detail page *(already done)*
+  - V1-037 — *(already done)*
+  - V1-006 — Implement manual card edit by admin
+
+---
+
 ## Task Report: V1-035 — 2026-06-08
 
 - Status: `done`
