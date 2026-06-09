@@ -4,6 +4,21 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-004 — 2026-06-09
+
+- Status: `done`
+- Summary: Починил исходящие соединения из Docker-контейнера к TMDb. Добавил `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` в `environment:` обоих сервисов (`docker-compose.yml`). Если в `.env` указан proxy — Docker Compose подставит его в контейнер, `urllib` подхватит автоматически. В `metadata_providers.py` разделил обработку `URLError` — теперь в лог пишется понятное сообщение с рекомендацией проверить proxy/файрвол.
+- Changed files:
+  - `docker-compose.yml` (+ HTTP_PROXY, HTTPS_PROXY, NO_PROXY в api и worker)
+  - `src/filmoteka/infrastructure/metadata_providers.py` (+ импорт URLError; отдельный except с детальным сообщением)
+- Checks:
+  - ruff check: `yes` (только предсуществующее предупреждение)
+  - mypy: `yes` (57 source files, clean)
+  - docker compose config: `yes` (HTTP_PROXY/HTTPS_PROXY присутствуют)
+  - pytest integration: `yes` (69/69 passed)
+- Next task:
+  - V1-011 — Implement language filter for audio and subtitles
+
 ## Task Report: INFRA-001 — 2026-06-09
 
 - Status: `done`

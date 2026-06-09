@@ -47,6 +47,10 @@ services:
       # mounted at /media/library regardless of the host path in .env.
       LIBRARY_ROOT: /media/library
       TMDB_API_KEY: ${TMDB_API_KEY}
+      # Proxy settings — set in .env if behind a corporate/ISP proxy.
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
     volumes:
       - ./specs:/app/specs:ro
       - ${LIBRARY_ROOT:-./media/library}:/media/library
@@ -78,6 +82,10 @@ services:
       # mounted at /media/library regardless of the host path in .env.
       LIBRARY_ROOT: /media/library
       TMDB_API_KEY: ${TMDB_API_KEY}
+      # Proxy settings — set in .env if behind a corporate/ISP proxy.
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
     volumes:
       - ./specs:/app/specs:ro
       - ${LIBRARY_ROOT:-./media/library}:/media/library

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, cast
+from typing import cast
+from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -24,7 +25,9 @@ TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p"
 # ---------------------------------------------------------------------------
 
 
-def _tmdb_api_get(path: str, api_key: str, params: dict[str, str] | None = None) -> dict[str, object] | None:
+def _tmdb_api_get(
+    path: str, api_key: str, params: dict[str, str] | None = None
+) -> dict[str, object] | None:
     """Perform a GET request against the TMDb API.
 
     Returns the parsed JSON body on success (HTTP 200), or ``None`` on
@@ -43,6 +46,13 @@ def _tmdb_api_get(path: str, api_key: str, params: dict[str, str] | None = None)
 
         body: dict[str, object] = json.loads(resp.read().decode("utf-8"))
         return body
+    except URLError:
+        logger.exception(
+            "TMDb GET %s — network error (check internet / proxy / firewall), "
+            "see https://github.com/mrsalt3000/filmoteka#troubleshooting",
+            path,
+        )
+        return None
     except Exception:
         logger.exception("TMDb GET %s failed", path)
         return None

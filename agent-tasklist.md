@@ -741,6 +741,20 @@
   2. Admin poster endpoints работают без ошибки "TMDB_API_KEY is not configured".
   3. Import pipeline находит постеры через TMDb в Docker.
 
+- [x] **BUGFIX-004** Починить исходящие соединения из Docker-контейнера к TMDb.
+
+  Проблема: `urllib.request.urlopen()` возвращает `[Errno 111] Connection refused` при попытке доступа к `api.themoviedb.org` из контейнера. DNS работает, но TCP-соединение отклоняется.
+
+  Варианты причин и решений:
+  - **Антивирус/файрвол** (Kaspersky и т.д.) блокирует HTTPS из неизвестных процессов → добавить исключение для Docker или WSL2
+  - **Корпоративный proxy** → передать `HTTP_PROXY`/`HTTPS_PROXY` в контейнер через `environment:` в docker-compose.yml
+  - **WSL2 DNS/network глюк** → `docker compose run --rm api python -c "from urllib.request import urlopen; print(urlopen('https://api.themoviedb.org', timeout=5).status)"` для диагностики
+
+  Проверка результата:
+  1. `urlopen('https://api.themoviedb.org/')` из контейнера возвращает HTTP 200.
+  2. Admin poster fill-missing/refresh-all работают без ошибок.
+  3. Import pipeline находит постеры в Docker.
+
 ---
 
 # 4. V2
