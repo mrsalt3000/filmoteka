@@ -17,7 +17,21 @@
   - ruff check: `yes` (предсуществующее предупреждение в test_admin.py:681, не относится к задаче)
   - mypy: `yes` (57 source files, clean)
 - Next task:
-  - V1-009 — Implement filters by genre, year, country, age rating
+  - V1-010 — Implement filters by tech attributes (resolution, codec, subtitles, audio tracks)
+
+## Task Report: V1-009 — 2026-06-09
+
+- Status: `done`
+- Summary: Реализовал фильтры по жанру (slug) и диапазону годов. В `GET /films` добавлены query-параметры: `genre` (slug из Genre), `year_from` и `year_to` (диапазон). Старый `year` сохранён для обратной совместимости. Фильтры `genre` и `year`/`year_from`/`year_to` комбинируются между собой и с поиском `q`. Фильтры по стране и возрастному рейтингу отложены — в схеме БД нет соответствующих полей (нужна отдельная задача).
+- Changed files:
+  - `src/filmoteka/api/catalog.py` (+ genre, year_from, year_to params; genre filter через Genre.slug)
+  - `tests/integration/test_catalog.py` (+ 7 тестов: genre slug, genre no-results, year_from, year_to, year range, genre+year combo, search+genre combo)
+- Checks:
+  - ruff check: `yes` (только предсуществующее предупреждение в test_admin.py:681)
+  - mypy: `yes` (57 source files, clean)
+  - pytest integration test_catalog.py: `yes` (30/30 passed, +7 новых)
+- Next task:
+  - V1-010 — Implement filters by tech attributes (resolution, codec, subtitles, audio tracks)
 
 ## Task Report: BUGFIX-001 — 2026-06-09
 

@@ -34,12 +34,15 @@ def list_films(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     year: int | None = Query(None),
+    year_from: int | None = Query(None),
+    year_to: int | None = Query(None),
+    genre: str | None = Query(None, min_length=1),
     q: str | None = Query(None, min_length=1),
     db: Session = Depends(get_db),
 ) -> FilmListResponse:
-    """Return a paginated list of films, optionally filtered by year or
-    free-text search (case-insensitive) across title, description, genre
-    names, and person names."""
+    """Return a paginated list of films, optionally filtered by year range,
+    genre slug, exact year, or free-text search (case-insensitive) across
+    title, description, genre names, and person names."""
     query = db.query(Film)
 
     if q:
@@ -50,8 +53,16 @@ def list_films(
             | Film.persons.any(Person.name.ilike(f"%{q}%"))
         )
 
+    if genre is not None:
+        query = query.filter(Film.genres.any(Genre.slug == genre))
+
     if year is not None:
         query = query.filter(Film.year == year)
+    else:
+        if year_from is not None:
+            query = query.filter(Film.year >= year_from)
+        if year_to is not None:
+            query = query.filter(Film.year <= year_to)
 
     total = query.count()
     items = query.order_by(Film.created_at.desc()).offset(skip).limit(limit).all()

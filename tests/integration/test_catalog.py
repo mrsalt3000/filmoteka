@@ -186,6 +186,123 @@ class TestListFilms:
         assert body["total"] == 1
         assert body["items"][0]["title"] == "The Matrix Reloaded"
 
+    # ── Filters: genre, year range ────────────────────────────────
+
+    def test_filter_by_genre_slug(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        drama = Genre(name="Drama", slug="drama")
+        action = Genre(name="Action", slug="action")
+        f1 = Film(title="Interstellar", year=2014, genres=[sci_fi])
+        f2 = Film(title="The Dark Knight", year=2008, genres=[action, drama])
+        f3 = Film(title="Inception", year=2010, genres=[sci_fi, action])
+        db_session.add_all([f1, f2, f3])
+        db_session.commit()
+
+        resp = client.get("/films?genre=sci-fi")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        titles = {f["title"] for f in body["items"]}
+        assert titles == {"Interstellar", "Inception"}
+
+    def test_filter_by_genre_slug_no_results(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        comedy = Genre(name="Comedy", slug="comedy")
+        f1 = Film(title="Interstellar", year=2014, genres=[comedy])
+        db_session.add(f1)
+        db_session.commit()
+
+        resp = client.get("/films?genre=horror")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 0
+
+    def test_filter_by_year_from(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        db_session.add_all([
+            Film(title="Old", year=1999),
+            Film(title="Middle", year=2005),
+            Film(title="New", year=2010),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?year_from=2000")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        assert {f["title"] for f in body["items"]} == {"Middle", "New"}
+
+    def test_filter_by_year_to(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        db_session.add_all([
+            Film(title="Old", year=1999),
+            Film(title="Middle", year=2005),
+            Film(title="New", year=2010),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?year_to=2005")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        assert {f["title"] for f in body["items"]} == {"Old", "Middle"}
+
+    def test_filter_by_year_range(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        db_session.add_all([
+            Film(title="Old", year=1999),
+            Film(title="Middle", year=2005),
+            Film(title="New", year=2010),
+            Film(title="Latest", year=2020),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?year_from=2000&year_to=2010")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        assert {f["title"] for f in body["items"]} == {"Middle", "New"}
+
+    def test_filter_genre_plus_year_range(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        drama = Genre(name="Drama", slug="drama")
+        f1 = Film(title="Interstellar", year=2014, genres=[sci_fi])
+        f2 = Film(title="The Martian", year=2015, genres=[sci_fi, drama])
+        f3 = Film(title="Arrival", year=2016, genres=[sci_fi])
+        f4 = Film(title="Inception", year=2010, genres=[sci_fi])
+        db_session.add_all([f1, f2, f3, f4])
+        db_session.commit()
+
+        resp = client.get("/films?genre=sci-fi&year_from=2014&year_to=2015")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        assert {f["title"] for f in body["items"]} == {"Interstellar", "The Martian"}
+
+    def test_filter_combined_with_search(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        drama = Genre(name="Drama", slug="drama")
+        f1 = Film(title="Interstellar", year=2014, genres=[sci_fi])
+        f2 = Film(title="The Dark Knight", year=2008, genres=[drama])
+        db_session.add_all([f1, f2])
+        db_session.commit()
+
+        resp = client.get("/films?genre=sci-fi&q=inter")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Interstellar"
+
     # ── Full-text search: description, genres, persons ─────────────
 
     def test_search_by_description(
