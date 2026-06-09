@@ -9,6 +9,7 @@ import shutil
 import subprocess
 from collections.abc import Generator
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, StreamingResponse
@@ -103,7 +104,7 @@ def _ffmpeg_remux_stream(path: Path) -> StreamingResponse:
         generate(),
         media_type="video/mp4",
         headers={
-            "Content-Disposition": f'inline; filename="{path.stem}.mp4"',
+            "Content-Disposition": f"inline; filename*=UTF-8''{quote(path.stem + '.mp4', safe='')}",
             "Accept-Ranges": "none",
         },
     )

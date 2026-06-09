@@ -160,6 +160,27 @@ class TestStreamMedia:
         # MIME is still video/x-matroska for the HEAD check
         assert resp.headers["content-type"] == "video/x-matroska"
 
+    def test_mkv_with_cyrillic_filename_does_not_500(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """MKV with a non-ASCII filename returns 200 (not 500) when ffmpeg
+        is available.  Regression test for a bug where ``path.stem`` was
+        embedded directly in the ``Content-Disposition`` header, which
+        must be latin-1."""
+        video = tmp_path / "Начало.mkv"
+        video.write_bytes(b"fake mkv")
+        media = self._create_media(db_session, str(video))
+
+        with patch("filmoteka.api.media._ffmpeg_available", return_value=True):
+            resp = client.get(f"/media/{media.id}/stream")
+        # 200 means the StreamingResponse was constructed successfully;
+        # actual body comes from ffmpeg which isn't really running.
+        assert resp.status_code == 200
+        # Content-Disposition header must be present and valid
+        disp = resp.headers.get("content-disposition", "")
+        assert "filename*=UTF-8''" in disp
+        assert "%D0%9D%D0%B0%D1%87%D0%B0%D0%BB%D0%BE" in disp
+
 
 class TestStreamMediaAutoFix:
     """Auto-fix: stream endpoint resolves broken paths under library_root."""

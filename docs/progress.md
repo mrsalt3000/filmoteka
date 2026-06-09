@@ -19,6 +19,21 @@
 - Next task:
   - V1-010 — Implement filters by tech attributes (resolution, codec, subtitles, audio tracks)
 
+## Task Report: BUGFIX-002 — 2026-06-09
+
+- Status: `done`
+- Summary: Починил 500 на MKV с не-ASCII (русскими) названиями. `Content-Disposition` в `_ffmpeg_remux_stream()` использовал `path.stem` напрямую, но HTTP-заголовки обязаны быть в latin-1 — кириллица вызывала `UnicodeEncodeError`. Заменил на `filename*=UTF-8''...` (RFC 5987) через `urllib.parse.quote()`. Добавлен регрессионный тест с русским названием.
+- Changed files:
+  - `src/filmoteka/api/media.py` (+ `from urllib.parse import quote`; `Content-Disposition` → `filename*=UTF-8''...`)
+  - `tests/integration/test_media.py` (+ `test_mkv_with_cyrillic_filename_does_not_500`)
+  - `agent-tasklist.md` (+ BUGFIX-002)
+- Checks:
+  - ruff check: `yes` (только предсуществующее предупреждение в test_admin.py:681)
+  - mypy: `yes` (57 source files, clean)
+  - pytest integration test_media.py: `yes` (32/32 passed, +1 новый)
+- Next task:
+  - V1-010 — Implement filters by tech attributes (resolution, codec, subtitles, audio tracks)
+
 ## Task Report: V1-009 — 2026-06-09
 
 - Status: `done`
