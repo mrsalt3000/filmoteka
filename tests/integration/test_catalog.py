@@ -303,6 +303,179 @@ class TestListFilms:
         assert body["total"] == 1
         assert body["items"][0]["title"] == "Interstellar"
 
+    # ── Tech attribute filters: resolution, codec, audio_codec, subtitles ──
+
+    def test_filter_by_resolution(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        f1 = Film(title="HD Film", year=2020)
+        f2 = Film(title="SD Film", year=2021)
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/hd.mp4", height=1080, codec="h264"),
+            MediaFile(edition_id=ed2.id, file_path="/b/sd.mp4", height=480, codec="h264"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?resolution=720")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "HD Film"
+
+    def test_filter_by_resolution_4k(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        f1 = Film(title="4K Film", year=2022)
+        f2 = Film(title="1080p Film", year=2023)
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/4k.mp4", height=2160),
+            MediaFile(edition_id=ed2.id, file_path="/b/1080.mp4", height=1080),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?resolution=4k")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "4K Film"
+
+    def test_filter_by_codec(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        f1 = Film(title="H264 Film", year=2020)
+        f2 = Film(title="HEVC Film", year=2021)
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/h264.mp4", codec="h264"),
+            MediaFile(edition_id=ed2.id, file_path="/b/hevc.mp4", codec="hevc"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?codec=h264")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "H264 Film"
+
+    def test_filter_by_codec_partial(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Partial match on codec (e.g. '264' matches 'h264')."""
+        f1 = Film(title="H264 Film", year=2020)
+        db_session.add(f1)
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        db_session.add(ed1)
+        db_session.flush()
+
+        db_session.add(MediaFile(edition_id=ed1.id, file_path="/a/h264.mp4", codec="h264"))
+        db_session.commit()
+
+        resp = client.get("/films?codec=264")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+
+    def test_filter_by_audio_codec(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        f1 = Film(title="AAC Film", year=2020)
+        f2 = Film(title="DTS Film", year=2021)
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/aac.mp4", audio_codec="aac"),
+            MediaFile(edition_id=ed2.id, file_path="/b/dts.mp4", audio_codec="dts"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?audio_codec=aac")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "AAC Film"
+
+    def test_filter_has_subtitles(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        f1 = Film(title="With Subs", year=2020)
+        f2 = Film(title="No Subs", year=2021)
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/subs.mp4", subtitle_languages="eng,rus"),
+            MediaFile(edition_id=ed2.id, file_path="/b/nosubs.mp4", subtitle_languages=None),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?has_subtitles=true")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "With Subs"
+
+    def test_filter_combined_tech(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Combine resolution + codec filter."""
+        f1 = Film(title="HD H264", year=2020)
+        f2 = Film(title="HD HEVC", year=2021)
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/hd_h264.mp4", height=1080, codec="h264"),
+            MediaFile(edition_id=ed2.id, file_path="/b/hd_hevc.mp4", height=1080, codec="hevc"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?resolution=1080&codec=hevc")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "HD HEVC"
+
     # ── Full-text search: description, genres, persons ─────────────
 
     def test_search_by_description(

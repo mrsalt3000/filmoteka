@@ -32,7 +32,21 @@
   - mypy: `yes` (57 source files, clean)
   - pytest integration test_media.py: `yes` (32/32 passed, +1 новый)
 - Next task:
-  - V1-010 — Implement filters by tech attributes (resolution, codec, subtitles, audio tracks)
+  - V1-011 — Implement language filter for audio and subtitles
+
+## Task Report: V1-010 — 2026-06-09
+
+- Status: `done`
+- Summary: Реализовал фильтры по техатрибутам MediaFile: resolution, codec, audio_codec, has_subtitles. Все фильтры работают через subquery Film → MovieEdition → MediaFile. Resolution парсится из лейблов (4K, 1080p, 720p, SD и т.д.) в минимальную высоту. Codec/audio_codec — частичное совпадение (ilike). has_subtitles=true — проверка subtitle_languages IS NOT NULL. 7 новых integration тестов.
+- Changed files:
+  - `src/filmoteka/api/catalog.py` (+ _RESOLUTION_MAP, _min_height(); 4 query-параметра; subquery-фильтры)
+  - `tests/integration/test_catalog.py` (+ 7 тестов: resolution, 4k, codec, codec partial, audio_codec, has_subtitles, combined)
+- Checks:
+  - ruff check: `yes` (только предсуществующее предупреждение)
+  - mypy: `yes` (57 source files, clean)
+  - pytest integration test_catalog.py: `yes` (37/37 passed, +7 новых)
+- Next task:
+  - V1-011 — Implement language filter for audio and subtitles
 
 ## Task Report: BUGFIX-003 — 2026-06-09
 

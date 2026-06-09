@@ -20,6 +20,7 @@ from filmoteka.api.schemas.catalog import (
 from filmoteka.domain.catalog.models import (
     Film,
     Genre,
+    MediaFile,
     MovieEdition,
     Person,
     film_person,
@@ -27,6 +28,31 @@ from filmoteka.domain.catalog.models import (
 from filmoteka.infrastructure.database import get_db
 
 router = APIRouter(prefix="/films", tags=["catalog"])
+
+
+_RESOLUTION_MAP: dict[str, int] = {
+    "4k": 2160,
+    "2160": 2160,
+    "2160p": 2160,
+    "uhd": 2160,
+    "1440": 1440,
+    "1440p": 1440,
+    "2k": 1440,
+    "1080": 1080,
+    "1080p": 1080,
+    "hd": 1080,
+    "720": 720,
+    "720p": 720,
+    "sd": 480,
+    "480": 480,
+    "480p": 480,
+}
+
+
+def _min_height(resolution: str) -> int | None:
+    """Return the minimum pixel height for a resolution label, or ``None``
+    if unrecognised."""
+    return _RESOLUTION_MAP.get(resolution.strip().lower())
 
 
 @router.get("", response_model=FilmListResponse)
@@ -38,11 +64,19 @@ def list_films(
     year_to: int | None = Query(None),
     genre: str | None = Query(None, min_length=1),
     q: str | None = Query(None, min_length=1),
+    resolution: str | None = Query(None, min_length=1),
+    codec: str | None = Query(None, min_length=1),
+    audio_codec: str | None = Query(None, min_length=1),
+    has_subtitles: bool | None = Query(None),
     db: Session = Depends(get_db),
 ) -> FilmListResponse:
     """Return a paginated list of films, optionally filtered by year range,
-    genre slug, exact year, or free-text search (case-insensitive) across
-    title, description, genre names, and person names."""
+    genre slug, exact year, free-text search, or tech attributes (resolution,
+    video codec, audio codec, subtitle presence).
+
+    Tech attributes are matched against ``MediaFile`` records reachable
+    through ``Film → MovieEdition → MediaFile``.
+    """
     query = db.query(Film)
 
     if q:
@@ -63,6 +97,46 @@ def list_films(
             query = query.filter(Film.year >= year_from)
         if year_to is not None:
             query = query.filter(Film.year <= year_to)
+
+    # ── Tech attribute filters (via Film → MovieEdition → MediaFile) ──
+
+    if resolution is not None:
+        min_h = _min_height(resolution)
+        if min_h is not None:
+            query = query.filter(
+                Film.id.in_(
+                    db.query(MovieEdition.film_id)
+                    .join(MediaFile)
+                    .filter(MediaFile.height >= min_h)
+                )
+            )
+
+    if codec is not None:
+        query = query.filter(
+            Film.id.in_(
+                db.query(MovieEdition.film_id)
+                .join(MediaFile)
+                .filter(MediaFile.codec.ilike(f"%{codec}%"))
+            )
+        )
+
+    if audio_codec is not None:
+        query = query.filter(
+            Film.id.in_(
+                db.query(MovieEdition.film_id)
+                .join(MediaFile)
+                .filter(MediaFile.audio_codec.ilike(f"%{audio_codec}%"))
+            )
+        )
+
+    if has_subtitles is True:
+        query = query.filter(
+            Film.id.in_(
+                db.query(MovieEdition.film_id)
+                .join(MediaFile)
+                .filter(MediaFile.subtitle_languages.isnot(None))
+            )
+        )
 
     total = query.count()
     items = query.order_by(Film.created_at.desc()).offset(skip).limit(limit).all()
