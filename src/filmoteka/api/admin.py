@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -24,6 +26,7 @@ from filmoteka.api.schemas.catalog import (
 from filmoteka.domain.access.models import User
 from filmoteka.domain.catalog.models import (
     Film,
+    MediaFile,
     MovieEdition,
     Person,
     film_person,
@@ -33,6 +36,8 @@ from filmoteka.infrastructure.database import SessionLocal, get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
 from filmoteka.infrastructure.metadata_providers import tmdb_search_poster
 from filmoteka.infrastructure.settings import settings
+
+_logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -352,3 +357,130 @@ def update_film(
             for e in film.editions
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# Media re-index
+# ---------------------------------------------------------------------------
+
+_reindex_tasks: dict[str, dict[str, object]] = {}
+_REINDEX_TASK_ID = "media-reindex"
+
+
+@router.post("/media/reindex", status_code=202)
+def media_reindex(
+    current_user: User = Depends(require_role("admin")),
+    config: LibraryConfig = Depends(get_library_config),
+) -> dict[str, object]:
+    """Re-index media files whose stored paths no longer resolve on disk.
+
+    Scans all ``MediaFile`` records, checks whether ``file_path`` exists,
+    and if not, searches for the file by name under the configured library
+    root (``target_root``).  Matching records are updated in-place.
+
+    Starts a background task. Poll ``GET /admin/media/reindex/status``
+    for completion.
+    """
+    task = _reindex_tasks.get(_REINDEX_TASK_ID)
+    if task and task["status"] == "running":
+        return {
+            "task_id": _REINDEX_TASK_ID,
+            "status": "running",
+            "message": "Re-index already in progress",
+        }
+
+    _reindex_tasks[_REINDEX_TASK_ID] = {"status": "running", "report": None, "error": None}
+
+    def _run() -> None:
+        db = SessionLocal()
+        try:
+            lib_root = config.paths.target_root
+            media_files = db.query(MediaFile).all()
+
+            fixed = 0
+            not_found = 0
+            skipped = 0
+
+            for mf in media_files:
+                stored = Path(mf.file_path)
+                if stored.is_file():
+                    skipped += 1
+                    continue
+
+                # Try to locate the file under the library root
+                resolved = _reindex_resolve_path(mf.file_path, lib_root)
+                if resolved is not None:
+                    _logger.info(
+                        "Re-indexed media %d: %s → %s", mf.id, mf.file_path, resolved
+                    )
+                    mf.file_path = str(resolved)
+                    fixed += 1
+                else:
+                    not_found += 1
+
+            db.commit()
+
+            _reindex_tasks[_REINDEX_TASK_ID] = {
+                "status": "completed",
+                "report": {
+                    "total": len(media_files),
+                    "fixed": fixed,
+                    "not_found": not_found,
+                    "skipped": skipped,
+                },
+                "error": None,
+            }
+        except Exception as exc:
+            db.rollback()
+            _logger.exception("Media re-index failed")
+            _reindex_tasks[_REINDEX_TASK_ID] = {
+                "status": "failed",
+                "report": None,
+                "error": str(exc),
+            }
+        finally:
+            db.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    return {"task_id": _REINDEX_TASK_ID, "status": "running", "message": "Media re-index started"}
+
+
+@router.get("/media/reindex/status")
+def media_reindex_status(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Return the status of the last media re-index operation."""
+    task = _reindex_tasks.get(_REINDEX_TASK_ID)
+    if task is None:
+        return {"task_id": _REINDEX_TASK_ID, "status": "idle", "report": None, "error": None}
+    return {"task_id": _REINDEX_TASK_ID, **task}
+
+
+def _reindex_resolve_path(stored_path: str, library_root: Path) -> Path | None:
+    """Resolve a stored media path under *library_root*.
+
+    Looks for a file with the same basename recursively.  If multiple
+    matches exist, tries to disambiguate by matching the last 2 path
+    components (parent-dir + filename).
+    """
+    name = Path(stored_path).name
+    if not name or not library_root.is_dir():
+        return None
+
+    matches = list(library_root.rglob(name))
+    if len(matches) == 1:
+        return matches[0]
+
+    if len(matches) > 1:
+        stored = Path(stored_path)
+        tail_parts = stored.parts[-2:] if len(stored.parts) >= 2 else stored.parts
+        tail = "/".join(tail_parts)
+        for m in matches:
+            try:
+                if str(m.relative_to(library_root)) == tail:
+                    return m
+            except ValueError:
+                continue
+
+    return None

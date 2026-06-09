@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from filmoteka.api.dependencies import get_library_config
 from filmoteka.app import create_app
-from filmoteka.domain.catalog.models import Film
+from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
 from filmoteka.infrastructure.database import get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
 from filmoteka.infrastructure.settings import settings
@@ -538,3 +538,175 @@ class TestAdminFilmEdit:
         # No fields changed → needs_review stays True
         assert body["needs_review"] is True
         assert body["title"] == "Original Title"
+
+
+class TestAdminMediaReindex:
+    """POST /admin/media/reindex — fix broken media file paths."""
+
+    def _poll_status(
+        self, client: TestClient, token: str, max_attempts: int = 30
+    ) -> Any:
+        import time
+        for _ in range(max_attempts):
+            time.sleep(0.1)
+            resp = client.get(
+                "/admin/media/reindex/status",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            body: dict[str, object] = resp.json()
+            status = body.get("status")
+            if status in ("completed", "failed", "idle", "error"):
+                return body
+        raise AssertionError("Reindex operation did not complete in time")
+
+    def _cleanup_all_test_data(self) -> None:
+        """Truncate tables that background-thread tests may have written to."""
+        engine = create_engine(TEST_DATABASE_URL)
+        with engine.connect() as conn:
+            conn.execute(text("DELETE FROM media_files"))
+            conn.execute(text("DELETE FROM movie_editions"))
+            conn.execute(text("DELETE FROM films"))
+            conn.commit()
+        engine.dispose()
+
+    def test_without_token_gets_401(self, client: TestClient) -> None:
+        resp = client.post("/admin/media/reindex")
+        assert resp.status_code == 401
+
+    def test_regular_user_gets_403(self, client: TestClient) -> None:
+        token = _create_user(client, "regular_reindex", "pass")
+        resp = client.post(
+            "/admin/media/reindex",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403
+
+    def test_reindex_fixes_broken_path(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """MediaFile with a non-existent path gets fixed when the file
+        exists under the library root."""
+        token = _create_admin_token(client, db_session, "admin_reindex1")
+
+        test_session = sessionmaker(bind=create_engine(TEST_DATABASE_URL))
+        test_db = test_session()
+        media_id = 0
+
+        try:
+            video = tmp_path / "library" / "Action" / "movie.mp4"
+            video.parent.mkdir(parents=True)
+            video.write_bytes(b"real content")
+
+            film = Film(title="Broken Path", year=2020)
+            test_db.add(film)
+            test_db.flush()
+            edition = MovieEdition(film_id=film.id)
+            test_db.add(edition)
+            test_db.flush()
+            media = MediaFile(
+                edition_id=edition.id,
+                file_path="/old/media/library/Action/movie.mp4",
+                file_size=100,
+            )
+            test_db.add(media)
+            test_db.commit()
+            media_id = media.id
+
+            config = LibraryConfig.model_validate({
+                "paths": {
+                    "downloads_root": str(tmp_path),
+                    "target_root": str(tmp_path / "library"),
+                },
+                "import": {"extensions": [".mp4"], "max_file_size_gb": 50},
+                "organization": "by_year",
+            })
+            client.app.dependency_overrides[get_library_config] = lambda: config  # type: ignore[attr-defined]
+
+            with (
+                patch("filmoteka.api.admin.SessionLocal", test_session),
+            ):
+                resp = client.post(
+                    "/admin/media/reindex",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                assert resp.status_code == 202
+
+                result = self._poll_status(client, token)
+                assert result["status"] == "completed"
+                report = result["report"]
+                assert report is not None
+                assert report["total"] == 1
+                assert report["fixed"] == 1
+                assert report["skipped"] == 0
+
+            check = test_session()
+            try:
+                fixed = check.query(MediaFile).filter(MediaFile.id == media_id).first()
+                assert fixed is not None
+                assert fixed.file_path == str(video)
+            finally:
+                check.close()
+        finally:
+            test_db.close()
+            client.app.dependency_overrides.pop(get_library_config, None)  # type: ignore[attr-defined]
+            self._cleanup_all_test_data()
+
+    def test_reindex_skips_valid_paths(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """MediaFile with a valid path is skipped (not counted as fixed)."""
+        token = _create_admin_token(client, db_session, "admin_reindex2")
+
+        test_session = sessionmaker(bind=create_engine(TEST_DATABASE_URL))
+        test_db = test_session()
+        media_id = 0
+
+        try:
+            video = tmp_path / "valid.mp4"
+            video.write_bytes(b"content")
+
+            film = Film(title="Valid Path", year=2020)
+            test_db.add(film)
+            test_db.flush()
+            edition = MovieEdition(film_id=film.id)
+            test_db.add(edition)
+            test_db.flush()
+            media = MediaFile(
+                edition_id=edition.id,
+                file_path=str(video),
+                file_size=100,
+            )
+            test_db.add(media)
+            test_db.commit()
+            media_id = media.id
+
+            config = LibraryConfig.model_validate({
+                "paths": {
+                    "downloads_root": str(tmp_path),
+                    "target_root": str(tmp_path),
+                },
+                "import": {"extensions": [".mp4"], "max_file_size_gb": 50},
+                "organization": "by_year",
+            })
+            client.app.dependency_overrides[get_library_config] = lambda: config  # type: ignore[attr-defined]
+
+            with (
+                patch("filmoteka.api.admin.SessionLocal", test_session),
+            ):
+                resp = client.post(
+                    "/admin/media/reindex",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                assert resp.status_code == 202
+
+                result = self._poll_status(client, token)
+                assert result["status"] == "completed"
+                report = result["report"]
+                assert report is not None
+                assert report["total"] == 1
+                assert report["fixed"] == 0
+                assert report["skipped"] == 1
+        finally:
+            test_db.close()
+            client.app.dependency_overrides.pop(get_library_config, None)  # type: ignore[attr-defined]
+            self._cleanup_all_test_data()

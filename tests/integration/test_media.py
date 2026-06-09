@@ -10,10 +10,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from filmoteka.api.dependencies import get_library_config
 from filmoteka.app import create_app
 from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
+from filmoteka.infrastructure.library_config import LibraryConfig
 
 pytestmark = pytest.mark.integration
 
@@ -157,6 +159,98 @@ class TestStreamMedia:
         assert resp.status_code == 200
         # MIME is still video/x-matroska for the HEAD check
         assert resp.headers["content-type"] == "video/x-matroska"
+
+
+class TestStreamMediaAutoFix:
+    """Auto-fix: stream endpoint resolves broken paths under library_root."""
+
+    def test_auto_fix_resolves_broken_path(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """When stored path doesn't resolve but the file exists under
+        library_root, the endpoint serves it and updates the DB path."""
+        # Create the real file under library_root
+        lib_root = tmp_path / "library"
+        video = lib_root / "Action" / "movie.mp4"
+        video.parent.mkdir(parents=True)
+        video.write_bytes(b"real content")
+
+        # MediaFile with a broken (old) path
+        film = Film(title="AutoFix", year=2020)
+        db_session.add(film)
+        db_session.flush()
+        edition = MovieEdition(film_id=film.id)
+        db_session.add(edition)
+        db_session.flush()
+        media = MediaFile(
+            edition_id=edition.id,
+            file_path="/old/library/Action/movie.mp4",
+            file_size=100,
+        )
+        db_session.add(media)
+        db_session.commit()
+        media_id = media.id
+
+        # Override LibraryConfig to point at our test library root
+        config = LibraryConfig.model_validate({
+            "paths": {
+                "downloads_root": str(tmp_path),
+                "target_root": str(lib_root),
+            },
+            "import": {"extensions": [".mp4"], "max_file_size_gb": 50},
+            "organization": "by_year",
+        })
+        client.app.dependency_overrides[get_library_config] = lambda: config  # type: ignore[attr-defined]
+
+        try:
+            resp = client.get(f"/media/{media_id}/stream")
+            assert resp.status_code == 200
+            assert resp.content == b"real content"
+
+            # Verify the DB path was updated
+            db_session.refresh(media)
+            assert media.file_path == str(video)
+        finally:
+            client.app.dependency_overrides.pop(get_library_config, None)  # type: ignore[attr-defined]
+
+    def test_auto_fix_returns_404_when_not_found(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """When neither the stored path nor the library root has the file,
+        the endpoint still returns 404."""
+        lib_root = tmp_path / "library"
+        lib_root.mkdir()
+
+        film = Film(title="NoFile", year=2020)
+        db_session.add(film)
+        db_session.flush()
+        edition = MovieEdition(film_id=film.id)
+        db_session.add(edition)
+        db_session.flush()
+        media = MediaFile(
+            edition_id=edition.id,
+            file_path=str(tmp_path / "nonexistent.mp4"),
+            file_size=100,
+        )
+        db_session.add(media)
+        db_session.commit()
+        media_id = media.id
+
+        config = LibraryConfig.model_validate({
+            "paths": {
+                "downloads_root": str(tmp_path),
+                "target_root": str(lib_root),
+            },
+            "import": {"extensions": [".mp4"], "max_file_size_gb": 50},
+            "organization": "by_year",
+        })
+        client.app.dependency_overrides[get_library_config] = lambda: config  # type: ignore[attr-defined]
+
+        try:
+            resp = client.get(f"/media/{media_id}/stream")
+            assert resp.status_code == 404
+        finally:
+            client.app.dependency_overrides.pop(get_library_config, None)  # type: ignore[attr-defined]
 
 
 class TestWatchStart:

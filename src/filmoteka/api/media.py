@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 from collections.abc import Generator
@@ -14,6 +15,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from filmoteka.api.auth import _get_current_user
+from filmoteka.api.dependencies import get_library_config
 from filmoteka.api.schemas.watch import (
     FilmWatchState,
     FilmWatchStatesRequest,
@@ -26,6 +28,9 @@ from filmoteka.domain.access.models import User
 from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
+from filmoteka.infrastructure.library_config import LibraryConfig
+
+_logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/media", tags=["media"])
 
@@ -105,6 +110,48 @@ def _ffmpeg_remux_stream(path: Path) -> StreamingResponse:
 
 
 # ---------------------------------------------------------------------------
+# Path re-resolution helper
+# ---------------------------------------------------------------------------
+
+
+def _resolve_media_path(stored_path: str, library_root: Path) -> Path | None:
+    """Try to find a media file under *library_root* when *stored_path* fails.
+
+    Strategy:
+    1. Extract the filename (basename) from the stored path.
+    2. Search recursively under *library_root* for a file with that name.
+    3. If exactly one match is found, return it.
+    4. If multiple matches, try to disambiguate by matching the last 2 path
+       components (parent-dir + filename) of the stored path.
+    """
+    name = Path(stored_path).name
+    if not name:
+        return None
+
+    if not library_root.is_dir():
+        return None
+
+    matches = list(library_root.rglob(name))
+    if len(matches) == 1:
+        return matches[0]
+
+    # Multiple matches — try to disambiguate by matching parent-dir + filename.
+    if len(matches) > 1:
+        stored = Path(stored_path)
+        # Use the last 2 parts (e.g. "Action/movie.mp4")
+        tail_parts = stored.parts[-2:] if len(stored.parts) >= 2 else stored.parts
+        tail = "/".join(tail_parts)
+        for m in matches:
+            try:
+                if str(m.relative_to(library_root)) == tail:
+                    return m
+            except ValueError:
+                continue
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Stream endpoint
 # ---------------------------------------------------------------------------
 
@@ -114,6 +161,7 @@ def stream_media(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    config: LibraryConfig = Depends(get_library_config),
 ) -> FileResponse | Response | StreamingResponse:
     """Stream a media file by its ID.
 
@@ -132,6 +180,10 @@ def stream_media(
 
     If MKV and ffmpeg is not available, returns 415 Unsupported Media
     Type.
+
+    If the stored file path does not resolve, the function attempts to
+    locate the file by name under the configured library root and updates
+    the database record so subsequent requests find it immediately.
     """
     media = db.get(MediaFile, media_id)
     if media is None:
@@ -141,11 +193,23 @@ def stream_media(
         )
 
     path = Path(media.file_path)
+
+    # If the stored path doesn't resolve, try to find the file
+    # under the current library root (handles env switches e.g. Docker ↔ native).
     if not path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Media file not found on disk",
-        )
+        resolved = _resolve_media_path(media.file_path, config.paths.target_root)
+        if resolved is not None:
+            _logger.info(
+                "Re-indexed media %d: %s → %s", media.id, media.file_path, resolved
+            )
+            media.file_path = str(resolved)
+            db.commit()
+            path = resolved
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Media file not found on disk",
+            )
 
     suffix = path.suffix.lower()
     mime = _mime_type(suffix)

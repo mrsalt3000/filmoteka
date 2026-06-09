@@ -4,6 +4,25 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-001 — 2026-06-09
+
+- Status: `done`
+- Summary: Починил воспроизведение видео при смене окружения (Docker ↔ native, WSL ↔ Windows). Корень: `MediaFile.file_path` хранит абсолютные пути, которые становятся невалидными при смене среды. Добавлен auto-fix в `stream_media()` — если файл не найден по сохранённому пути, ищется по имени под текущим `library_root`. Добавлен admin endpoint `POST /admin/media/reindex` для массовой переиндексации + кнопка в админке. 7 unit-тестов на `_resolve_media_path`, 4 integration-теста на reindex, 2 integration-теста на auto-fix.
+- Changed files:
+  - `src/filmoteka/api/media.py` (+ _resolve_media_path helper; auto-fix в stream_media; импорты logging, get_library_config, LibraryConfig)
+  - `src/filmoteka/api/admin.py` (+ POST /admin/media/reindex, GET /admin/media/reindex/status, _reindex_resolve_path; импорты logging, Path, MediaFile, _logger)
+  - `src/filmoteka/static/index.html` (+ "Media paths" секция в админке с кнопкой Re-index; JS: runReindex, buildReindexReportHTML)
+  - `tests/unit/test_media_paths.py` (new — 7 тестов на _resolve_media_path)
+  - `tests/integration/test_admin.py` (+ TestAdminMediaReindex — 4 теста: 401, 403, fix, skip; _cleanup_all_test_data)
+  - `tests/integration/test_media.py` (+ TestStreamMediaAutoFix — 2 теста: auto-fix resolves, 404 when not found; импорты get_library_config, LibraryConfig)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (148/148, +7 новых)
+  - pytest integration: `yes` (135/135, +6 новых)
+- Next task:
+  - V1-009 — Implement filters by genre, year, country, age rating
+
 ## Task Report: V1-008 — 2026-06-09
 
 - Status: `done`

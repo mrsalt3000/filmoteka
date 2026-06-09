@@ -620,6 +620,13 @@ async function renderAdmin(el) {
       <div id="scan-report"></div>
 
       <div class="poster-section">
+        <h3>Media paths</h3>
+        <p>Re-index fixes stored file paths when media files exist on disk but the stored paths are stale (e.g. after switching between Docker and native mode).</p>
+        <button class="poster-btn" id="reindex-btn" onclick="runReindex()">🔄 Re-index media paths</button>
+        <div id="reindex-report"></div>
+      </div>
+
+      <div class="poster-section">
         <h3>Posters</h3>
         <p>Fetch posters from TMDb. Existing posters are not affected unless you choose to refresh all.</p>
         <div class="poster-btns">
@@ -684,6 +691,76 @@ function buildReportHTML(report) {
         <strong>Errors (${errors.length})</strong>
         <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
       </div>` : ''}
+  </div>`;
+}
+
+// ── Media re-index ───────────────────────────────────────────────
+async function runReindex() {
+  const btn = document.getElementById('reindex-btn');
+  const reportEl = document.getElementById('reindex-report');
+  if (!btn || !reportEl) return;
+
+  if (!confirm('Re-index media paths? This will search for media files whose stored paths are broken.')) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Re-indexing…';
+  reportEl.innerHTML = '<div class="spinner">Re-indexing media files…</div>';
+
+  try {
+    const resp = await apiAuth('/admin/media/reindex', 'POST');
+    if (resp.status === 'error') {
+      reportEl.innerHTML = `<div class="error">${esc(resp.error)}</div>`;
+      btn.disabled = false;
+      btn.textContent = '🔄 Re-index media paths';
+      return;
+    }
+
+    // Poll until completed or failed
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const status = await apiAuth('/admin/media/reindex/status');
+        if (status.status === 'completed' || status.status === 'failed' || status.status === 'error') {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.textContent = '🔄 Re-index media paths';
+          if (status.status === 'completed') {
+            const r = status.report || {};
+            reportEl.innerHTML = buildReindexReportHTML(r);
+          } else {
+            reportEl.innerHTML = `<div class="error">${esc(status.error || 'Re-index failed')}</div>`;
+          }
+        }
+      } catch {
+        if (attempts > 60) {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.textContent = '🔄 Re-index media paths';
+          reportEl.innerHTML = '<div class="error">Timed out waiting for re-index.</div>';
+        }
+      }
+    }, 1000);
+  } catch (e) {
+    reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    btn.disabled = false;
+    btn.textContent = '🔄 Re-index media paths';
+  }
+}
+
+function buildReindexReportHTML(r) {
+  const total = r.total || 0;
+  const fixed = r.fixed || 0;
+  const notFound = r.not_found || 0;
+  const skipped = r.skipped || 0;
+  return `<div class="admin-report">
+    <h3>Re-index complete</h3>
+    <table>
+      <tr><td>Total media files</td><td>${total}</td></tr>
+      <tr><td>Fixed (path updated)</td><td>${fixed}</td></tr>
+      <tr><td>Not found on disk</td><td>${notFound}</td></tr>
+      <tr><td>Skipped (already valid)</td><td>${skipped}</td></tr>
+    </table>
   </div>`;
 }
 
