@@ -6,6 +6,8 @@ COPY pyproject.toml README.md alembic.ini ./
 COPY src/ src/
 COPY migrations/ migrations/
 
-RUN pip install --no-cache-dir .
+RUN apt-get update && apt-get install -y ffmpeg --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir .
 
 CMD ["python", "-c", "print('worker not yet implemented')"]

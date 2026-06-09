@@ -4,6 +4,21 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: INFRA-001 — 2026-06-09
+
+- Status: `done`
+- Summary: Добавил ffmpeg в Docker-образы api и worker. Код ремукса MKV (V1-031) уже был, но в контейнерах ffmpeg отсутствовал — `_ffmpeg_available()` возвращал `False`, и плеер выдавал 415. В оба Dockerfile добавлен `apt-get install -y ffmpeg`. Проверено: `ffmpeg -version` (7.1.4) работает в обоих образах. Теперь MKV играет в браузере через on-the-fly ремукс.
+- Changed files:
+  - `docker/Dockerfile.api` (+ apt-get install ffmpeg)
+  - `docker/Dockerfile.worker` (+ apt-get install ffmpeg)
+- Checks:
+  - docker build: `yes` (оба образа собраны)
+  - ffmpeg -version: `yes` (7.1.4 в обоих)
+  - ruff check: `yes` (предсуществующее предупреждение в test_admin.py:681, не относится к задаче)
+  - mypy: `yes` (57 source files, clean)
+- Next task:
+  - V1-009 — Implement filters by genre, year, country, age rating
+
 ## Task Report: BUGFIX-001 — 2026-06-09
 
 - Status: `done`
