@@ -34,6 +34,18 @@
 - Next task:
   - V1-010 — Implement filters by tech attributes (resolution, codec, subtitles, audio tracks)
 
+## Task Report: BUGFIX-003 — 2026-06-09
+
+- Status: `done`
+- Summary: Прокинул TMDB_API_KEY в Docker-контейнеры. `.env` не копируется в образ (правильно — секреты не должны быть в image), но docker-compose.yml не передавал переменную контейнерам api и worker. `settings.tmdb_api_key` всегда был `None` в Docker. В обе секции `environment` добавлено `TMDB_API_KEY: ${TMDB_API_KEY}` — Docker Compose читает значение из `.env` в корне проекта.
+- Changed files:
+  - `docker-compose.yml` (+ TMDB_API_KEY в api и worker)
+- Checks:
+  - docker compose config: `yes` (TMDB_API_KEY присутствует в обоих сервисах)
+  - ruff / mypy: не требуется (изменён только compose-файл)
+- Next task:
+  - V1-010 — Implement filters by tech attributes (resolution, codec, subtitles, audio tracks)
+
 ## Task Report: V1-009 — 2026-06-09
 
 - Status: `done`

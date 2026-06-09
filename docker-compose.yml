@@ -43,9 +43,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-change-me}
       LIBRARY_SPEC_PATH: /app/specs/library.yaml
+      # Override LIBRARY_ROOT inside the container: files are always
+      # mounted at /media/library regardless of the host path in .env.
+      LIBRARY_ROOT: /media/library
+      TMDB_API_KEY: ${TMDB_API_KEY}
     volumes:
       - ./specs:/app/specs:ro
-      - ${DOWNLOADS_ROOT:-./media/downloads}:/media/downloads
       - ${LIBRARY_ROOT:-./media/library}:/media/library
     ports:
       - "8000:8000"
@@ -71,9 +74,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-change-me}
       LIBRARY_SPEC_PATH: /app/specs/library.yaml
+      # Override LIBRARY_ROOT inside the container: files are always
+      # mounted at /media/library regardless of the host path in .env.
+      LIBRARY_ROOT: /media/library
+      TMDB_API_KEY: ${TMDB_API_KEY}
     volumes:
       - ./specs:/app/specs:ro
-      - ${DOWNLOADS_ROOT:-./media/downloads}:/media/downloads
       - ${LIBRARY_ROOT:-./media/library}:/media/library
 
   nginx:

@@ -731,6 +731,15 @@
   1. MKV с кириллическим названием играет без 500.
   2. MP4 с кириллическим названием продолжает работать.
 
+- [x] **BUGFIX-003** Прокинуть TMDB_API_KEY в Docker-контейнеры.
+
+  Проблема: `.env` не копируется в образ (секреты не должны быть в image — правильно), но docker-compose.yml не передаёт `TMDB_API_KEY` как env-переменную контейнерам. `settings.tmdb_api_key` всегда `None` в Docker. Решение: добавить `TMDB_API_KEY: ${TMDB_API_KEY}` в секцию `environment` сервисов api и worker. Docker Compose прочитает значение из `.env` автоматически.
+
+  Проверка результата:
+  1. `docker compose config` показывает TMDB_API_KEY в окружении api.
+  2. Admin poster endpoints работают без ошибки "TMDB_API_KEY is not configured".
+  3. Import pipeline находит постеры через TMDb в Docker.
+
 ---
 
 # 4. V2
