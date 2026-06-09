@@ -186,6 +186,86 @@ class TestListFilms:
         assert body["total"] == 1
         assert body["items"][0]["title"] == "The Matrix Reloaded"
 
+    # ── Full-text search: description, genres, persons ─────────────
+
+    def test_search_by_description(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        db_session.add_all([
+            Film(title="Alpha", description="A thrilling space adventure"),
+            Film(title="Beta", description="A quiet drama"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?q=space+adventure")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Alpha"
+
+    def test_search_by_genre(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        drama = Genre(name="Drama", slug="drama")
+        f1 = Film(title="Interstellar", year=2014, genres=[sci_fi])
+        f2 = Film(title="The Father", year=2020, genres=[drama])
+        db_session.add_all([f1, f2])
+        db_session.commit()
+
+        resp = client.get("/films?q=sci-fi")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Interstellar"
+
+    def test_search_by_actor(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        from filmoteka.domain.catalog.models import film_person
+
+        actor = Person(name="Keanu Reeves")
+        other = Person(name="Tom Hanks")
+        db_session.add_all([actor, other])
+        db_session.flush()
+
+        f1 = Film(title="The Matrix")
+        f2 = Film(title="Forrest Gump")
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        db_session.execute(
+            film_person.insert().values([
+                {"film_id": f1.id, "person_id": actor.id, "role": "actor"},
+                {"film_id": f2.id, "person_id": other.id, "role": "actor"},
+            ])
+        )
+        db_session.commit()
+
+        resp = client.get("/films?q=keanu")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "The Matrix"
+
+    def test_search_matches_multiple_fields(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Search term can match via different fields for different films."""
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        f1 = Film(title="The Matrix", year=1999, description="A sci-fi classic")
+        f2 = Film(title="Inception", year=2010, description="Dream heist")
+        db_session.add_all([f1, f2])
+        db_session.flush()
+        f1.genres = [sci_fi]
+        db_session.commit()
+
+        # "sci-fi" matches f1 by description and f1 by genre
+        resp = client.get("/films?q=sci-fi")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+
 
 class TestGetFilm:
     """GET /films/{id}"""

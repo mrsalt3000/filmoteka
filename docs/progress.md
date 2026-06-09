@@ -4,6 +4,21 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-008 — 2026-06-09
+
+- Status: `done`
+- Summary: Расширил поиск по `q` с title на description, genre names и person names. В `GET /films` фильтр использует SQLAlchemy `any()` через many-to-many связи. 4 новых integration-теста: поиск по description, genre, actor, множественные поля.
+- Changed files:
+  - `src/filmoteka/api/catalog.py` (+ импорт Genre; расширен q-фильтр через OR с any(); обновлён docstring)
+  - `tests/integration/test_catalog.py` (+ 4 теста: search_by_description, search_by_genre, search_by_actor, search_matches_multiple_fields)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (141/141)
+  - pytest integration: `yes` (129/129, +4 новых)
+- Next task:
+  - V1-009 — Implement filters by genre, year, country, age rating
+
 ## Task Report: V1-007 — 2026-06-09
 
 - Status: `done`

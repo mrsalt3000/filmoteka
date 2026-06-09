@@ -19,6 +19,7 @@ from filmoteka.api.schemas.catalog import (
 )
 from filmoteka.domain.catalog.models import (
     Film,
+    Genre,
     MovieEdition,
     Person,
     film_person,
@@ -37,11 +38,17 @@ def list_films(
     db: Session = Depends(get_db),
 ) -> FilmListResponse:
     """Return a paginated list of films, optionally filtered by year or
-    full-text search on title (case-insensitive)."""
+    free-text search (case-insensitive) across title, description, genre
+    names, and person names."""
     query = db.query(Film)
 
     if q:
-        query = query.filter(Film.title.ilike(f"%{q}%"))
+        query = query.filter(
+            Film.title.ilike(f"%{q}%")
+            | Film.description.ilike(f"%{q}%")
+            | Film.genres.any(Genre.name.ilike(f"%{q}%"))
+            | Film.persons.any(Person.name.ilike(f"%{q}%"))
+        )
 
     if year is not None:
         query = query.filter(Film.year == year)
