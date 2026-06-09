@@ -5,15 +5,34 @@
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 
 from filmoteka.api.auth import require_role
 from filmoteka.api.dependencies import get_library_config
+from filmoteka.api.schemas.catalog import (
+    EditionOut,
+    FilmDetailOut,
+    FilmUpdateSchema,
+    GenreOut,
+    MediaFileOut,
+    PersonOut,
+)
 from filmoteka.domain.access.models import User
+from filmoteka.domain.catalog.models import (
+    Film,
+    MovieEdition,
+    Person,
+    film_person,
+)
 from filmoteka.domain.importing.pipeline import run_import
-from filmoteka.infrastructure.database import SessionLocal
+from filmoteka.infrastructure.database import SessionLocal, get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
+from filmoteka.infrastructure.metadata_providers import tmdb_search_poster
+from filmoteka.infrastructure.settings import settings
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -78,3 +97,258 @@ def import_status(
     if task is None:
         return {"task_id": _TASK_ID, "status": "idle", "report": None, "error": None}
     return {"task_id": _TASK_ID, **task}
+
+
+# ---------------------------------------------------------------------------
+# Poster management
+# ---------------------------------------------------------------------------
+
+_poster_tasks: dict[str, dict[str, object]] = {}
+_POSTER_TASK_ID = "poster-op"
+
+
+@router.post("/posters/fill-missing", status_code=202)
+def poster_fill_missing(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Fill missing posters for films that don't have one yet.
+
+    Starts a background task. Poll ``GET /admin/posters/status``
+    for completion.
+    """
+    if not settings.tmdb_api_key:
+        return {
+            "task_id": _POSTER_TASK_ID,
+            "status": "error",
+            "error": "TMDB_API_KEY is not configured. Set it in .env to use poster features.",
+        }
+
+    task = _poster_tasks.get(_POSTER_TASK_ID)
+    if task and task["status"] == "running":
+        return {
+            "task_id": _POSTER_TASK_ID,
+            "status": "running",
+            "message": "Poster operation already in progress",
+        }
+
+    _poster_tasks[_POSTER_TASK_ID] = {"status": "running", "report": None, "error": None}
+
+    def _run() -> None:
+        db = SessionLocal()
+        try:
+            assert settings.tmdb_api_key is not None
+            api_key: str = settings.tmdb_api_key
+
+            films = db.query(Film).filter(Film.poster_url.is_(None)).all()
+            updated = 0
+            errors: list[str] = []
+
+            for film in films:
+                try:
+                    result = tmdb_search_poster(film.title, film.year, api_key)
+                    if result is not None:
+                        film.poster_url, film.poster_source = result
+                        updated += 1
+                except Exception as exc:
+                    errors.append(f"Film #{film.id} ({film.title}): {exc}")
+
+            db.commit()
+
+            _poster_tasks[_POSTER_TASK_ID] = {
+                "status": "completed",
+                "report": {
+                    "total": len(films),
+                    "updated": updated,
+                    "skipped": len(films) - updated,
+                    "errors": errors,
+                },
+                "error": None,
+            }
+        except Exception as exc:
+            db.rollback()
+            _poster_tasks[_POSTER_TASK_ID] = {
+                "status": "failed",
+                "report": None,
+                "error": str(exc),
+            }
+        finally:
+            db.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    msg = "Fill missing posters started"
+    return {"task_id": _POSTER_TASK_ID, "status": "running", "message": msg}
+
+
+@router.post("/posters/refresh-all", status_code=202)
+def poster_refresh_all(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Refresh posters for all films, replacing existing ones.
+
+    Starts a background task. Poll ``GET /admin/posters/status``
+    for completion.
+    """
+    if not settings.tmdb_api_key:
+        return {
+            "task_id": _POSTER_TASK_ID,
+            "status": "error",
+            "error": "TMDB_API_KEY is not configured. Set it in .env to use poster features.",
+        }
+
+    task = _poster_tasks.get(_POSTER_TASK_ID)
+    if task and task["status"] == "running":
+        return {
+            "task_id": _POSTER_TASK_ID,
+            "status": "running",
+            "message": "Poster operation already in progress",
+        }
+
+    _poster_tasks[_POSTER_TASK_ID] = {"status": "running", "report": None, "error": None}
+
+    def _run() -> None:
+        db = SessionLocal()
+        try:
+            assert settings.tmdb_api_key is not None
+            api_key: str = settings.tmdb_api_key
+
+            films = db.query(Film).all()
+            updated = 0
+            errors: list[str] = []
+
+            for film in films:
+                try:
+                    result = tmdb_search_poster(film.title, film.year, api_key)
+                    if result is not None:
+                        film.poster_url, film.poster_source = result
+                        updated += 1
+                except Exception as exc:
+                    errors.append(f"Film #{film.id} ({film.title}): {exc}")
+
+            db.commit()
+
+            _poster_tasks[_POSTER_TASK_ID] = {
+                "status": "completed",
+                "report": {
+                    "total": len(films),
+                    "updated": updated,
+                    "skipped": len(films) - updated,
+                    "errors": errors,
+                },
+                "error": None,
+            }
+        except Exception as exc:
+            db.rollback()
+            _poster_tasks[_POSTER_TASK_ID] = {
+                "status": "failed",
+                "report": None,
+                "error": str(exc),
+            }
+        finally:
+            db.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    msg = "Refresh all posters started"
+    return {"task_id": _POSTER_TASK_ID, "status": "running", "message": msg}
+
+
+@router.get("/posters/status")
+def poster_status(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Return the status of the last poster operation."""
+    task = _poster_tasks.get(_POSTER_TASK_ID)
+    if task is None:
+        return {"task_id": _POSTER_TASK_ID, "status": "idle", "report": None, "error": None}
+    return {"task_id": _POSTER_TASK_ID, **task}
+
+
+# ---------------------------------------------------------------------------
+# Film card editing
+# ---------------------------------------------------------------------------
+
+
+@router.put("/films/{film_id}")
+def update_film(
+    film_id: int,
+    body: FilmUpdateSchema,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> FilmDetailOut:
+    """Update a film card. Only provided fields are changed.
+
+    Admin-only. Resets ``needs_review`` and sets metadata source to ``manual``
+    to reflect human verification.
+    """
+    film = (
+        db.query(Film)
+        .options(
+            joinedload(Film.genres),
+            joinedload(Film.editions).joinedload(MovieEdition.media_files),
+        )
+        .filter(Film.id == film_id)
+        .one_or_none()
+    )
+    if film is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Film not found",
+        )
+
+    changed = False
+    if body.title is not None and body.title != film.title:
+        film.title = body.title
+        changed = True
+    if body.year is not None and body.year != film.year:
+        film.year = body.year
+        changed = True
+    if body.description is not None and body.description != film.description:
+        film.description = body.description
+        changed = True
+
+    if changed:
+        film.needs_review = False
+        film.metadata_source = "manual"
+        film.metadata_confidence = 1.0
+        film.metadata_enriched_at = datetime.now()
+
+    db.commit()
+    db.refresh(film)
+
+    # Reload relations after commit
+    rows = (
+        db.execute(
+            select(film_person.c.role, Person).join(
+                Person, film_person.c.person_id == Person.id
+            ).where(film_person.c.film_id == film_id)
+        )
+        .all()
+    )
+    persons = [
+        PersonOut(id=row.Person.id, name=row.Person.name, role=row.role)
+        for row in rows
+    ]
+
+    return FilmDetailOut(
+        id=film.id,
+        title=film.title,
+        year=film.year,
+        description=film.description,
+        poster_url=film.poster_url,
+        kinopoisk_url=film.kinopoisk_url,
+        needs_review=film.needs_review,
+        created_at=film.created_at,
+        genres=[GenreOut.model_validate(g) for g in film.genres],
+        persons=persons,
+        editions=[
+            EditionOut(
+                id=e.id,
+                edition_name=e.edition_name,
+                quality=e.quality,
+                language=e.language,
+                media_files=[MediaFileOut.model_validate(m) for m in e.media_files],
+            )
+            for e in film.editions
+        ],
+    )

@@ -70,6 +70,17 @@ class EditionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ---------------------------------------------------------------------------
+# Admin update
+# ---------------------------------------------------------------------------
+
+
+class FilmUpdateSchema(BaseModel):
+    title: str | None = None
+    year: int | None = None
+    description: str | None = None
+
+
 class FilmDetailOut(BaseModel):
     id: int
     title: str

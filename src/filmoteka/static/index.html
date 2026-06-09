@@ -124,6 +124,19 @@ nav input::placeholder { color: var(--text2); }
 .play-error .icon { font-size: 3rem; margin-bottom: .5rem; }
 .play-error .msg { font-size: 1.1rem; margin-bottom: .25rem; }
 .play-error .detail { color: var(--text2); font-size: .85rem; }
+
+/* ── Admin film edit ──────────────────────────── */
+.edit-btn { margin-left: .75rem; padding: .25rem .6rem; background: none; border: 1px solid var(--text2); color: var(--text); border-radius: var(--radius); font-size: .8rem; cursor: pointer; }
+.edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+.edit-field { width: 100%; padding: .35rem .5rem; border: 1px solid var(--surface2); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-size: .9rem; margin-bottom: .5rem; }
+.edit-field:focus { border-color: var(--accent); outline: none; }
+.edit-textarea { width: 100%; padding: .35rem .5rem; border: 1px solid var(--surface2); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-size: .9rem; resize: vertical; min-height: 60px; margin-bottom: .5rem; }
+.edit-textarea:focus { border-color: var(--accent); outline: none; }
+.edit-actions { display: flex; gap: .5rem; margin-top: .5rem; }
+.edit-save-btn { padding: .4rem 1rem; background: var(--accent); color: var(--play-btn-text); border: none; border-radius: var(--radius); font-size: .85rem; cursor: pointer; }
+.edit-save-btn:hover { opacity: .9; }
+.edit-cancel-btn { padding: .4rem 1rem; background: none; border: 1px solid var(--text2); color: var(--text); border-radius: var(--radius); font-size: .85rem; cursor: pointer; }
+.edit-cancel-btn:hover { border-color: var(--text); }
 </style>
 </head>
 <body>
@@ -160,6 +173,7 @@ setTheme(getTheme());
 // ── Auth state ─────────────────────────────────────────────────────
 const TOKEN_KEY = 'filmoteka-token';
 let currentUser = null;
+let editingFilmId = null;
 
 function getToken() { return localStorage.getItem(TOKEN_KEY); }
 function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
@@ -400,8 +414,20 @@ async function renderFilm(el, id) {
             : `<div class="poster-placeholder">🎬</div>`}
         </div>
         <div class="detail-info">
-          <h2>${esc(f.title)}</h2>
-          <div class="meta">${f.year || '—'}${f.description ? ' · ' + esc(f.description) : ''}</div>
+          ${editingFilmId === f.id ? `
+            <input class="edit-field" id="edit-title" type="text" value="${esc(f.title)}" placeholder="Title">
+            <input class="edit-field" id="edit-year" type="number" value="${f.year || ''}" placeholder="Year">
+            <textarea class="edit-textarea" id="edit-description" placeholder="Description">${esc(f.description || '')}</textarea>
+            <div class="edit-actions">
+              <button class="edit-save-btn" onclick="saveFilmEdit(${f.id})">Save</button>
+              <button class="edit-cancel-btn" onclick="cancelFilmEdit()">Cancel</button>
+            </div>
+          ` : `
+            <h2>${esc(f.title)}
+              ${currentUser && currentUser.role === 'admin' ? `<button class="edit-btn" onclick="startFilmEdit(${f.id})">✏ Edit</button>` : ''}
+            </h2>
+            <div class="meta">${f.year || '—'}${f.description ? ' · ' + esc(f.description) : ''}</div>
+          `}
           ${f.kinopoisk_url ? `<a class="external-link" href="${esc(f.kinopoisk_url)}" target="_blank" rel="noopener">View on Kinopoisk →</a>` : ''}
           ${playBtnHtml}
           ${progressHtml}
@@ -423,6 +449,34 @@ async function renderFilm(el, id) {
         `).join('')}</ul>
       </div>
     </div>`;
+}
+
+// ── Admin film edit ─────────────────────────────────────────────
+function startFilmEdit(id) {
+  editingFilmId = id;
+  render();
+}
+
+function cancelFilmEdit() {
+  editingFilmId = null;
+  render();
+}
+
+async function saveFilmEdit(id) {
+  const title = document.getElementById('edit-title').value.trim();
+  const year = document.getElementById('edit-year').value.trim();
+  const description = document.getElementById('edit-description').value.trim();
+  const body = {};
+  if (title) body.title = title;
+  if (year) body.year = parseInt(year, 10);
+  if (description) body.description = description;
+  try {
+    await apiAuth(`/admin/films/${id}`, 'PUT', body);
+    editingFilmId = null;
+    render();
+  } catch (e) {
+    alert('Failed to save: ' + e.message);
+  }
 }
 
 async function renderPlayer(el, mediaId) {

@@ -4,7 +4,22 @@
 
 > Этот файл ведёт агент.
 
-## Task Report: V1-036 — 2026-06-08
+## Task Report: V1-006 — 2026-06-09
+
+- Status: `done`
+- Summary: Реализовал ручную правку карточки фильма админом. `PUT /admin/films/{film_id}` принимает опциональные `title`, `year`, `description`, обновляет только переданные поля. При изменении сбрасывает `needs_review=False`, `metadata_source="manual"`, `metadata_confidence=1.0`. Во фронтенде на странице фильма для admin-пользователя появляется "✏ Edit" кнопка, при клике — inline-редактирование title/year/description с Save/Cancel. 9 новых integration-тестов.
+- Changed files:
+  - `src/filmoteka/api/schemas/catalog.py` (+ FilmUpdateSchema)
+  - `src/filmoteka/api/admin.py` (+ PUT /admin/films/{film_id}; импорты EditionOut, GenreOut, MediaFileOut, PersonOut, select, joinedload)
+  - `src/filmoteka/static/index.html` (+ CSS .edit-btn/.edit-field/.edit-textarea/.edit-actions; JS: editingFilmId, startFilmEdit, cancelFilmEdit, saveFilmEdit; renderFilm: edit mode UI for admin)
+  - `tests/integration/test_admin.py` (+ TestAdminFilmEdit — 9 тестов: 401, 403, 404, edit title/year/description/all, clears needs_review, no-change preserves needs_review)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (134/134)
+  - pytest integration: `yes` (120/120, +9 новых)
+- Next task:
+  - V1-007 — Write unit/integration tests for enrichment pipeline
 
 - Status: `done`
 - Summary: Добавил визуальный прогресс-бар на страницу карточки фильма (`#film/{id}`). Под кнопкой Play/Continue показывается: для незавершённого просмотра — прогресс-бар (отношение last_position к duration_secs) + подпись "MM:SS / HH:MM:SS"; для завершённого — зелёный badge "✓ Watched". Без просмотра или без duration_secs — ничего не показывается.
