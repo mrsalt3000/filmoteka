@@ -4,6 +4,21 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-007 — 2026-06-09
+
+- Status: `done`
+- Summary: Написал unit и integration тесты для enrichment pipeline. Новый файл `tests/unit/test_pipeline.py` с 7 unit-тестами: ImportReport (defaults, to_dict, errors, new list isolation) и `_ffprobe_available()` (found/not found). Добавил 5 integration-тестов в `TestPipelineBridge`: quality upgrade при успешном TMDb (source="tmdb", confidence=0.9), needs_review=True при пустом TMDb, stays filename-level без API key, dedup двух файлов в один фильм + две редакции, dedup одинакового названия с разными годами → два фильма. Всего +7 unit, +5 integration = 266 total (141 unit + 125 integration).
+- Changed files:
+  - `tests/unit/test_pipeline.py` (new — 7 тестов)
+  - `tests/integration/test_importing.py` (+ 5 тестов в TestPipelineBridge; импорты patch, settings)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest unit: `yes` (141/141, +7 новых)
+  - pytest integration: `yes` (125/125, +5 новых)
+- Next task:
+  - V1-008 — Implement full-text search across title, description, genres, actors
+
 ## Task Report: V1-006 — 2026-06-09
 
 - Status: `done`

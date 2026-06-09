@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -19,6 +20,7 @@ from filmoteka.domain.importing.models import (
 )
 from filmoteka.domain.importing.scan import probe_candidates, scan_downloads
 from filmoteka.infrastructure.library_config import LibraryConfig
+from filmoteka.infrastructure.settings import settings
 
 pytestmark = pytest.mark.integration
 
@@ -535,3 +537,152 @@ class TestPipelineBridge:
         assert film.metadata_confidence == 0.3  # title only, no year
         assert film.metadata_enriched_at is None
         assert film.needs_review is True
+
+    # ── Quality flags: TMDb enrichment ────────────────────────────
+
+    @patch("filmoteka.domain.importing.pipeline.tmdb_search_poster")
+    @patch("filmoteka.domain.importing.pipeline.tmdb_find_kinopoisk_url")
+    def test_bridge_tmdb_success_upgrades_quality(
+        self,
+        mock_kinopoisk: object,
+        mock_poster: object,
+        db_session: Session,
+        tmp_path: Path,
+    ) -> None:
+        """When TMDb finds poster or kinopoisk link, quality is upgraded."""
+        from filmoteka.domain.catalog.models import Film
+        from filmoteka.domain.importing.pipeline import run_import
+
+        mock_poster.return_value = ("http://img/poster.jpg", "tmdb")  # type: ignore[attr-defined]
+        mock_kinopoisk.return_value = "https://kinopoisk.ru/film/123/"  # type: ignore[attr-defined]
+
+        root = tmp_path
+        video = root / "The.Matrix.1999.1080p.mkv"
+        _make_test_video(video)
+        config = _make_config(root)
+
+        run_import(config, db_session)
+
+        film = db_session.query(Film).one()
+        assert film.metadata_source == "tmdb"
+        assert film.metadata_confidence == 0.9
+        assert film.metadata_enriched_at is not None
+        assert film.needs_review is False
+        assert film.poster_url == "http://img/poster.jpg"
+        assert film.kinopoisk_url == "https://kinopoisk.ru/film/123/"
+
+    @patch("filmoteka.domain.importing.pipeline.tmdb_search_poster")
+    @patch("filmoteka.domain.importing.pipeline.tmdb_find_kinopoisk_url")
+    def test_bridge_tmdb_empty_sets_needs_review(
+        self,
+        mock_kinopoisk: object,
+        mock_poster: object,
+        db_session: Session,
+        tmp_path: Path,
+    ) -> None:
+        """When TMDb is reachable but returns nothing, needs_review=True."""
+        from filmoteka.domain.catalog.models import Film
+        from filmoteka.domain.importing.pipeline import run_import
+
+        mock_poster.return_value = None  # type: ignore[attr-defined]
+        mock_kinopoisk.return_value = None  # type: ignore[attr-defined]
+
+        root = tmp_path
+        video = root / "The.Matrix.1999.1080p.mkv"
+        _make_test_video(video)
+        config = _make_config(root)
+
+        run_import(config, db_session)
+
+        film = db_session.query(Film).one()
+        assert film.metadata_source == "filename_parse"
+        assert film.metadata_confidence == 0.6
+        assert film.metadata_enriched_at is None
+        assert film.needs_review is True
+        assert film.poster_url is None
+        assert film.kinopoisk_url is None
+
+    @patch.object(settings, "tmdb_api_key", None)
+    def test_bridge_without_tmdb_key_keeps_filename_level(
+        self,
+        db_session: Session,
+        tmp_path: Path,
+    ) -> None:
+        """Without TMDB_API_KEY, quality stays at filename_parse level."""
+        from filmoteka.domain.catalog.models import Film
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        video = root / "The.Matrix.1999.1080p.mkv"
+        _make_test_video(video)
+        config = _make_config(root)
+
+        run_import(config, db_session)
+
+        film = db_session.query(Film).one()
+        assert film.metadata_source == "filename_parse"
+        assert film.metadata_confidence == 0.6
+        assert film.needs_review is False  # no TMDB → no reason to flag
+        assert film.poster_url is None
+        assert film.kinopoisk_url is None
+
+    # ── Dedup: film and edition matching ───────────────────────────
+
+    def test_bridge_two_files_same_film_different_quality(
+        self,
+        db_session: Session,
+        tmp_path: Path,
+    ) -> None:
+        """Two files with the same title+year but different quality → one film, two editions."""
+        from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        v1 = root / "The.Matrix.1999.1080p.mkv"
+        v2 = root / "The.Matrix.1999.2160p.mkv"
+        _make_test_video(v1)
+        _make_test_video(v2)
+        config = _make_config(root)
+
+        run_import(config, db_session)
+
+        films = db_session.query(Film).all()
+        assert len(films) == 1
+        assert films[0].title == "The Matrix"
+        assert films[0].year == 1999
+
+        editions = (
+            db_session.query(MovieEdition)
+            .filter(MovieEdition.film_id == films[0].id)
+            .order_by(MovieEdition.quality)
+            .all()
+        )
+        assert len(editions) == 2
+        assert editions[0].quality == "1080p"
+        assert editions[1].quality == "2160p"
+
+        media = db_session.query(MediaFile).all()
+        assert len(media) == 2
+
+    def test_bridge_same_title_different_year_two_films(
+        self,
+        db_session: Session,
+        tmp_path: Path,
+    ) -> None:
+        """Same title but different year → two separate films."""
+        from filmoteka.domain.catalog.models import Film
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        v1 = root / "The.Matrix.1999.mkv"
+        v2 = root / "The.Matrix.2021.mkv"
+        _make_test_video(v1)
+        _make_test_video(v2)
+        config = _make_config(root)
+
+        run_import(config, db_session)
+
+        films = db_session.query(Film).order_by(Film.year).all()
+        assert len(films) == 2
+        assert films[0].year == 1999
+        assert films[1].year == 2021
