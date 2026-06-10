@@ -111,6 +111,14 @@ nav input::placeholder { color: var(--text2); }
 .admin-page .poster-section { margin-top: 2rem; border-top: 1px solid var(--surface2); padding-top: 1.5rem; }
 .admin-page .poster-section h3 { font-size: 1rem; margin-bottom: .75rem; }
 .admin-page .poster-section p { font-size: .85rem; color: var(--text2); margin-bottom: .75rem; }
+.jobs-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.jobs-table th, .jobs-table td { padding: .4rem .6rem; text-align: left; border-bottom: 1px solid var(--surface2); }
+.jobs-table th { color: var(--text2); font-weight: 600; }
+.job-status { padding: .15rem .4rem; border-radius: 3px; font-size: .8rem; font-weight: 500; }
+.job-completed { color: #2a6; }
+.job-failed, .job-retry { color: #c33; }
+.job-running { color: #48b; }
+.job-pending { color: var(--text2); }
 .admin-page .poster-btns { display: flex; gap: .75rem; flex-wrap: wrap; }
 .admin-page .poster-btn { padding: .6rem 1.25rem; background: var(--surface2); color: var(--text); border: 1px solid var(--text2); border-radius: var(--radius); font-size: .9rem; cursor: pointer; }
 .admin-page .poster-btn:hover { border-color: var(--text); }
@@ -669,7 +677,39 @@ async function renderAdmin(el) {
         </div>
         <div id="poster-report"></div>
       </div>
+
+      <div class="poster-section">
+        <h3>Background Jobs</h3>
+        <p>Recent background tasks and their status.</p>
+        <div id="jobs-list"><div class="spinner">Loading…</div></div>
+      </div>
     </div>`;
+  loadJobs();
+}
+
+async function loadJobs() {
+  const el = document.getElementById('jobs-list');
+  if (!el) return;
+  try {
+    const data = await apiAuth('/admin/jobs');
+    if (data.items.length === 0) {
+      el.innerHTML = '<p style="color:var(--text2)">No background jobs yet.</p>';
+      return;
+    }
+    el.innerHTML = `<table class="jobs-table">
+      <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Created</th><th>Error</th></tr></thead>
+      <tbody>${data.items.map(j => `
+        <tr>
+          <td>${j.id}</td>
+          <td>${esc(j.type)}</td>
+          <td><span class="job-status job-${esc(j.status)}">${esc(j.status)}</span></td>
+          <td>${new Date(j.created_at).toLocaleString()}</td>
+          <td>${j.error ? esc(j.error) : '—'}</td>
+        </tr>`).join('')}</tbody>
+    </table>`;
+  } catch (e) {
+    el.innerHTML = `<div class="error">Failed to load jobs: ${esc(e.message)}</div>`;
+  }
 }
 
 async function runScan() {
@@ -684,30 +724,26 @@ async function runScan() {
   reportEl.innerHTML = '<div class="spinner">Starting scan…</div>';
 
   try {
-    // Start the scan — returns immediately (202)
-    await apiAuth('/admin/import/scan', 'POST');
+    // Start the scan — returns 202 with job_id
+    const startResp = await apiAuth('/admin/import/scan', 'POST');
+    const jobId = startResp.job_id;
+    if (!jobId) throw new Error('No job_id returned');
+
     reportEl.innerHTML = '<div class="spinner">Scanning library… this may take a few minutes for large files.</div>';
 
     // Poll for completion
-    const report = await pollScanStatus();
-    reportEl.innerHTML = buildReportHTML(report);
+    const job = await pollJob(jobId);
+    if (job.status === 'completed') {
+      reportEl.innerHTML = buildReportHTML(job.result);
+    } else {
+      throw new Error(job.error || 'Scan failed');
+    }
   } catch (e) {
     reportEl.innerHTML = `<div class="error">Scan failed: ${esc(e.message)}</div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = '🔍 Scan library';
   }
-}
-
-async function pollScanStatus() {
-  for (let i = 0; i < 600; i++) {
-    await new Promise(r => setTimeout(r, 2000));
-    const resp = await apiAuth('/admin/import/status');
-    if (resp.status === 'completed') return resp.report;
-    if (resp.status === 'failed') throw new Error(resp.error || 'Unknown error');
-    // still running — keep polling
-  }
-  throw new Error('Scan timed out after 20 minutes');
 }
 
 function buildReportHTML(report) {
@@ -717,7 +753,7 @@ function buildReportHTML(report) {
     <table>
       <tr><td>Files found</td><td>${report.files_found}</td></tr>
       <tr><td>Files probed</td><td>${report.files_probed}</td></tr>
-      <tr><td>Files laid out</td><td>${report.files_laid_out}</td></tr>
+      <tr><td>Files indexed</td><td>${report.files_indexed}</td></tr>
       <tr><td>Films created</td><td>${report.films_created}</td></tr>
     </table>
     ${errors.length > 0 ? `
