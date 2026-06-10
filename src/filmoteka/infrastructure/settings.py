@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # External metadata providers
     omdb_api_key: str | None = None
 
+    # LLM for mood-based suggestions (e.g. http://localhost:11434 for Ollama)
+    llm_api_url: str | None = None
+
     version: str = "0.1.0"
 
 

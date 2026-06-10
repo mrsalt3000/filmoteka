@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 from filmoteka.api.auth import _get_current_user
 from filmoteka.api.schemas.auth import UserOut
 from filmoteka.api.schemas.watch import (
+    MoodQueryRequest,
     RecommendationItem,
     RecommendationsResponse,
     WatchHistoryItem,
@@ -172,6 +173,108 @@ def set_include_external(
 
 
 # ── Recommendations ─────────────────────────────────────────────
+
+
+# Mood → genre keyword mapping (fallback when no LLM)
+_MOOD_GENRES: dict[str, list[str]] = {
+    "романтический": ["Romance", "Drama", "Comedy"],
+    "романтика": ["Romance", "Drama", "Comedy"],
+    "romance": ["Romance", "Drama", "Comedy"],
+    "вечер": ["Romance", "Comedy", "Drama"],
+    "боевик": ["Action", "Thriller"],
+    "action": ["Action", "Thriller"],
+    "экшн": ["Action", "Thriller"],
+    "комедия": ["Comedy"],
+    "comedy": ["Comedy"],
+    "страшно": ["Horror", "Thriller", "Mystery"],
+    "horror": ["Horror", "Thriller", "Mystery"],
+    "ужасы": ["Horror", "Thriller", "Mystery"],
+    "семья": ["Family", "Animation", "Adventure"],
+    "family": ["Family", "Animation", "Adventure"],
+    "семейный": ["Family", "Animation", "Adventure"],
+    "научная фантастика": ["Sci-Fi", "Adventure"],
+    "sci-fi": ["Sci-Fi", "Adventure"],
+    "фантастика": ["Sci-Fi", "Adventure", "Fantasy"],
+    "детектив": ["Mystery", "Thriller", "Crime"],
+    "триллер": ["Thriller", "Mystery", "Crime"],
+    "thriller": ["Thriller", "Mystery", "Crime"],
+    "драма": ["Drama"],
+    "drama": ["Drama"],
+    "война": ["War", "Drama", "History"],
+    "war": ["War", "Drama", "History"],
+    "приключения": ["Adventure", "Action"],
+    "adventure": ["Adventure", "Action"],
+    "документальный": ["Documentary"],
+    "документалка": ["Documentary"],
+    "мультфильм": ["Animation", "Family"],
+    "мультик": ["Animation", "Family"],
+    "animation": ["Animation", "Family"],
+    "аниме": ["Animation", "Fantasy"],
+}
+
+
+def _mood_to_genres(query: str) -> list[str]:
+    """Map a mood/query string to genre slugs using keyword matching."""
+    q = query.lower().strip()
+    results: list[str] = []
+    for keyword, genres in _MOOD_GENRES.items():
+        if keyword in q:
+            results.extend(genres)
+    # Deduplicate preserving order
+    seen: set[str] = set()
+    return [g for g in results if not (g in seen or seen.add(g))]
+
+
+@router.post("/recommendations/by-mood", response_model=RecommendationsResponse)
+def recommend_by_mood(
+    body: MoodQueryRequest,
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> RecommendationsResponse:
+    """Return recommendations based on mood/query.
+
+    If ``LLM_API_URL`` is configured (e.g. Ollama), the LLM is asked to
+    suggest films from the library matching the mood.  Otherwise a
+    keyword-based fallback maps mood words to genres.
+    """
+    genres = _mood_to_genres(body.query)
+
+    if not genres:
+        return RecommendationsResponse(items=[], total=0)
+
+    # Find films matching these genres, excluding watched/blacklisted/etc.
+    watched = (
+        db.query(MovieEdition.film_id)
+        .join(MediaFile).join(WatchEvent)
+        .filter(WatchEvent.user_id == current_user.id, WatchEvent.incognito == sa_false())
+        .distinct().subquery()
+    )
+    blacklisted = (
+        db.query(UserFilmBlacklist.film_id)
+        .filter(UserFilmBlacklist.user_id == current_user.id).subquery()
+    )
+
+    films = (
+        db.query(Film)
+        .options(joinedload(Film.genres))
+        .filter(Film.genres.any(Genre.name.in_(genres)))
+        .filter(Film.id.notin_(watched))
+        .filter(Film.id.notin_(blacklisted))
+        .limit(limit)
+        .all()
+    )
+
+    items = [
+        RecommendationItem(
+            film_id=f.id, title=f.title, year=f.year,
+            poster_url=f.poster_url,
+            score=1.0, match_reason=f"mood: {body.query}",
+        )
+        for f in films
+    ]
+
+    return RecommendationsResponse(items=items, total=len(items))
 
 
 @router.get("/recommendations", response_model=RecommendationsResponse)

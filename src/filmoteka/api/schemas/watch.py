@@ -73,6 +73,10 @@ class RecommendationsResponse(BaseModel):
     total: int
 
 
+class MoodQueryRequest(BaseModel):
+    query: str
+
+
 class AdminWatchStatItem(BaseModel):
     user_id: int
     username: str

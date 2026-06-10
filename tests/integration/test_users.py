@@ -759,3 +759,52 @@ class TestRecommendations:
         )
         titles = [i["title"] for i in resp.json()["items"]]
         assert "Blacklisted Sci-Fi" not in titles
+
+
+class TestRecommendByMood:
+    """POST /me/recommendations/by-mood — mood-based suggestions."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_requires_auth(self, client: TestClient) -> None:
+        resp = client.post(
+            "/me/recommendations/by-mood",
+            json={"query": "comedy"},
+        )
+        assert resp.status_code == 401
+
+    def test_returns_matching_genre(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "mood_test")
+        comedy = Genre(name="Comedy", slug="comedy")
+        drama = Genre(name="Drama", slug="drama")
+        db_session.add_all([comedy, drama])
+        db_session.flush()
+        db_session.add_all([
+            Film(title="Funny Movie", year=2020, genres=[comedy]),
+            Film(title="Sad Movie", year=2021, genres=[drama]),
+        ])
+        db_session.commit()
+
+        resp = client.post(
+            "/me/recommendations/by-mood",
+            headers=self._auth(token),
+            json={"query": "comedy"},
+        )
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Funny Movie" in titles
+        assert "Sad Movie" not in titles
+
+    def test_unknown_mood_returns_empty(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "mood_empty")
+        resp = client.post(
+            "/me/recommendations/by-mood",
+            headers=self._auth(token),
+            json={"query": "xyznonexistent"},
+        )
+        assert resp.json() == {"items": [], "total": 0}
