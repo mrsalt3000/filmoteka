@@ -884,3 +884,34 @@ class TestBackgroundJobs:
             headers=self._auth(token),
         )
         assert resp.status_code == 404
+
+
+# ── Admin watch statistics ────────────────────────────────────────
+
+
+class TestAdminWatchStats:
+    """GET /admin/watch-stats — all users' watch events."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_requires_admin(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "ws_admin")
+        resp = client.get("/admin/watch-stats", headers=self._auth(token))
+        assert resp.status_code == 200
+
+    def test_regular_user_gets_403(
+        self, client: TestClient
+    ) -> None:
+        token = _create_user(client, "ws_user", "pass")
+        resp = client.get(
+            "/admin/watch-stats",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403
+
+    def test_without_token_gets_401(self, client: TestClient) -> None:
+        resp = client.get("/admin/watch-stats")
+        assert resp.status_code == 401

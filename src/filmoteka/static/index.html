@@ -683,10 +683,40 @@ async function renderAdmin(el) {
         <p>Recent background tasks and their status.</p>
         <div id="jobs-list"><div class="spinner">Loading…</div></div>
       </div>
+
+      <div class="poster-section">
+        <h3>Watch Statistics</h3>
+        <p>All users' watch events (incognito excluded).</p>
+        <div id="watch-stats-list"><div class="spinner">Loading…</div></div>
+      </div>
     </div>`;
   loadJobs();
+  loadWatchStats();
 }
 
+async function loadWatchStats() {
+  const el = document.getElementById('watch-stats-list');
+  if (!el) return;
+  try {
+    const data = await apiAuth('/admin/watch-stats');
+    if (data.items.length === 0) {
+      el.innerHTML = '<p style="color:var(--text2)">No watch events yet.</p>';
+      return;
+    }
+    el.innerHTML = `<table class="jobs-table">
+      <thead><tr><th>User</th><th>Film</th><th>Watched At</th><th>Finished</th></tr></thead>
+      <tbody>${data.items.map(w => `
+        <tr>
+          <td>${esc(w.username)}</td>
+          <td>${esc(w.film_title)}</td>
+          <td>${new Date(w.started_at).toLocaleString()}</td>
+          <td>${w.finished ? '✓' : '…'}</td>
+        </tr>`).join('')}</tbody>
+    </table>`;
+  } catch (e) {
+    el.innerHTML = `<div class="error">Failed to load stats: ${esc(e.message)}</div>`;
+  }
+}
 async function loadJobs() {
   const el = document.getElementById('jobs-list');
   if (!el) return;

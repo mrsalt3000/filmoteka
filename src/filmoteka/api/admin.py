@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import false as sa_false
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -30,6 +31,7 @@ from filmoteka.api.schemas.catalog import (
     PersonOut,
 )
 from filmoteka.api.schemas.jobs import JobListResponse, JobStatusResponse
+from filmoteka.api.schemas.watch import AdminWatchStatItem, AdminWatchStatsResponse
 from filmoteka.domain.access.models import User
 from filmoteka.domain.access.service import hash_password
 from filmoteka.domain.catalog.models import (
@@ -42,6 +44,7 @@ from filmoteka.domain.catalog.models import (
 from filmoteka.domain.importing.pipeline import run_import
 from filmoteka.domain.tasks.models import BackgroundJob
 from filmoteka.domain.tasks.worker import run_background_job
+from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import SessionLocal, get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
 from filmoteka.infrastructure.metadata_providers import omdb_search_poster
@@ -101,6 +104,58 @@ def list_jobs(
         .all()
     )
     return {"items": jobs, "total": total}
+
+
+# ---------------------------------------------------------------------------
+# Watch statistics
+# ---------------------------------------------------------------------------
+
+
+@router.get("/watch-stats", response_model=AdminWatchStatsResponse)
+def admin_watch_stats(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Return a paginated list of all watch events across users.
+
+    Incognito events are excluded. Sorted by most recent first.
+    """
+    query = (
+        db.query(
+            User.username,
+            Film.title,
+            WatchEvent.started_at,
+            WatchEvent.finished,
+        )
+        .select_from(WatchEvent)
+        .join(User, WatchEvent.user_id == User.id)
+        .join(MediaFile, WatchEvent.media_file_id == MediaFile.id)
+        .join(MovieEdition, MediaFile.edition_id == MovieEdition.id)
+        .join(Film, MovieEdition.film_id == Film.id)
+        .filter(WatchEvent.incognito == sa_false())
+    )
+
+    total = query.count()
+    rows = (
+        query.order_by(WatchEvent.started_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    items = [
+        AdminWatchStatItem(
+            username=r[0],
+            film_title=r[1],
+            started_at=r[2],
+            finished=r[3],
+        )
+        for r in rows
+    ]
+
+    return {"items": items, "total": total}
 
 
 @router.post("/users", response_model=UserOut, status_code=201)

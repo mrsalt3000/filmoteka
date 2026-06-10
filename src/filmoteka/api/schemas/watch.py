@@ -71,3 +71,15 @@ class RecommendationItem(BaseModel):
 class RecommendationsResponse(BaseModel):
     items: list[RecommendationItem]
     total: int
+
+
+class AdminWatchStatItem(BaseModel):
+    username: str
+    film_title: str
+    started_at: datetime
+    finished: bool
+
+
+class AdminWatchStatsResponse(BaseModel):
+    items: list[AdminWatchStatItem]
+    total: int
