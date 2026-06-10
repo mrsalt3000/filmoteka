@@ -4,6 +4,25 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-029 — 2026-06-10
+
+- Status: `done`
+- Summary: Провёл ручную приёмку всех 12 сценариев по PRD-чеклисту. Результаты задокументированы в `docs/acceptance-report.md`. **9/12 PASS**, 3 WARN (см. ниже). Подтверждено: импорт 3622 фильмов, идемпотентность, поиск, просмотр, инкогнито, child profile, family video, offline degradation. Найдены 3 issues: backup ломается из-за отсутствия pg_dump в Docker, постерное обогащение не запускается автоматически при re-scan, поиск по английским названиям не находит фильмы с русскими заголовками.
+- Changed files:
+  - `docs/acceptance-report.md` (new — полный протокол приёмки)
+  - `docs/progress.md` (this report)
+- Checks:
+  - 12 API-based acceptance scenarios: PASS — импорт, идемпотентность, поиск, просмотр, история, инкогнито, child profile, family video, offline degradation
+  - WARN — enrichment (74/3622 posters; нужно запустить fill-missing), recommendations (пусто — нет истории), backup (pg_dump отсутствует)
+  - ruff check: не требуется (acceptance — docs-only)
+- Risks / follow-ups:
+  - **Известный дефект:** backup ломается — `pg_dump` не установлен в Docker-образе. Нужно добавить `postgresql-client` в Dockerfile.
+  - **Известный дефект:** постеры исчезли после re-scan — импорт пересоздаёт Film без OMDB enrichment. Нужно запустить fill-missing через admin UI.
+  - Поиск "Matrix" → 0 результатов — ожидаемо для библиотеки с русскими названиями.
+  - История пуста — не было завершённых просмотров перед проверкой.
+- Next task:
+  - V2-030 — Подготовить финальную документацию (README, test-runbook, architecture log)
+
 ## Task Report: V2-028 — 2026-06-10
 
 - Status: `done`
