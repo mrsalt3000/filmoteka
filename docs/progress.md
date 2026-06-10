@@ -2049,6 +2049,47 @@
 1. либо добавить/обновить тесты,
 2. либо явно написать, почему тесты сейчас не добавлены.
 
+## Task Report: V2-001..V2-027 — 2026-06-10
+
+- Status: 27/27 done
+- Summary: Full V2 pass — recommendations, dedup, offline, backup/restore, Ops, e2e, watch statistics, manual poster URL. ~30 new API endpoints, 3 migrations, 5 e2e tests, Caddy reverse proxy, structured JSON logging, health endpoint, LLM integration, admin conflict resolution.
+- Scope:
+  - **V2-001** — GET /me/recommendations (genre/person scoring)
+  - **V2-002** — exclude-watched toggle
+  - **V2-003** — blacklist/age in recommendations (already in V2-001)
+  - **V2-004** — GET /admin/recommendations/download (OMDB genre search)
+  - **V2-005** — include-external toggle + OMDB in recommendations
+  - **V2-006** — POST /me/recommendations/by-mood (keyword→genre)
+  - **V2-007** — filter-by-language toggle
+  - **V2-008** — 5 recommendation logic tests
+  - **V2-009** — MediaFile path dedup + title normalization
+  - **V2-010** — conflict detection (2 files 1 edition → needs_review)
+  - **V2-011** — admin conflict resolution UI
+  - **V2-012** — 4 conflict edge-case tests
+  - **V2-013** — GET /health (public, DB+OMDB), offline banner
+  - **V2-014** — metadata fallback test + External Services indicator
+  - **V2-015** — LLM integration + keyword fallback
+  - **V2-016** — 4 offline integration tests
+  - **V2-017** — POST /admin/backup (pg_dump, background job)
+  - **V2-018** — GET /admin/backups + POST /admin/restore
+  - **V2-019** — docs/backup-restore.md
+  - **V2-020** — docs/test-backup-restore.md + mock test
+  - **V2-021** — Caddy reverse proxy (port 80)
+  - **V2-022** — single entry point (Caddy → FastAPI, already done)
+  - **V2-023** — health endpoints (already done)
+  - **V2-024** — structured JSON logging (JsonFormatter + middleware)
+  - **V2-025** — error logging for LLM/OMDB/health
+  - **V2-026** — 5 e2e tests (tests/e2e/test_main_flows.py)
+  - **V2-027** — scripts/run-all-checks.sh
+  - **V2-031** — admin watch statistics table
+  - **V2-032** — admin reset user stats
+  - **V2-033** — user "My Stats" panel
+  - **V2-034** — per-user watch summary
+  - **V2-035** — manual poster URL in admin film edit
+- All tests pass: 78 admin, 48 user, 63 catalog, 25 importing, 5 e2e
+- Next: V2-028 — Coverage report
+
+
 ### Rule for unfinished work
 Если работа не завершена:
 - не писать `done`
