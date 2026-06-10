@@ -760,7 +760,12 @@ async function loadWatchStats() {
 async function resetUserStats(userId, username) {
   if (!confirm(`Reset watch history for user "${username}"? This cannot be undone.`)) return;
   try {
-    await apiAuth(`/admin/watch-stats/${userId}`, 'DELETE');
+    const token = getToken();
+    const resp = await fetch(`/admin/watch-stats/${userId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
     loadWatchStats();
   } catch (e) {
     alert(`Failed to reset: ${e.message}`);
