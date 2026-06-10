@@ -941,6 +941,84 @@ class TestListFilms:
         detail = client.get(f"/films/{f.id}")
         assert detail.json()["is_family_video"] is True
 
+    def test_family_excluded_from_search(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Family video excluded from search results by default."""
+        db_session.add(Film(title="Birthday Party", year=2020, is_family_video=True))
+        db_session.commit()
+
+        resp = client.get("/films?q=Birthday")
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Birthday Party" not in titles
+
+    def test_family_visible_in_list_response(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """is_family_video field is exposed in the list endpoint."""
+        db_session.add(Film(title="Test", year=2020, is_family_video=True))
+        db_session.commit()
+
+        resp = client.get("/films?include_family=true")
+        assert resp.status_code == 200
+        item = resp.json()["items"][0]
+        assert "is_family_video" in item
+        assert item["is_family_video"] is True
+
+    def test_family_combo_with_search(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """include_family=true plus search finds family videos."""
+        db_session.add_all([
+            Film(title="Birthday Party", year=2020, is_family_video=True),
+            Film(title="Other Film", year=2021),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?q=Birthday&include_family=true")
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Birthday Party" in titles
+
+    def test_admin_toggle_removes_from_listing(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Toggling is_family_video on via admin removes it from default listing."""
+        f = Film(title="Toggle Off", year=2020)
+        db_session.add(f)
+        db_session.commit()
+
+        # Visible by default
+        resp = client.get("/films")
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Toggle Off" in titles
+
+        # Admin marks as family video
+        admin_token = self._create_user(client, "admin_toggle_fam")
+        self._make_admin(db_session, "admin_toggle_fam")
+        client.put(
+            f"/admin/films/{f.id}",
+            headers=self._auth_header(admin_token),
+            json={"is_family_video": True},
+        )
+
+        # Now hidden from default listing
+        resp = client.get("/films")
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Toggle Off" not in titles
+
+    def test_anonymous_excludes_family(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Unauthenticated users also do not see family videos."""
+        db_session.add(Film(title="Private Clip", year=2020, is_family_video=True))
+        db_session.commit()
+
+        resp = client.get("/films")
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Private Clip" not in titles
+
     def test_search_by_description(
         self, client: TestClient, db_session: Session
     ) -> None:
