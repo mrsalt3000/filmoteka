@@ -4,6 +4,26 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-006 — 2026-06-10
+
+- Status: `done`
+- Summary: Починил ffmpeg remux для MKV с AC3 аудио. **Корневая причина:** `-movflags frag_keyframe+empty_moov+default_base_moof` несовместим с AC3 (Dolby Digital). ffmpeg падал с `Cannot write moov atom before AC3 packets. Set the delay_moov flag to fix this.`, но `stderr=subprocess.DEVNULL` скрывал ошибку. Клиент получал 947-байтовый init-сегмент (ftyp+moov без медиа-данных) и зависал. **Фикс:** `+delay_moov` в movflags, `stderr=subprocess.PIPE` с логгированием через фоновый поток, детекция раннего завершения (< 10 KB → warning).
+- Changed files:
+  - `src/filmoteka/api/media.py` — 3 изменения в `_ffmpeg_remux_stream()`: movflags (+delay_moov), stderr (PIPE + log), early-exit detection
+  - `agent-tasklist.md` — BUGFIX-006 marked [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff check src/filmoteka/api/media.py: ✅
+  - mypy src/filmoteka/api/media.py: ✅
+  - AC3 MKV stream (media 3656): ✅ 298 MB downloaded, moof+mdat present
+  - AAC MKV stream (media 3653, regression): ✅ 13 MB downloaded, moof+mdat present
+  - `docker compose logs` errors: none
+- Risks / follow-ups:
+  - Другие проблемные кодеки (DTS, TrueHD) могут давать похожие ошибки — теперь они логируются и будут видны
+  - При необходимости можно добавить перекодирование AC3→AAC (-c:a aac) для лучшей совместимости
+- Next task:
+  - Определяется владельцем проекта
+
 ## Task Report: V2-030 — 2026-06-10
 
 - Status: `done`

@@ -9,6 +9,7 @@ import shutil
 import subprocess
 from collections.abc import Generator
 from pathlib import Path
+from threading import Thread
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -72,6 +73,9 @@ def _ffmpeg_remux_stream(path: Path) -> StreamingResponse:
 
     Uses stream copy (no re-encoding) so it is fast and lossless.
     The output is a fragmented MP4 that browsers can play progressively.
+
+    For AC3 audio tracks the ``+delay_moov`` flag is used to work around
+    an ffmpeg incompatibility with ``empty_moov`` + AC3.
     """
 
     def generate() -> Generator[bytes, None, None]:
@@ -80,14 +84,24 @@ def _ffmpeg_remux_stream(path: Path) -> StreamingResponse:
             "-i", str(path),
             "-c", "copy",
             "-f", "mp4",
-            "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+            "-movflags", "frag_keyframe+empty_moov+default_base_moof+delay_moov",
             "pipe:1",
         ]
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
+        stderr_lines: list[str] = []
+
+        def _read_stderr() -> None:
+            for line in process.stderr or []:
+                stderr_lines.append(line.decode("utf-8", errors="replace"))
+
+        stderr_thread = Thread(target=_read_stderr, daemon=True)
+        stderr_thread.start()
+
+        bytes_yielded = 0
         try:
             stdout = process.stdout
             if stdout is None:
@@ -96,10 +110,27 @@ def _ffmpeg_remux_stream(path: Path) -> StreamingResponse:
                 chunk = stdout.read(65536)
                 if not chunk:
                     break
+                bytes_yielded += len(chunk)
                 yield chunk
         finally:
             process.terminate()
             process.wait()
+            stderr_thread.join(timeout=2)
+
+        # If ffmpeg produced only the init segment (< 10 KB) something
+        # went wrong — log the full error for diagnostics.
+        if bytes_yielded < 10000:
+            err_text = "".join(stderr_lines).strip()
+            _logger.warning(
+                "ffmpeg remux produced only %d bytes for %s — likely a codec "
+                "incompatibility: %s",
+                bytes_yielded, path.name, err_text,
+            )
+        elif stderr_lines:
+            _logger.info(
+                "ffmpeg remux stderr for %s: %s",
+                path.name, "".join(stderr_lines)[:500],
+            )
 
     return StreamingResponse(
         generate(),

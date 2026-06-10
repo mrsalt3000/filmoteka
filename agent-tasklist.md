@@ -755,6 +755,28 @@
   2. Admin poster fill-missing/refresh-all работают без ошибок.
   3. Import pipeline находит постеры в Docker.
 
+- [x] **BUGFIX-005** Починить `resetUserStats` crash на 204 No Content.
+
+  Проблема: admin endpoint `POST /admin/watch-stats/reset/{user_id}` возвращает 204 No Content. Frontend пытается распарсить JSON, получает ошибку и падает (Uncaught (in promise) SyntaxError). Решение: заменить `apiAuth()` на сырой `fetch()` с обработкой 204.
+
+  Проверка результата:
+  1. Кнопка "Reset" в админке работает без console error.
+  2. Статистика пользователя сбрасывается корректно.
+
+- [x] **BUGFIX-006** Починить ffmpeg remux для MKV с AC3 аудио.
+
+  Проблема: MKV-файлы с AC3 (Dolby Digital) аудиодорожкой не ремуксируются в MP4. ffmpeg выдаёт ошибку `Cannot write moov atom before AC3 packets. Set the delay_moov flag to fix this.`, но stderr сброшен в `/dev/null`, поэтому ошибка скрыта. Браузер получает 947-байтовый init-сегмент и зависает в ожидании данных.
+
+  Решение:
+  - Не сбрасывать stderr ffmpeg — логировать ошибки.
+  - Использовать `delay_moov` во flags ffmpeg для совместимости с AC3.
+  - Если remux не удался — вернуть понятную ошибку клиенту.
+
+  Проверка результата:
+  1. `Брат.1997.WEB-DLRip-AVC_[New-team]_by_AVP_Studio.mkv` (id=3656) играет в браузере.
+  2. MKV с обычным (AAC) аудио продолжает работать как раньше.
+  3. При недоступности ffmpeg возвращается 415 как и раньше.
+
 ---
 
 ## 3.12. Provider migration
