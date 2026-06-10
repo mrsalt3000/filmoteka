@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from urllib.request import Request, urlopen
 
 from fastapi import APIRouter
@@ -12,26 +13,23 @@ from filmoteka.api.schemas.watch import ComponentStatus, HealthResponse
 from filmoteka.infrastructure.database import SessionLocal
 from filmoteka.infrastructure.settings import settings
 
+_logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["health"])
 
 
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    """Return overall service health.
-
-    Checks database connectivity and (briefly) external service
-    reachability.  Designed for load balancer / docker health checks.
-    """
-    # Database check
+    """Return overall service health."""
     db_status = "ok"
     try:
         db: Session = SessionLocal()
         db.execute(text("SELECT 1"))
         db.close()
-    except Exception:
+    except Exception as exc:
+        _logger.warning("Health check — database: %s", exc)
         db_status = "degraded"
 
-    # External connectivity check (OMDB — 3s timeout)
     ext_status = "ok"
     if settings.omdb_api_key:
         try:
@@ -40,7 +38,8 @@ def health() -> HealthResponse:
             resp = urlopen(req, timeout=3)
             if resp.status != 200:
                 ext_status = "degraded"
-        except Exception:
+        except Exception as exc:
+            _logger.warning("Health check — OMDB: %s", exc)
             ext_status = "unavailable"
 
     overall = "ok" if db_status == "ok" else "degraded"

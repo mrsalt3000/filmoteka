@@ -266,7 +266,7 @@ def recommend_by_mood(
         try:
             return _llm_mood_recommendations(body.query, limit, db, current_user)
         except Exception:
-            _logger.warning("LLM mood query failed — falling back to keywords")
+            _logger.exception("LLM mood query failed — falling back to keywords")
             pass  # fall through to keyword matching
 
     # Keyword fallback

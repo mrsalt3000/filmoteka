@@ -307,6 +307,7 @@ def admin_download_suggestions(
                     "reason": f"Popular in {genre}",
                 })
         except Exception:
+            _logger.warning("OMDB search failed for genre %r", genre, exc_info=True)
             continue
 
     return {"items": suggestions[:30], "total": len(suggestions[:30])}
