@@ -782,3 +782,105 @@ class TestAdminMediaReindex:
             assert result["skipped"] >= 1
         finally:
             client.app.dependency_overrides.pop(get_library_config, None)  # type: ignore[attr-defined]
+
+
+# ── Background job infrastructure ────────────────────────────────
+
+
+class TestBackgroundJobs:
+    """BackgroundJob lifecycle and list endpoint."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_job_lifecycle(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """pending → running → completed lifecycle."""
+        from filmoteka.domain.tasks.models import BackgroundJob
+        job = BackgroundJob(type="test_lifecycle", status="pending")
+        db_session.add(job)
+        db_session.commit()
+        assert job.status == "pending"
+
+        job.status = "running"
+        db_session.commit()
+        assert job.status == "running"
+
+        job.status = "completed"
+        job.result = {"ok": True}
+        db_session.commit()
+
+        token = _create_admin_token(client, db_session, "bg_lifecycle")
+        resp = client.get(
+            f"/admin/jobs/{job.id}",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "completed"
+        assert body["result"] == {"ok": True}
+
+    def test_job_failure(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Job error is persisted and visible via API."""
+        from filmoteka.domain.tasks.models import BackgroundJob
+        job = BackgroundJob(type="test_fail", status="failed", error="Something broke")
+        db_session.add(job)
+        db_session.commit()
+
+        token = _create_admin_token(client, db_session, "bg_fail")
+        resp = client.get(
+            f"/admin/jobs/{job.id}",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "failed"
+        assert "Something broke" in body["error"]
+
+    def test_job_result_stored(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Job result with nested dict is stored and returned."""
+        from filmoteka.domain.tasks.models import BackgroundJob
+        result = {"total": 10, "updated": 5, "errors": ["err1"]}
+        job = BackgroundJob(type="test_result", status="completed", result=result)
+        db_session.add(job)
+        db_session.commit()
+
+        token = _create_admin_token(client, db_session, "bg_result")
+        resp = client.get(
+            f"/admin/jobs/{job.id}",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["result"]["total"] == 10
+        assert body["result"]["errors"] == ["err1"]
+
+    def test_list_jobs_pagination(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """GET /admin/jobs respects skip and limit."""
+        token = _create_admin_token(client, db_session, "bg_paginate")
+
+        resp = client.get(
+            "/admin/jobs?skip=0&limit=2",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["items"]) <= 2
+
+    def test_get_job_not_found(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Non-existent job ID returns 404."""
+        token = _create_admin_token(client, db_session, "bg_notfound")
+        resp = client.get(
+            "/admin/jobs/999999",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 404
