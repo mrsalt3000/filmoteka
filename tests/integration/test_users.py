@@ -651,6 +651,39 @@ class TestIncludeExternal:
         assert resp.status_code == 401
 
 
+# ── Language filter ──────────────────────────────────────────────
+
+
+class TestFilterByLanguage:
+    """PUT /me/filter-by-language — toggle flag."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_default_is_false(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "lang_default")
+        resp = client.get("/auth/me", headers=self._auth(token))
+        assert resp.json()["filter_by_language"] is False
+
+    def test_set_true(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "lang_true")
+        resp = client.put(
+            "/me/filter-by-language",
+            headers=self._auth(token),
+            json={"filter": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["filter_by_language"] is True
+
+    def test_requires_auth(self, client: TestClient) -> None:
+        resp = client.put("/me/filter-by-language", json={"filter": True})
+        assert resp.status_code == 401
+
+
 # ── Recommendations ──────────────────────────────────────────────
 
 

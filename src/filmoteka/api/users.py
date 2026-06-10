@@ -7,6 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import false as sa_false
+from sqlalchemy import func as sa_func
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -53,6 +54,10 @@ class ExcludeWatchedRequest(BaseModel):
 
 class IncludeExternalRequest(BaseModel):
     include: bool
+
+
+class FilterByLanguageRequest(BaseModel):
+    filter: bool
 
 
 @router.get("/blacklist", response_model=BlacklistResponse)
@@ -167,6 +172,20 @@ def set_include_external(
 ) -> UserOut:
     """Set whether external films (not in library) appear in recommendations."""
     current_user.include_external = body.include
+    db.commit()
+    db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
+@router.put("/filter-by-language")
+def set_filter_by_language(
+    body: FilterByLanguageRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> UserOut:
+    """Set whether recommendations are filtered by the user's most
+    common watched audio language."""
+    current_user.filter_by_language = body.filter
     db.commit()
     db.refresh(current_user)
     return UserOut.model_validate(current_user)
@@ -362,6 +381,32 @@ def get_recommendations(
             candidates = candidates.filter(
                 or_(Film.age_rating.is_(None), Film.age_rating.in_(allowed))
             )
+
+    # ── Language filter ─────────────────────────────────────────
+    if current_user.filter_by_language:
+        top_lang = (
+            db.query(MediaFile.audio_codec, sa_func.count(MediaFile.id).label("cnt"))
+            .join(MovieEdition)
+            .join(WatchEvent)
+            .filter(
+                WatchEvent.user_id == current_user.id,
+                WatchEvent.incognito == sa_false(),
+                MediaFile.audio_codec.isnot(None),
+            )
+            .group_by(MediaFile.audio_codec)
+            .order_by(sa_func.count(MediaFile.id).desc())
+            .first()
+        )
+        if top_lang is not None and top_lang[0]:
+            lang_val = top_lang[0]
+            matching = (
+                db.query(MovieEdition.film_id)
+                .join(MediaFile)
+                .filter(MediaFile.audio_codec == lang_val)
+                .distinct()
+                .subquery()
+            )
+            candidates = candidates.filter(Film.id.in_(matching))
 
     candidates = candidates.all()
 

@@ -35,6 +35,7 @@ class UserOut(BaseModel):
     exclude_family_from_recommendations: bool = True
     exclude_watched: bool = False
     include_external: bool = False
+    filter_by_language: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
