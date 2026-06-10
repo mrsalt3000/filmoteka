@@ -54,6 +54,26 @@ def _get_current_user(
     return user
 
 
+def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Return the current user, or ``None`` if unauthenticated.
+
+    Unlike ``_get_current_user`` this does not raise on missing/invalid
+    tokens — safe for endpoints where auth is optional.
+    """
+    if credentials is None:
+        return None
+    user_id = decode_access_token(credentials.credentials)
+    if user_id is None:
+        return None
+    user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        return None
+    return user
+
+
 def require_role(required_role: str = "admin") -> Callable[[User], User]:
     """Dependency factory: returns a dependency that enforces a minimum role.
 

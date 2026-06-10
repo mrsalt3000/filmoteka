@@ -22,6 +22,7 @@ class User(Base):
         String(16), nullable=False, default="user"
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    age_group: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
     def __repr__(self) -> str:

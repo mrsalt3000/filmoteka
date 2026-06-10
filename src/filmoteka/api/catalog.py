@@ -5,9 +5,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from filmoteka.api.auth import get_optional_current_user
 from filmoteka.api.schemas.catalog import (
     EditionOut,
     FilmDetailOut,
@@ -17,6 +18,7 @@ from filmoteka.api.schemas.catalog import (
     MediaFileOut,
     PersonOut,
 )
+from filmoteka.domain.access.models import User
 from filmoteka.domain.catalog.models import (
     Film,
     Genre,
@@ -55,6 +57,21 @@ def _min_height(resolution: str) -> int | None:
     return _RESOLUTION_MAP.get(resolution.strip().lower())
 
 
+_AGE_GROUP_MAX: dict[str, int] = {
+    "0_6": 6,
+    "7_12": 12,
+    "13_17": 16,
+}
+
+_AGE_RATING_VALUES: dict[str, int] = {
+    "0+": 0,
+    "6+": 6,
+    "12+": 12,
+    "16+": 16,
+    "18+": 18,
+}
+
+
 @router.get("", response_model=FilmListResponse)
 def list_films(
     skip: int = Query(0, ge=0),
@@ -70,6 +87,7 @@ def list_films(
     has_subtitles: bool | None = Query(None),
     audio_lang: str | None = Query(None, min_length=1),
     subtitle_lang: str | None = Query(None, min_length=1),
+    current_user: User | None = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ) -> FilmListResponse:
     """Return a paginated list of films, optionally filtered by year range,
@@ -158,6 +176,26 @@ def list_films(
             )
         )
 
+    # ── Child-restriction: age-rating filter ──────────────────────
+
+    is_child = (
+        current_user is not None
+        and current_user.role == "child"
+        and current_user.age_group is not None
+    )
+    if is_child:
+        max_age = _AGE_GROUP_MAX.get(current_user.age_group)  # type: ignore[union-attr]
+        if max_age is not None:
+            allowed_ratings = [
+                r for r, v in _AGE_RATING_VALUES.items() if v <= max_age
+            ]
+            query = query.filter(
+                or_(
+                    Film.age_rating.is_(None),
+                    Film.age_rating.in_(allowed_ratings),
+                )
+            )
+
     total = query.count()
     items = query.order_by(Film.created_at.desc()).offset(skip).limit(limit).all()
 
@@ -207,6 +245,7 @@ def get_film(
         title=film.title,
         year=film.year,
         description=film.description,
+        age_rating=film.age_rating,
         needs_review=film.needs_review,
         created_at=film.created_at,
         genres=[GenreOut.model_validate(g) for g in film.genres],

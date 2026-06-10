@@ -16,8 +16,10 @@ from sqlalchemy.orm import Session, joinedload
 from filmoteka.api.auth import require_role
 from filmoteka.api.dependencies import get_library_config
 from filmoteka.api.schemas.auth import (
+    VALID_AGE_GROUPS,
     VALID_ROLES,
     AdminCreateUserRequest,
+    AdminUpdateUserRequest,
     UserOut,
 )
 from filmoteka.api.schemas.catalog import (
@@ -66,7 +68,7 @@ def admin_create_user(
     current_user: User = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ) -> User:
-    """Create a new user with a specified role (user or child).
+    """Create a new user with a specified role (user or child) and optional age_group.
 
     Admin-only. Returns the created user.
     """
@@ -74,6 +76,15 @@ def admin_create_user(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid role '{body.role}'. Allowed: {', '.join(sorted(VALID_ROLES))}",
+        )
+
+    if body.age_group is not None and body.age_group not in VALID_AGE_GROUPS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Invalid age_group '{body.age_group}'. "
+                f"Allowed: {', '.join(sorted(VALID_AGE_GROUPS))}"
+            ),
         )
 
     existing = db.query(User).filter(User.username == body.username).first()
@@ -87,8 +98,39 @@ def admin_create_user(
         username=body.username,
         hashed_password=hash_password(body.password),
         role=body.role,
+        age_group=body.age_group,
     )
     db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.put("/users/{user_id}", response_model=UserOut)
+def admin_update_user(
+    user_id: int,
+    body: AdminUpdateUserRequest,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> User:
+    """Update a user's age_group. Admin-only."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if body.age_group is not None and body.age_group not in VALID_AGE_GROUPS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Invalid age_group '{body.age_group}'. "
+                f"Allowed: {', '.join(sorted(VALID_AGE_GROUPS))}"
+            ),
+        )
+
+    user.age_group = body.age_group
     db.commit()
     db.refresh(user)
     return user
@@ -351,6 +393,9 @@ def update_film(
     if body.description is not None and body.description != film.description:
         film.description = body.description
         changed = True
+    if body.age_rating is not None and body.age_rating != film.age_rating:
+        film.age_rating = body.age_rating
+        changed = True
 
     if changed:
         film.needs_review = False
@@ -381,6 +426,7 @@ def update_film(
         year=film.year,
         description=film.description,
         poster_url=film.poster_url,
+        age_rating=film.age_rating,
         needs_review=film.needs_review,
         created_at=film.created_at,
         genres=[GenreOut.model_validate(g) for g in film.genres],

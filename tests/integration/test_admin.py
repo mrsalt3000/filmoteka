@@ -281,6 +281,78 @@ class TestAdminCreateUser:
         )
         assert resp.status_code == 422
 
+    def test_create_child_with_age_group(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "admin_cag")
+        resp = client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "username": "kid_with_age",
+                "password": "pass",
+                "role": "child",
+                "age_group": "7_12",
+            },
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["username"] == "kid_with_age"
+        assert body["role"] == "child"
+        assert body["age_group"] == "7_12"
+
+    def test_create_user_invalid_age_group(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "admin_badag")
+        resp = client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "username": "bad_age",
+                "password": "pass",
+                "role": "child",
+                "age_group": "99_99",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_update_user_age_group(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """PUT /admin/users/{id} sets age_group."""
+        admin_token = _create_admin_token(client, db_session, "admin_upd")
+
+        # Create a child user first
+        create_resp = client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"username": "updatable_kid", "password": "pass", "role": "child"},
+        )
+        assert create_resp.status_code == 201
+        user_id = create_resp.json()["id"]
+
+        # Update age_group
+        resp = client.put(
+            f"/admin/users/{user_id}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"age_group": "13_17"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["age_group"] == "13_17"
+
+    def test_update_user_nonexistent(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "admin_updne")
+        resp = client.put(
+            "/admin/users/999999",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"age_group": "0_6"},
+        )
+        assert resp.status_code == 404
+
 
 # ---------------------------------------------------------------------------
 # Poster management

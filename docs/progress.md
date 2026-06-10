@@ -4,6 +4,30 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-014 — 2026-06-10
+
+- Status: `done`
+- Summary: Реализовал возрастные группы для child-профиля. Добавлены `Film.age_rating` и `User.age_group` (миграция). Админ может создавать child-пользователей с `age_group` (0_6, 7_12, 13_17) и задавать `age_rating` фильмам. В `GET /films` добавлен опциональный `get_optional_current_user` — если запрос от child с `age_group`, фильмы с рейтингом выше его группы исключаются из выдачи. Добавлена опция `age_rating` в `FilmUpdateSchema` и `FilmDetailOut`.
+- Changed files:
+  - `src/filmoteka/domain/access/models.py` (+ age_group)
+  - `src/filmoteka/domain/catalog/models.py` (+ age_rating)
+  - `migrations/versions/9dadfa94c2ae_add_age_rating_to_films_age_group_to_.py` (new)
+  - `src/filmoteka/api/schemas/auth.py` (+ VALID_AGE_GROUPS, AdminUpdateUserRequest, age_group в UserOut и AdminCreateUserRequest)
+  - `src/filmoteka/api/schemas/catalog.py` (+ age_rating в FilmOut, FilmUpdateSchema, FilmDetailOut)
+  - `src/filmoteka/api/auth.py` (+ get_optional_current_user)
+  - `src/filmoteka/api/admin.py` (+ PUT /admin/users/{id}; age_group в create user; age_rating в film edit)
+  - `src/filmoteka/api/catalog.py` (+ age-rating filter; optional user; age_rating в get_film)
+  - `tests/integration/test_admin.py` (+4 теста: create child with age_group, invalid age_group, update age_group, nonexistent)
+  - `tests/integration/test_catalog.py` (+3 теста: child filters adult content, child without age_group, adult sees all; +User import)
+  - `agent-tasklist.md` (V1-014 marked [x])
+- Checks:
+  - ruff check: `yes` (pre-existing warning only)
+  - mypy: `yes` (57 source files, clean)
+  - pytest integration test_admin.py: `yes` (39/39, +4 new)
+  - pytest integration test_catalog.py: `yes` (49/49, +3 new)
+- Next task:
+  - V1-015 — Implement user blacklist for films
+
 ## Task Report: V1-013 — 2026-06-10
 
 - Status: `done`

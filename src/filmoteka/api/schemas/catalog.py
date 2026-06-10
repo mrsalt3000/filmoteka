@@ -16,6 +16,7 @@ class FilmOut(BaseModel):
     title: str
     year: int | None = None
     poster_url: str | None = None
+    age_rating: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -78,6 +79,7 @@ class FilmUpdateSchema(BaseModel):
     title: str | None = None
     year: int | None = None
     description: str | None = None
+    age_rating: str | None = None
 
 
 class FilmDetailOut(BaseModel):
@@ -86,6 +88,7 @@ class FilmDetailOut(BaseModel):
     year: int | None = None
     description: str | None = None
     poster_url: str | None = None
+    age_rating: str | None = None
     needs_review: bool = False
     created_at: datetime
     genres: list[GenreOut] = []
