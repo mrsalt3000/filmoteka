@@ -4,6 +4,24 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-030 — 2026-06-10
+
+- Status: `done`
+- Summary: Подготовил финальную документацию. Переписан `README.md` (полный гайд по установке, конфигурации, API, фронтенду, troubleshooting). Обновлён `docs/test-runbook.md` (добавлены скрипты run-all-checks.sh/run-coverage.sh, pre-existing failures). Добавлены 3 новых ADR (OMDB, scan-only import, Caddy+health) в `docs/architecture-decisions.md` + обновлён индекс. AGENTS.md — ревизия: всё актуально, изменений не требуется.
+- Changed files:
+  - `README.md` (полностью переписан)
+  - `docs/test-runbook.md` (расширен)
+  - `docs/architecture-decisions.md` (+3 ADR, обновлён индекс)
+  - `docs/progress.md` (this report)
+- Checks:
+  - Визуальный review каждого файла: done
+  - ruff check: не требуется (docs-only)
+- Risks / follow-ups:
+  - AGENTS.md review завершён — файл актуален
+  - V2 phase завершена. Проект готов к переходу к следующей фазе.
+- Next task:
+  - V2 phase complete. Следующая фаза определяется владельцем проекта.
+
 ## Task Report: V2-029 — 2026-06-10
 
 - Status: `done`

@@ -46,6 +46,9 @@
 | ADR-013 | Keep project instructions in `AGENTS.md` | accepted | 2026-06-03 |
 | ADR-014 | Separate unit, integration, and e2e tests | accepted | 2026-06-03 |
 | ADR-015 | Import pipeline — wired end-to-end, bridge step, admin trigger | accepted | 2026-06-07 |
+| ADR-016 | OMDB replaces TMDb as poster source | accepted | 2026-06-10 |
+| ADR-017 | Scan-only import (no copy/move) | accepted | 2026-06-10 |
+| ADR-018 | Caddy reverse proxy + public health endpoint | accepted | 2026-06-10 |
 
 ---
 
@@ -857,6 +860,123 @@ MVP реализовал отдельные доменные функции им
 - Neutral / follow-up:
   - V1-023: background jobs для импорта
   - V2-009: advanced dedup
+
+---
+
+## ADR-016: OMDB replaces TMDb as poster source
+
+- Status: `accepted`
+- Date: `2026-06-10`
+- Deciders:
+  - project owner
+  - coding agent
+- Related:
+  - Tasklist items: V1-039
+
+### Context
+Исходный проект использовал TMDb API для поиска постеров и Kinopoisk
+для внешних ссылок. TMDb API — бесплатный, но требует регистрации
+и имеет лимиты. Kinopoisk API нестабилен и часто меняет условия.
+
+### Decision
+Заменить TMDb и Kinopoisk на **OMDB** как единственный источник
+постеров. OMDB предоставляет:
+- поиск по названию + году (`?t=...&y=...`),
+- fuzzy fallback через `?s=...`
+- достаточное покрытие для домашней библиотеки.
+
+`TMDB_API_KEY` → `OMDB_API_KEY` в настройках. `Film.kinopoisk_url`
+удалён из модели. Весь старый TMDb-код удалён.
+
+### Options considered
+1. **OMDB** (выбрано)
+   - Pros: простой API, бесплатный ключ, достаточное покрытие
+   - Cons: нет трейлеров, нет актёров/описания (только постеры)
+2. **Оставить TMDb**
+   - Pros: богаче данные (actors, description)
+   - Cons: Kinopoisk ссылки не работают, два API вместо одного
+
+### Consequences
+- Positive: один провайдер, проще код, меньше ключей
+- Negative: только постеры, без дополнительных метаданных
+- Follow-up: метаданные (жанры, описание) остаются на уровне filename parse
+
+---
+
+## ADR-017: Scan-only import (no copy/move)
+
+- Status: `accepted`
+- Date: `2026-06-10`
+- Deciders:
+  - project owner
+  - coding agent
+- Related:
+  - Tasklist items: V1-029
+
+### Context
+Исходный импорт предполагал копирование/перемещение файлов из
+`downloads_root` в `library_root`. На практике пользователь хранит
+файлы сразу в финальной папке. Копирование — лишняя операция,
+которая занимает место и время.
+
+### Decision
+Импорт **только индексирует** файлы в `LIBRARY_ROOT`. Файлы не
+копируются и не перемещаются. `downloads_root` и layout-шаг удалены.
+`LIBRARY_ROOT` — единственная директория, с которой работает импорт.
+
+### Options considered
+1. **Scan-only** (выбрано)
+   - Pros: быстро, идемпотентно, не занимает место
+   - Cons: нет сортировки по папкам
+2. Copy/move из downloads
+   - Pros: чистая библиотека с сортировкой
+   - Cons: медленно, требует места, сложнее идемпотентность
+3. Optional layout
+   - Pros: гибкость
+   - Cons: сложнее код, редко используется
+
+### Consequences
+- Positive: простой и быстрый импорт
+- Negative: организация папок остаётся на пользователе
+- Follow-up: можно добавить опциональный layout позже
+
+---
+
+## ADR-018: Caddy reverse proxy + public health endpoint
+
+- Status: `accepted`
+- Date: `2026-06-10`
+- Deciders:
+  - project owner
+  - coding agent
+- Related:
+  - Tasklist items: V2-013, V2-021, V2-022, V2-023
+
+### Context
+Проект вырос из одного API-сервиса в стек: API, worker, frontend.
+Пользователь открывает браузер и ожидает единую точку входа.
+Нужен reverse proxy и health check для мониторинга.
+
+### Decision
+- **Caddy 2** как reverse proxy (замена nginx, который был на старте)
+- Caddy обслуживает frontend (SPA) и проксирует `/api/` → FastAPI
+- Публичный `GET /health` проверяет БД и внешние сервисы,
+  не требует аутентификации
+- Frontend показывает offline-баннер при недоступности API
+
+### Options considered
+1. **Caddy** (выбрано)
+   - Pros: автоматические HTTPS, простой Caddyfile, встроенная
+     поддержка SPA (try_files)
+   - Cons: ещё один компонент в стеке
+2. **Nginx** (был изначально)
+   - Pros: привычный, зрелый
+   - Cons: нет авто-HTTPS, сложнее настройка SPA fallback
+
+### Consequences
+- Positive: единый порт для пользователя, автоматический HTTPS
+- Negative: дополнительный контейнер
+- Follow-up: для home-сети достаточно HTTP (Caddy настроен на порт 80)
 
 ---
 
