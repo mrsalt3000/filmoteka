@@ -1059,6 +1059,29 @@ class TestListFilms:
         titles = [i["title"] for i in resp.json()["items"]]
         assert "Private Clip" not in titles
 
+    def test_catalog_works_without_omdb_key(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Catalog listing and detail work without OMDB_API_KEY."""
+        from filmoteka.infrastructure.settings import settings
+        from unittest.mock import patch
+
+        with patch.object(settings, "omdb_api_key", None):
+            f = Film(title="Offline Film", year=2020)
+            db_session.add(f)
+            db_session.commit()
+
+            # List works
+            resp = client.get("/films")
+            assert resp.status_code == 200
+            titles = [i["title"] for i in resp.json()["items"]]
+            assert "Offline Film" in titles
+
+            # Detail works
+            resp = client.get(f"/films/{f.id}")
+            assert resp.status_code == 200
+            assert resp.json()["title"] == "Offline Film"
+
     def test_search_by_description(
         self, client: TestClient, db_session: Session
     ) -> None:

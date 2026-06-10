@@ -790,11 +790,36 @@ async function renderAdmin(el) {
         <p>Films with potential duplicates (needs review).</p>
         <div id="conflicts-list"><div class="spinner">Loading…</div></div>
       </div>
+
+      <div class="poster-section">
+        <h3>📡 External Services</h3>
+        <p>Connectivity status of external providers.</p>
+        <div id="ext-status"><div class="spinner">Checking…</div></div>
+      </div>
     </div>`;
   loadJobs();
   loadWatchStats();
   loadUserSummary();
   loadConflicts();
+  loadExtStatus();
+}
+
+async function loadExtStatus() {
+  const el = document.getElementById('ext-status');
+  if (!el) return;
+  try {
+    const h = await api('/health');
+    const dbIcon = h.database.status === 'ok' ? '✅' : '❌';
+    const extIcon = h.external.status === 'ok' ? '✅' : h.external.status === 'degraded' ? '⚠️' : '❌';
+    el.innerHTML = `
+      <table class="jobs-table">
+        <tr><td>Database</td><td>${dbIcon} ${h.database.status}</td></tr>
+        <tr><td>OMDB API</td><td>${extIcon} ${h.external.status}</td></tr>
+      </table>
+      <p style="margin-top:.5rem;font-size:.8rem;color:var(--text2)">Version: ${h.version}</p>`;
+  } catch {
+    el.innerHTML = '<div class="error">Could not reach health endpoint.</div>';
+  }
 }
 
 async function loadConflicts() {
