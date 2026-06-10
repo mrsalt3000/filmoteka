@@ -84,3 +84,14 @@ class AdminWatchStatItem(BaseModel):
 class AdminWatchStatsResponse(BaseModel):
     items: list[AdminWatchStatItem]
     total: int
+
+
+class AdminWatchStatsSummaryItem(BaseModel):
+    user_id: int
+    username: str
+    films_started: int
+
+
+class AdminWatchStatsSummaryResponse(BaseModel):
+    items: list[AdminWatchStatsSummaryItem]
+    total: int

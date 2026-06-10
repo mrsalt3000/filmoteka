@@ -10,6 +10,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import false as sa_false
+from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -31,7 +32,12 @@ from filmoteka.api.schemas.catalog import (
     PersonOut,
 )
 from filmoteka.api.schemas.jobs import JobListResponse, JobStatusResponse
-from filmoteka.api.schemas.watch import AdminWatchStatItem, AdminWatchStatsResponse
+from filmoteka.api.schemas.watch import (
+    AdminWatchStatItem,
+    AdminWatchStatsResponse,
+    AdminWatchStatsSummaryItem,
+    AdminWatchStatsSummaryResponse,
+)
 from filmoteka.domain.access.models import User
 from filmoteka.domain.access.service import hash_password
 from filmoteka.domain.catalog.models import (
@@ -182,6 +188,44 @@ def admin_clear_user_stats(
         WatchEvent.incognito == sa_false(),
     ).delete(synchronize_session=False)
     db.commit()
+
+
+@router.get("/watch-stats/summary", response_model=AdminWatchStatsSummaryResponse)
+def admin_watch_stats_summary(
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Return per-user summary: how many unique films each user has started.
+
+    Incognito events are excluded.
+    """
+    subq = (
+        db.query(
+            WatchEvent.user_id,
+            sa_func.count(WatchEvent.media_file_id.distinct()).label("films_started"),
+        )
+        .filter(WatchEvent.incognito == sa_false())
+        .group_by(WatchEvent.user_id)
+        .subquery()
+    )
+
+    summary = (
+        db.query(User.id, User.username, subq.c.films_started)
+        .outerjoin(subq, User.id == subq.c.user_id)
+        .order_by(sa_func.coalesce(subq.c.films_started, 0).desc())
+        .all()
+    )
+
+    items = [
+        AdminWatchStatsSummaryItem(
+            user_id=r[0],
+            username=r[1],
+            films_started=r[2] or 0,
+        )
+        for r in summary
+    ]
+
+    return {"items": items, "total": len(items)}
 
 
 @router.post("/users", response_model=UserOut, status_code=201)

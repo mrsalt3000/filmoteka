@@ -727,9 +727,35 @@ async function renderAdmin(el) {
         <p>All users' watch events (incognito excluded).</p>
         <div id="watch-stats-list"><div class="spinner">Loading…</div></div>
       </div>
+
+      <div class="poster-section">
+        <h3>User Summary</h3>
+        <p>Total unique films started per user (incognito excluded).</p>
+        <div id="user-summary-list"><div class="spinner">Loading…</div></div>
+      </div>
     </div>`;
   loadJobs();
   loadWatchStats();
+  loadUserSummary();
+}
+
+async function loadUserSummary() {
+  const el = document.getElementById('user-summary-list');
+  if (!el) return;
+  try {
+    const data = await apiAuth('/admin/watch-stats/summary');
+    if (data.items.length === 0) {
+      el.innerHTML = '<p style="color:var(--text2)">No data yet.</p>';
+      return;
+    }
+    el.innerHTML = `<table class="jobs-table">
+      <thead><tr><th>User</th><th>Films Started</th></tr></thead>
+      <tbody>${data.items.map(s => `
+        <tr><td>${esc(s.username)}</td><td>${s.films_started}</td></tr>`).join('')}</tbody>
+    </table>`;
+  } catch (e) {
+    el.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
 }
 
 async function loadWatchStats() {

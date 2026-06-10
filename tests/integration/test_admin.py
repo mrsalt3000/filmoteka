@@ -980,3 +980,21 @@ class TestAdminWatchStats:
     ) -> None:
         resp = client.delete("/admin/watch-stats/1")
         assert resp.status_code == 401
+
+    def test_summary(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """GET /admin/watch-stats/summary returns per-user counts."""
+        token = _create_admin_token(client, db_session, "ws_summary")
+
+        resp = client.get(
+            "/admin/watch-stats/summary",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "items" in body
+        assert "total" in body
+        # admin has no watch events, but should appear with 0
+        users = [i["username"] for i in body["items"]]
+        assert "ws_summary" in users
