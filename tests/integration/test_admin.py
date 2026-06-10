@@ -1212,3 +1212,38 @@ class TestOfflineMode:
         assert resp.status_code == 202
         assert resp.json()["status"] == "error"
         assert "OMDB_API_KEY" in str(resp.json().get("error", ""))
+
+
+# ── Backup ────────────────────────────────────────────────────────
+
+
+class TestBackup:
+    """POST /admin/backup — database backup."""
+
+    def test_backup_requires_auth(self, client: TestClient) -> None:
+        resp = client.post("/admin/backup")
+        assert resp.status_code == 401
+
+    def test_backup_regular_user_gets_403(
+        self, client: TestClient
+    ) -> None:
+        token = _create_user(client, "bkp_user", "pass")
+        resp = client.post(
+            "/admin/backup",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403
+
+    def test_backup_starts_job(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """POST /admin/backup returns 202 with job_id."""
+        token = _create_admin_token(client, db_session, "bkp_start")
+        resp = client.post(
+            "/admin/backup",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 202
+        body = resp.json()
+        assert body["status"] == "pending"
+        assert "job_id" in body

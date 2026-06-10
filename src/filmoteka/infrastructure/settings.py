@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # LLM for mood-based suggestions (e.g. http://localhost:11434 for Ollama)
     llm_api_url: str | None = None
 
+    # Backup
+    backup_dir: str = "/backups"
+
     version: str = "0.1.0"
 
 

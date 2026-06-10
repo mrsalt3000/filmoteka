@@ -310,6 +310,75 @@ def admin_download_suggestions(
     return {"items": suggestions[:30], "total": len(suggestions[:30])}
 
 
+# ---------------------------------------------------------------------------
+# Backup
+# ---------------------------------------------------------------------------
+
+
+@router.post("/backup", status_code=202)
+def admin_create_backup(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Create a PostgreSQL backup via ``pg_dump``.
+
+    Runs in a background job. Poll ``GET /admin/jobs/{job_id}``
+    for completion.  The backup file path is returned in ``result``.
+    """
+    job = run_background_job(
+        "backup", _run_backup,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "backup"}
+
+
+def _run_backup() -> dict | None:
+    """Run pg_dump and save to backup_dir."""
+    import os
+    import subprocess
+    from datetime import datetime
+
+    backup_dir = Path(settings.backup_dir)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"filmoteka_{timestamp}.sql"
+    filepath = backup_dir / filename
+
+    # Parse database_url for pg_dump connection
+    url = settings.database_url
+    # postgresql://user:password@host:port/dbname
+    parts = url.replace("postgresql://", "").split("@")
+    user_pass = parts[0].split(":")
+    host_db = parts[1].split("/")
+    host_port = host_db[0].split(":")
+
+    env = os.environ.copy()
+    env["PGPASSWORD"] = user_pass[1]
+
+    result = subprocess.run(
+        [
+            "pg_dump",
+            "-h", host_port[0],
+            "-p", host_port[1] if len(host_port) > 1 else "5432",
+            "-U", user_pass[0],
+            "-d", host_db[1],
+            "-f", str(filepath),
+            "--no-owner",
+            "--no-acl",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"pg_dump failed: {result.stderr}")
+
+    file_size = filepath.stat().st_size
+    return {"file": str(filepath), "size_bytes": file_size, "rows": filename}
+
+
 @router.post("/users", response_model=UserOut, status_code=201)
 def admin_create_user(
     body: AdminCreateUserRequest,

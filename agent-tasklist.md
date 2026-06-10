@@ -887,7 +887,7 @@
 
 ## 4.4. Backup and restore
 
-- [ ] **V2-017** Реализовать backup PostgreSQL.
+- [x] **V2-017** Реализовать backup PostgreSQL.
   
   Проверка результата:
   1. Создаётся валидный backup-файл.
