@@ -73,6 +73,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      api:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql+psycopg://filmoteka:filmoteka@db:5432/filmoteka
       REDIS_URL: redis://redis:6379/0
@@ -89,9 +91,6 @@ services:
     volumes:
       - ./specs:/app/specs:ro
       - ${LIBRARY_ROOT:-./media/library}:/media/library
-    depends_on:
-      api:
-        condition: service_started
 
   caddy:
     image: caddy:2-alpine
