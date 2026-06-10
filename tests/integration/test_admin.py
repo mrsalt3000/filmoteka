@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -179,6 +178,26 @@ class TestAdminImportScan:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
+
+    def test_list_jobs(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """GET /admin/jobs returns a paginated list of jobs."""
+        token = _create_admin_token(client, db_session, "admin_listjobs")
+
+        from filmoteka.domain.tasks.models import BackgroundJob
+        for i in range(3):
+            db_session.add(BackgroundJob(type=f"test_{i}", status="completed"))
+        db_session.commit()
+
+        resp = client.get(
+            "/admin/jobs",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] >= 3
+        assert len(body["items"]) >= 3
 
     def test_regular_user_gets_403(
         self, client: TestClient
@@ -442,7 +461,7 @@ class TestAdminPosters:
         self, client: TestClient, db_session: Session
     ) -> None:
         """Fill missing only updates films without poster_url."""
-        token = _create_admin_token(client, db_session, "admin_fill")
+        _create_admin_token(client, db_session, "admin_fill")
 
         # Create two films: one with poster, one without
         film_with = Film(
@@ -478,7 +497,7 @@ class TestAdminPosters:
         self, client: TestClient, db_session: Session
     ) -> None:
         """Refresh all updates all films regardless of existing poster."""
-        token = _create_admin_token(client, db_session, "admin_refr")
+        _create_admin_token(client, db_session, "admin_refr")
 
         film_a = Film(
             title="Film A", year=2020,
@@ -670,7 +689,7 @@ class TestAdminMediaReindex:
     ) -> None:
         """MediaFile with a non-existent path gets fixed when the file
         exists under the library root."""
-        token = _create_admin_token(client, db_session, "admin_reindex1")
+        _create_admin_token(client, db_session, "admin_reindex1")
 
         test_session = sessionmaker(bind=create_engine(TEST_DATABASE_URL))
 
@@ -724,7 +743,7 @@ class TestAdminMediaReindex:
         self, client: TestClient, db_session: Session, tmp_path: Path
     ) -> None:
         """MediaFile with a valid path is skipped (not counted as fixed)."""
-        token = _create_admin_token(client, db_session, "admin_reindex2")
+        _create_admin_token(client, db_session, "admin_reindex2")
 
         try:
             video = tmp_path / "valid.mp4"
@@ -743,7 +762,6 @@ class TestAdminMediaReindex:
             )
             db_session.add(media)
             db_session.commit()
-            media_id = media.id
 
             config = LibraryConfig.model_validate({
                 "paths": {

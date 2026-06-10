@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -29,7 +29,7 @@ from filmoteka.api.schemas.catalog import (
     MediaFileOut,
     PersonOut,
 )
-from filmoteka.api.schemas.jobs import JobStatusResponse
+from filmoteka.api.schemas.jobs import JobListResponse, JobStatusResponse
 from filmoteka.domain.access.models import User
 from filmoteka.domain.access.service import hash_password
 from filmoteka.domain.catalog.models import (
@@ -82,6 +82,25 @@ def get_job_status(
             detail="Job not found",
         )
     return job
+
+
+@router.get("/jobs", response_model=JobListResponse)
+def list_jobs(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Return a paginated list of recent background jobs."""
+    total = db.query(BackgroundJob).count()
+    jobs = (
+        db.query(BackgroundJob)
+        .order_by(BackgroundJob.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return {"items": jobs, "total": total}
 
 
 @router.post("/users", response_model=UserOut, status_code=201)

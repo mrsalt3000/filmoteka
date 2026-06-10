@@ -16,3 +16,8 @@ class JobStatusResponse(BaseModel):
     completed_at: datetime | None = None
     error: str | None = None
     result: dict | None = None
+
+
+class JobListResponse(BaseModel):
+    items: list[JobStatusResponse]
+    total: int

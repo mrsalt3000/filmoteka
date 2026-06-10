@@ -13,6 +13,7 @@ JOB_PENDING = "pending"
 JOB_RUNNING = "running"
 JOB_COMPLETED = "completed"
 JOB_FAILED = "failed"
+JOB_RETRY = "retry"
 
 
 class BackgroundJob(Base):
