@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from filmoteka.infrastructure.database import Base
@@ -22,6 +23,9 @@ class User(Base):
         String(16), nullable=False, default="user"
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    incognito: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false(), nullable=False
+    )
     age_group: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 

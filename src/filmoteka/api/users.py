@@ -6,9 +6,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Session, joinedload
 
 from filmoteka.api.auth import _get_current_user
+from filmoteka.api.schemas.auth import UserOut
 from filmoteka.api.schemas.watch import WatchHistoryItem, WatchHistoryResponse
 from filmoteka.domain.access.models import User, UserFilmBlacklist
 from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
@@ -20,6 +22,10 @@ router = APIRouter(prefix="/me", tags=["users"])
 
 class BlacklistResponse(BaseModel):
     film_ids: list[int]
+
+
+class IncognitoRequest(BaseModel):
+    incognito: bool
 
 
 @router.get("/blacklist", response_model=BlacklistResponse)
@@ -87,6 +93,19 @@ def remove_from_blacklist(
     db.commit()
 
 
+@router.put("/incognito")
+def set_incognito(
+    body: IncognitoRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> UserOut:
+    """Enable or disable incognito mode for the current user."""
+    current_user.incognito = body.incognito
+    db.commit()
+    db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
 @router.get("/watch/history", response_model=WatchHistoryResponse)
 def watch_history(
     skip: int = Query(0, ge=0),
@@ -102,7 +121,10 @@ def watch_history(
             .joinedload(MediaFile.edition)
             .joinedload(MovieEdition.film)
         )
-        .filter(WatchEvent.user_id == current_user.id)
+        .filter(
+            WatchEvent.user_id == current_user.id,
+            WatchEvent.incognito == sa_false(),
+        )
     )
 
     total = query.count()

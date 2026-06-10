@@ -356,3 +356,99 @@ class TestBlacklist:
         resp = client.get("/films", headers=self._auth(t_b))
         titles = [i["title"] for i in resp.json()["items"]]
         assert "Shared Film" in titles
+
+
+# ── Incognito mode ───────────────────────────────────────────────
+
+
+def _make_incognito_media(db_session: Session) -> MediaFile:
+    f = Film(title="Incognito Test Film", year=2020)
+    db_session.add(f)
+    db_session.flush()
+    ed = MovieEdition(film_id=f.id)
+    db_session.add(ed)
+    db_session.flush()
+    m = MediaFile(edition_id=ed.id, file_path="/tmp/incognito_test.mp4", duration_secs=120)
+    db_session.add(m)
+    db_session.commit()
+    return m
+
+
+class TestIncognito:
+    """Incognito mode — PUT /me/incognito and effect on history."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_set_incognito_on(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "inc_on")
+        resp = client.put(
+            "/me/incognito",
+            headers=self._auth(token),
+            json={"incognito": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["incognito"] is True
+
+    def test_set_incognito_off(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "inc_off")
+        client.put(
+            "/me/incognito",
+            headers=self._auth(token),
+            json={"incognito": True},
+        )
+        resp = client.put(
+            "/me/incognito",
+            headers=self._auth(token),
+            json={"incognito": False},
+        )
+        assert resp.json()["incognito"] is False
+
+    def test_incognito_watch_not_in_history(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Watch event created in incognito mode does not appear in history."""
+        token = _register(client, "inc_hist")
+        media = _make_incognito_media(db_session)
+
+        # Enable incognito
+        client.put(
+            "/me/incognito",
+            headers=self._auth(token),
+            json={"incognito": True},
+        )
+
+        # Start watching
+        client.post(
+            f"/media/{media.id}/watch/start",
+            headers=self._auth(token),
+        )
+
+        # History should be empty
+        resp = client.get(
+            "/me/watch/history",
+            headers=self._auth(token),
+        )
+        assert resp.json()["total"] == 0
+
+    def test_non_incognito_watch_in_history(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Watch event created without incognito appears in history."""
+        token = _register(client, "inc_nohist")
+        media = _make_incognito_media(db_session)
+
+        client.post(
+            f"/media/{media.id}/watch/start",
+            headers=self._auth(token),
+        )
+
+        resp = client.get(
+            "/me/watch/history",
+            headers=self._auth(token),
+        )
+        assert resp.json()["total"] == 1

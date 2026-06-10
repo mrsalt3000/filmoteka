@@ -4,6 +4,26 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-016 — 2026-06-10
+
+- Status: `done`
+- Summary: Реализовал incognito mode. `User.incognito` (bool, default False) + `WatchEvent.incognito` (bool) — миграция. `PUT /me/incognito` для включения/выключения. Watch-события, созданные в incognito, помечаются флагом и не показываются в истории (`GET /me/watch/history`), watch/state, states-by-film. 4 новых integration теста.
+- Changed files:
+  - `src/filmoteka/domain/access/models.py` (+ incognito column, server_default)
+  - `src/filmoteka/domain/watching/models.py` (+ incognito column, server_default)
+  - `migrations/versions/5342f2fca41e_add_incognito_columns_to_users_and_.py` (new)
+  - `src/filmoteka/api/schemas/auth.py` (+ incognito в UserOut)
+  - `src/filmoteka/api/users.py` (+ PUT /me/incognito; +UserOut импорт; incognito filter в history)
+  - `src/filmoteka/api/media.py` (+ sa_false import; incognito на create event; incognito filter в states-by-film)
+  - `tests/integration/test_users.py` (+ TestIncognito — 4 теста)
+  - `agent-tasklist.md` (V1-016 marked [x])
+- Checks:
+  - ruff check: `yes` (pre-existing warning only)
+  - mypy: `yes` (57 source files, clean)
+  - pytest integration test_users.py + test_media.py: `yes` (53/53, +4 new)
+- Next task:
+  - V1-017 — Implement clear watch history
+
 ## Task Report: V1-015 — 2026-06-10
 
 - Status: `done`

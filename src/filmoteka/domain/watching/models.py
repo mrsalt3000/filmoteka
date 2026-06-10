@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Float, ForeignKey, Integer
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from filmoteka.infrastructure.database import Base
@@ -28,6 +29,9 @@ class WatchEvent(Base):
     started_at: Mapped[datetime] = mapped_column(default=datetime.now)
     last_position: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     finished: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    incognito: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sa_false()
+    )
 
     media_file: Mapped[MediaFile] = relationship()
     user: Mapped[User] = relationship()

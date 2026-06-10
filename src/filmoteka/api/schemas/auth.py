@@ -30,6 +30,7 @@ class UserOut(BaseModel):
     username: str
     role: str
     is_active: bool
+    incognito: bool = False
     age_group: str | None = None
     created_at: datetime
 

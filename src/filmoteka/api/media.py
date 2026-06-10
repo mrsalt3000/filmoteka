@@ -13,6 +13,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Session, joinedload
 
 from filmoteka.api.auth import _get_current_user
@@ -290,6 +291,7 @@ def watch_states_by_film(
             WatchEvent.media_file_id.in_(list(media_to_film.keys())),
             WatchEvent.user_id == current_user.id,
             WatchEvent.finished == False,  # noqa: E712
+            WatchEvent.incognito == sa_false(),
         )
         .all()
     )
@@ -395,7 +397,11 @@ def start_watch(
             finished=existing.finished,
         )
 
-    event = WatchEvent(media_file_id=media_id, user_id=current_user.id)
+    event = WatchEvent(
+        media_file_id=media_id,
+        user_id=current_user.id,
+        incognito=current_user.incognito,
+    )
     db.add(event)
     db.commit()
     db.refresh(event)
