@@ -34,6 +34,9 @@ class User(Base):
     exclude_watched: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=sa_false(), nullable=False
     )
+    include_external: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false(), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
     def __repr__(self) -> str:

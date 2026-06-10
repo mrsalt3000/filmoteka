@@ -158,6 +158,7 @@ nav input::placeholder { color: var(--text2); }
   <a class="nav-link" id="admin-link" href="#admin" onclick="navigate('admin')" style="display:none">Admin</a>
   <span class="nav-link" id="family-toggle" style="display:none" onclick="toggleFamilyRecs()" title="Toggle family video in recommendations"></span>
   <span class="nav-link" id="watched-toggle" style="display:none" onclick="toggleExcludeWatched()" title="Toggle exclude watched"></span>
+  <span class="nav-link" id="external-toggle" style="display:none" onclick="toggleIncludeExternal()" title="Toggle external suggestions"></span>
   <span class="nav-link" id="mystats-link" style="display:none" onclick="toggleMyStats()">📊 My Stats</span>
   <span class="nav-link" id="login-btn" onclick="showLogin()">Log in</span>
   <span class="nav-link" id="user-label" style="display:none"></span>
@@ -227,6 +228,12 @@ async function toggleExcludeWatched() {
   renderNav();
 }
 
+async function toggleIncludeExternal() {
+  const newVal = !currentUser.include_external;
+  currentUser = await apiAuth('/me/include-external', 'PUT', { include: newVal });
+  renderNav();
+}
+
 async function toggleMyStats() {
   const panel = document.getElementById('mystats-panel');
   const content = document.getElementById('mystats-content');
@@ -261,6 +268,7 @@ function renderNav() {
   const familyToggle = document.getElementById('family-toggle');
   const myStatsLink = document.getElementById('mystats-link');
   const watchedToggle = document.getElementById('watched-toggle');
+  const externalToggle = document.getElementById('external-toggle');
 
   if (currentUser) {
     loginBtn.style.display = 'none';
@@ -277,6 +285,10 @@ function renderNav() {
     watchedToggle.textContent = currentUser.exclude_watched
       ? '👁 Watched: OFF'
       : '👁 Watched: ON';
+    externalToggle.style.display = 'inline';
+    externalToggle.textContent = currentUser.include_external
+      ? '🌐 External: ON'
+      : '🌐 External: OFF';
   } else {
     loginBtn.style.display = 'inline';
     userLabel.style.display = 'none';
@@ -285,6 +297,7 @@ function renderNav() {
     familyToggle.style.display = 'none';
     myStatsLink.style.display = 'none';
     watchedToggle.style.display = 'none';
+    externalToggle.style.display = 'none';
     document.getElementById('mystats-panel').style.display = 'none';
   }
 }

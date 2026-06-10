@@ -21,6 +21,7 @@ from filmoteka.api.schemas.watch import (
 from filmoteka.domain.access.models import User, UserFilmBlacklist
 from filmoteka.domain.catalog.models import (
     Film,
+    Genre,
     MediaFile,
     MovieEdition,
     film_genre,
@@ -28,6 +29,7 @@ from filmoteka.domain.catalog.models import (
 )
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
+from filmoteka.infrastructure.settings import settings
 
 router = APIRouter(prefix="/me", tags=["users"])
 
@@ -46,6 +48,10 @@ class ExcludeFamilyRequest(BaseModel):
 
 class ExcludeWatchedRequest(BaseModel):
     exclude: bool
+
+
+class IncludeExternalRequest(BaseModel):
+    include: bool
 
 
 @router.get("/blacklist", response_model=BlacklistResponse)
@@ -147,6 +153,19 @@ def set_exclude_watched(
 ) -> UserOut:
     """Set whether already-watched films are excluded from the catalog."""
     current_user.exclude_watched = body.exclude
+    db.commit()
+    db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
+@router.put("/include-external")
+def set_include_external(
+    body: IncludeExternalRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> UserOut:
+    """Set whether external films (not in library) appear in recommendations."""
+    current_user.include_external = body.include
     db.commit()
     db.refresh(current_user)
     return UserOut.model_validate(current_user)
@@ -283,6 +302,53 @@ def get_recommendations(
         )
         for f, s, r in top
     ]
+
+    # 6. External suggestions via OMDB (if enabled)
+    if current_user.include_external and settings.omdb_api_key and watched_genre_ids:
+        try:
+            import json as _json
+            from urllib.parse import urlencode
+            from urllib.request import Request, urlopen
+
+            genre_names = (
+                db.query(Genre.name)
+                .filter(Genre.id.in_(watched_genre_ids))
+                .all()
+            )
+            existing_titles = {f.title.lower() for f, in db.query(Film.title).all()}
+            seen = {i.title.lower() for i in items}
+            external_items: list[RecommendationItem] = []
+
+            for (gname,) in genre_names[:2]:
+                params = {"apikey": settings.omdb_api_key, "s": gname, "type": "movie"}
+                url = f"http://www.omdbapi.com/?{urlencode(params)}"
+                req = Request(url, headers={"Accept": "application/json"})
+                resp = urlopen(req, timeout=10)
+                if resp.status != 200:
+                    continue
+                body: dict = _json.loads(resp.read().decode("utf-8"))
+                if body.get("Response") != "True":
+                    continue
+                for r in body.get("Search", []):
+                    t = r.get("Title", "")
+                    tl = t.lower()
+                    if tl in existing_titles or tl in seen:
+                        continue
+                    seen.add(tl)
+                    external_items.append(RecommendationItem(
+                        film_id=0,
+                        title=t,
+                        year=r.get("Year", ""),
+                        poster=r.get("Poster") if r.get("Poster") != "N/A" else None,
+                        score=0.5,
+                        match_reason=f"external — {gname}",
+                    ))
+                    if len(external_items) >= 5:
+                        break
+
+            items.extend(external_items[:5])
+        except Exception:
+            pass
 
     return RecommendationsResponse(items=items, total=len(items))
 
