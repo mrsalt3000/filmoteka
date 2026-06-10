@@ -32,6 +32,7 @@ class UserOut(BaseModel):
     is_active: bool
     incognito: bool = False
     age_group: str | None = None
+    exclude_family_from_recommendations: bool = True
     created_at: datetime
 
     model_config = {"from_attributes": True}

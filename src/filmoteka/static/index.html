@@ -148,6 +148,7 @@ nav input::placeholder { color: var(--text2); }
   <h1><a href="#list" onclick="navigate('list')">🎬 Filmoteka</a></h1>
   <input id="search" type="text" placeholder="Search films…" oninput="onSearch(event)">
   <a class="nav-link" id="admin-link" href="#admin" onclick="navigate('admin')" style="display:none">Admin</a>
+  <span class="nav-link" id="family-toggle" style="display:none" onclick="toggleFamilyRecs()" title="Toggle family video in recommendations"></span>
   <span class="nav-link" id="login-btn" onclick="showLogin()">Log in</span>
   <span class="nav-link" id="user-label" style="display:none"></span>
   <span class="nav-link" id="logout-btn" style="display:none" onclick="handleLogout()">Log out</span>
@@ -197,11 +198,18 @@ async function loadUser() {
   renderNav();
 }
 
+async function toggleFamilyRecs() {
+  const newVal = !currentUser.exclude_family_from_recommendations;
+  currentUser = await apiAuth('/me/exclude-family', 'PUT', { exclude: newVal });
+  renderNav();
+}
+
 function renderNav() {
   const loginBtn = document.getElementById('login-btn');
   const userLabel = document.getElementById('user-label');
   const logoutBtn = document.getElementById('logout-btn');
   const adminLink = document.getElementById('admin-link');
+  const familyToggle = document.getElementById('family-toggle');
 
   if (currentUser) {
     loginBtn.style.display = 'none';
@@ -209,11 +217,16 @@ function renderNav() {
     userLabel.textContent = currentUser.username;
     logoutBtn.style.display = 'inline';
     adminLink.style.display = currentUser.role === 'admin' ? 'inline' : 'none';
+    familyToggle.style.display = 'inline';
+    familyToggle.textContent = currentUser.exclude_family_from_recommendations
+      ? '👪 Recs: OFF'
+      : '👪 Recs: ON';
   } else {
     loginBtn.style.display = 'inline';
     userLabel.style.display = 'none';
     logoutBtn.style.display = 'none';
     adminLink.style.display = 'none';
+    familyToggle.style.display = 'none';
   }
 }
 

@@ -542,3 +542,54 @@ class TestClearHistory:
             headers=self._auth(token),
         )
         assert resp.status_code == 204  # idempotent
+
+
+# ── Exclude family from recommendations ─────────────────────────
+
+
+class TestExcludeFamily:
+    """PUT /me/exclude-family — toggle flag."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_default_is_true(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "ef_default")
+        resp = client.get("/auth/me", headers=self._auth(token))
+        assert resp.json()["exclude_family_from_recommendations"] is True
+
+    def test_set_false(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "ef_false")
+        resp = client.put(
+            "/me/exclude-family",
+            headers=self._auth(token),
+            json={"exclude": False},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["exclude_family_from_recommendations"] is False
+
+    def test_set_true(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "ef_true")
+        client.put(
+            "/me/exclude-family",
+            headers=self._auth(token),
+            json={"exclude": False},
+        )
+        resp = client.put(
+            "/me/exclude-family",
+            headers=self._auth(token),
+            json={"exclude": True},
+        )
+        assert resp.json()["exclude_family_from_recommendations"] is True
+
+    def test_requires_auth(
+        self, client: TestClient
+    ) -> None:
+        resp = client.put("/me/exclude-family", json={"exclude": True})
+        assert resp.status_code == 401

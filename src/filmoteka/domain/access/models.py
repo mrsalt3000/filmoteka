@@ -6,6 +6,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, ForeignKey, Integer, String
 from sqlalchemy import false as sa_false
+from sqlalchemy import true as sa_true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from filmoteka.infrastructure.database import Base
@@ -27,6 +28,9 @@ class User(Base):
         Boolean, default=False, server_default=sa_false(), nullable=False
     )
     age_group: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    exclude_family_from_recommendations: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=sa_true(), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
     def __repr__(self) -> str:

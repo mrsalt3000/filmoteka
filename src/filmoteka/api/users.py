@@ -28,6 +28,10 @@ class IncognitoRequest(BaseModel):
     incognito: bool
 
 
+class ExcludeFamilyRequest(BaseModel):
+    exclude: bool
+
+
 @router.get("/blacklist", response_model=BlacklistResponse)
 def list_blacklist(
     db: Session = Depends(get_db),
@@ -101,6 +105,19 @@ def set_incognito(
 ) -> UserOut:
     """Enable or disable incognito mode for the current user."""
     current_user.incognito = body.incognito
+    db.commit()
+    db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
+@router.put("/exclude-family")
+def set_exclude_family(
+    body: ExcludeFamilyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> UserOut:
+    """Set whether family videos are excluded from recommendations."""
+    current_user.exclude_family_from_recommendations = body.exclude
     db.commit()
     db.refresh(current_user)
     return UserOut.model_validate(current_user)
