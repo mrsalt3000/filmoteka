@@ -77,6 +77,17 @@ class MoodQueryRequest(BaseModel):
     query: str
 
 
+class ComponentStatus(BaseModel):
+    status: str  # ok | degraded | unavailable
+
+
+class HealthResponse(BaseModel):
+    status: str
+    database: ComponentStatus
+    external: ComponentStatus
+    version: str = "2.0.0"
+
+
 class AdminWatchStatItem(BaseModel):
     user_id: int
     username: str

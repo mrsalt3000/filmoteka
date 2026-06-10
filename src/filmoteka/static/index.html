@@ -152,6 +152,7 @@ nav input::placeholder { color: var(--text2); }
 </style>
 </head>
 <body>
+<div id="offline-banner" style="display:none;background:#c33;color:#fff;text-align:center;padding:.5rem;font-size:.85rem">⚠️ Cannot reach server — some features unavailable</div>
 <nav id="navbar">
   <h1><a href="#list" onclick="navigate('list')">🎬 Filmoteka</a></h1>
   <input id="search" type="text" placeholder="Search films…" oninput="onSearch(event)">
@@ -386,7 +387,11 @@ function currentRoute() {
 // ── Data fetching ───────────────────────────────────────────────────
 async function api(path) {
   const resp = await fetch(path);
-  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+  if (!resp.ok) {
+    document.getElementById('offline-banner').style.display = 'block';
+    throw new Error(`${resp.status} ${resp.statusText}`);
+  }
+  document.getElementById('offline-banner').style.display = 'none';
   return resp.json();
 }
 
@@ -395,7 +400,11 @@ async function apiAuth(path, method, body) {
   const opts = { method: method || 'GET', headers: { Authorization: `Bearer ${token}` } };
   if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
   const resp = await fetch(path, opts);
-  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+  if (!resp.ok) {
+    document.getElementById('offline-banner').style.display = 'block';
+    throw new Error(`${resp.status} ${resp.statusText}`);
+  }
+  document.getElementById('offline-banner').style.display = 'none';
   return resp.json();
 }
 
