@@ -44,6 +44,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
 markers = [
+    "e2e: marks end-to-end scenario tests that exercise complete user flows",
     "integration: marks tests that require a running PostgreSQL container",
 ]
 
