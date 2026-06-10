@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from filmoteka.app import create_app
+from filmoteka.domain.access.models import User
 from filmoteka.domain.catalog.models import (
     Film,
     Genre,
@@ -792,6 +793,153 @@ class TestRecommendations:
         )
         titles = [i["title"] for i in resp.json()["items"]]
         assert "Blacklisted Sci-Fi" not in titles
+
+    def test_excludes_family_video(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Family video not recommended when exclude_family is True (default)."""
+        token = _register(client, "rec_fam")
+
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        db_session.add(sci_fi)
+        db_session.flush()
+
+        watched = Film(title="Watched", year=2020, genres=[sci_fi])
+        family = Film(title="Family Fun", year=2021, genres=[sci_fi], is_family_video=True)
+        normal = Film(title="Normal Film", year=2022, genres=[sci_fi])
+        db_session.add_all([watched, family, normal])
+        db_session.flush()
+
+        ed = MovieEdition(film_id=watched.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/rec_fam.mkv")
+        db_session.add(m)
+        db_session.commit()
+
+        client.post(f"/media/{m.id}/watch/start", headers=self._auth(token))
+        event = db_session.query(WatchEvent).first()
+        event.finished = True
+        db_session.commit()
+
+        resp = client.get("/me/recommendations", headers=self._auth(token))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Normal Film" in titles
+        assert "Family Fun" not in titles
+
+    def test_excludes_already_watched(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """In-progress (not finished) watch also excluded."""
+        token = _register(client, "rec_aw")
+
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        db_session.add(sci_fi)
+        db_session.flush()
+
+        watched = Film(title="Watched Unfinished", year=2020, genres=[sci_fi])
+        other = Film(title="Other Film", year=2021, genres=[sci_fi])
+        db_session.add_all([watched, other])
+        db_session.flush()
+
+        ed = MovieEdition(film_id=watched.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/rec_aw.mkv")
+        db_session.add(m)
+        db_session.commit()
+
+        # Start but don't finish
+        client.post(f"/media/{m.id}/watch/start", headers=self._auth(token))
+
+        resp = client.get("/me/recommendations", headers=self._auth(token))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Watched Unfinished" not in titles
+        assert "Other Film" not in titles  # no finished film to score from
+
+    def test_respects_child_age_restrictions(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Child with age_group=7_12 does not get 18+ recommendations."""
+        admin_token = _register(client, "rec_child_admin")
+        db_session.query(User).filter(User.username == "rec_child_admin").update(
+            {"role": "admin"}
+        )
+        db_session.commit()
+
+        create = client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"username": "rec_child", "password": "pass",
+                  "role": "child", "age_group": "7_12"},
+        )
+        assert create.status_code == 201
+        child_token = client.post("/auth/login", json={
+            "username": "rec_child", "password": "pass",
+        }).json()["access_token"]
+
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        db_session.add(sci_fi)
+        db_session.flush()
+
+        safe = Film(title="Safe Sci-Fi", year=2020, genres=[sci_fi], age_rating="6+")
+        adult = Film(title="Adult Sci-Fi", year=2021, genres=[sci_fi], age_rating="18+")
+        db_session.add_all([safe, adult])
+
+        # Child needs to have watched something for recommendations
+        watched = Film(title="Watched Kid", year=2019, genres=[sci_fi])
+        db_session.add(watched)
+        db_session.flush()
+        ed = MovieEdition(film_id=watched.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/rec_kid.mkv")
+        db_session.add(m)
+        db_session.commit()
+        client.post(f"/media/{m.id}/watch/start", headers={"Authorization": f"Bearer {child_token}"})
+        event = db_session.query(WatchEvent).filter(
+            WatchEvent.media_file_id == m.id
+        ).first()
+        if event:
+            event.finished = True
+            db_session.commit()
+
+        resp = client.get("/me/recommendations", headers={"Authorization": f"Bearer {child_token}"})
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Safe Sci-Fi" in titles
+        assert "Adult Sci-Fi" not in titles
+
+    def test_incognito_not_counted(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Incognito watch events do not affect recommendations."""
+        token = _register(client, "rec_inc")
+
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        db_session.add(sci_fi)
+        db_session.flush()
+
+        watched = Film(title="Incognito Watch", year=2020, genres=[sci_fi])
+        candidate = Film(title="Candidate", year=2021, genres=[sci_fi])
+        db_session.add_all([watched, candidate])
+        db_session.flush()
+
+        ed = MovieEdition(film_id=watched.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/rec_inc.mkv")
+        db_session.add(m)
+        db_session.commit()
+
+        # Enable incognito, watch, disable incognito
+        client.put("/me/incognito", headers=self._auth(token), json={"incognito": True})
+        client.post(f"/media/{m.id}/watch/start", headers=self._auth(token))
+        client.put("/me/incognito", headers=self._auth(token), json={"incognito": False})
+
+        # No recommendations because incognito watch doesn't count
+        resp = client.get("/me/recommendations", headers=self._auth(token))
+        assert resp.json()["total"] == 0
 
 
 class TestRecommendByMood:
