@@ -57,3 +57,17 @@ class FilmWatchStatesRequest(BaseModel):
 
 class FilmWatchStatesResponse(BaseModel):
     states: dict[str, FilmWatchState]
+
+
+class RecommendationItem(BaseModel):
+    film_id: int
+    title: str
+    year: int | None = None
+    poster_url: str | None = None
+    score: float = 0.0
+    match_reason: str = ""
+
+
+class RecommendationsResponse(BaseModel):
+    items: list[RecommendationItem]
+    total: int

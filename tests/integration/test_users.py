@@ -9,7 +9,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from filmoteka.app import create_app
-from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
+from filmoteka.domain.catalog.models import (
+    Film,
+    Genre,
+    MediaFile,
+    MovieEdition,
+)
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
 
@@ -593,3 +598,113 @@ class TestExcludeFamily:
     ) -> None:
         resp = client.put("/me/exclude-family", json={"exclude": True})
         assert resp.status_code == 401
+
+
+# ── Recommendations ──────────────────────────────────────────────
+
+
+class TestRecommendations:
+    """GET /me/recommendations — personalized recommendations."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_requires_auth(self, client: TestClient) -> None:
+        resp = client.get("/me/recommendations")
+        assert resp.status_code == 401
+
+    def test_no_history_returns_empty(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "rec_empty")
+        resp = client.get(
+            "/me/recommendations",
+            headers=self._auth(token),
+        )
+        assert resp.json() == {"items": [], "total": 0}
+
+    def test_recommends_by_genre(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """After watching a Sci-Fi film, another Sci-Fi film is recommended."""
+        token = _register(client, "rec_genre")
+
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        drama = Genre(name="Drama", slug="drama")
+        db_session.add_all([sci_fi, drama])
+        db_session.flush()
+
+        watched = Film(title="Watched Sci-Fi", year=2020, genres=[sci_fi])
+        candidate = Film(title="Another Sci-Fi", year=2021, genres=[sci_fi])
+        unrelated = Film(title="A Drama", year=2022, genres=[drama])
+        db_session.add_all([watched, candidate, unrelated])
+        db_session.flush()
+
+        # Create a media file + watch event for the watched film
+        ed = MovieEdition(film_id=watched.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/rec_sci.mkv")
+        db_session.add(m)
+        db_session.commit()
+
+        # Mark as finished
+        client.post(
+            f"/media/{m.id}/watch/start",
+            headers=self._auth(token),
+        )
+        # Update directly to finished
+        event = db_session.query(WatchEvent).first()
+        assert event is not None
+        event.finished = True
+        db_session.commit()
+
+        resp = client.get(
+            "/me/recommendations",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Another Sci-Fi" in titles
+        assert "A Drama" not in titles  # different genre
+        assert "Watched Sci-Fi" not in titles  # already watched
+
+    def test_excludes_blacklisted(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Blacklisted film is not recommended even if genre matches."""
+        token = _register(client, "rec_bl")
+
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        db_session.add(sci_fi)
+        db_session.flush()
+
+        watched = Film(title="Watched", year=2020, genres=[sci_fi])
+        blacklisted = Film(title="Blacklisted Sci-Fi", year=2021, genres=[sci_fi])
+        db_session.add_all([watched, blacklisted])
+        db_session.flush()
+
+        ed = MovieEdition(film_id=watched.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/rec_bl.mkv")
+        db_session.add(m)
+        db_session.commit()
+
+        client.post(f"/media/{m.id}/watch/start", headers=self._auth(token))
+        event = db_session.query(WatchEvent).first()
+        event.finished = True
+        db_session.commit()
+
+        # Blacklist the candidate
+        client.post(
+            f"/me/blacklist/{blacklisted.id}",
+            headers=self._auth(token),
+        )
+
+        resp = client.get(
+            "/me/recommendations",
+            headers=self._auth(token),
+        )
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Blacklisted Sci-Fi" not in titles

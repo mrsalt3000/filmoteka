@@ -7,13 +7,25 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import false as sa_false
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from filmoteka.api.auth import _get_current_user
 from filmoteka.api.schemas.auth import UserOut
-from filmoteka.api.schemas.watch import WatchHistoryItem, WatchHistoryResponse
+from filmoteka.api.schemas.watch import (
+    RecommendationItem,
+    RecommendationsResponse,
+    WatchHistoryItem,
+    WatchHistoryResponse,
+)
 from filmoteka.domain.access.models import User, UserFilmBlacklist
-from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
+from filmoteka.domain.catalog.models import (
+    Film,
+    MediaFile,
+    MovieEdition,
+    film_genre,
+    film_person,
+)
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
 
@@ -121,6 +133,141 @@ def set_exclude_family(
     db.commit()
     db.refresh(current_user)
     return UserOut.model_validate(current_user)
+
+
+# ── Recommendations ─────────────────────────────────────────────
+
+
+@router.get("/recommendations", response_model=RecommendationsResponse)
+def get_recommendations(
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> RecommendationsResponse:
+    """Return personalized film recommendations based on watch history.
+
+    Scoring: for each finished film, collect its genre and person IDs,
+    then score unwatched films by shared genres/persons.
+    Results exclude already watched, blacklisted, age-restricted,
+    and (if enabled) family videos.
+    """
+    # 1. Find watched (finished) film IDs for this user
+    watched_film_ids = (
+        db.query(MovieEdition.film_id)
+        .join(MediaFile)
+        .join(WatchEvent)
+        .filter(
+            WatchEvent.user_id == current_user.id,
+            WatchEvent.finished == True,  # noqa: E712
+            WatchEvent.incognito == sa_false(),
+        )
+        .distinct()
+        .subquery()
+    )
+
+    # 2. Get genre and person IDs from watched films
+    watched_genre_rows = (
+        db.query(film_genre.c.genre_id)
+        .filter(film_genre.c.film_id.in_(watched_film_ids))
+        .distinct()
+        .all()
+    )
+    watched_genre_ids = {r[0] for r in watched_genre_rows}
+
+    watched_person_rows = (
+        db.query(film_person.c.person_id)
+        .filter(film_person.c.film_id.in_(watched_film_ids))
+        .distinct()
+        .all()
+    )
+    watched_person_ids = {r[0] for r in watched_person_rows}
+
+    if not watched_genre_ids and not watched_person_ids:
+        return RecommendationsResponse(items=[], total=0)
+
+    # 3. Build a query for candidate films
+    #    Exclude: watched, blacklisted, family (if setting), age-restricted
+    watched_all = (
+        db.query(MovieEdition.film_id)
+        .join(MediaFile)
+        .join(WatchEvent)
+        .filter(
+            WatchEvent.user_id == current_user.id,
+            WatchEvent.incognito == sa_false(),
+        )
+        .distinct()
+        .subquery()
+    )
+
+    blacklisted = (
+        db.query(UserFilmBlacklist.film_id)
+        .filter(UserFilmBlacklist.user_id == current_user.id)
+        .subquery()
+    )
+
+    candidates = (
+        db.query(Film)
+        .options(joinedload(Film.genres), joinedload(Film.persons))
+        .filter(Film.id.notin_(watched_all))
+        .filter(Film.id.notin_(blacklisted))
+    )
+
+    if current_user.exclude_family_from_recommendations:
+        candidates = candidates.filter(Film.is_family_video == False)  # noqa: E712
+
+    if current_user.role == "child" and current_user.age_group is not None:
+        from filmoteka.api.catalog import _AGE_GROUP_MAX, _AGE_RATING_VALUES
+        max_age = _AGE_GROUP_MAX.get(current_user.age_group)
+        if max_age is not None:
+            allowed = [r for r, v in _AGE_RATING_VALUES.items() if v <= max_age]
+            candidates = candidates.filter(
+                or_(Film.age_rating.is_(None), Film.age_rating.in_(allowed))
+            )
+
+    candidates = candidates.all()
+
+    # 4. Score candidates
+    scored: list[tuple[Film, float, str]] = []
+    for film in candidates:
+        score = 0.0
+        reasons: list[str] = []
+
+        # Count matching genres
+        film_genre_ids = {g.id for g in film.genres}
+        match_genres = film_genre_ids & watched_genre_ids
+        if match_genres:
+            genre_score = len(match_genres) * 2.0
+            score += genre_score
+            reasons.append(f"genres ({len(match_genres)})")
+
+        # Count matching persons
+        film_person_ids = {p.id for p in film.persons}
+        match_persons = film_person_ids & watched_person_ids
+        if match_persons:
+            person_score = len(match_persons) * 1.5
+            score += person_score
+            reasons.append(f"actors ({len(match_persons)})")
+
+        if score > 0:
+            scored.append((film, score, "; ".join(reasons)))
+
+    # 5. Sort by score descending, return top N
+    scored.sort(key=lambda x: -x[1])
+    top = scored[:limit]
+
+    items = [
+        RecommendationItem(
+            film_id=f.id,
+            title=f.title,
+            year=f.year,
+            poster_url=f.poster_url,
+            score=s,
+            match_reason=r,
+        )
+        for f, s, r in top
+    ]
+
+    return RecommendationsResponse(items=items, total=len(items))
 
 
 @router.delete("/watch/history", status_code=204)
