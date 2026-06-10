@@ -143,6 +143,18 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
         parsed.edition_type,
     )
 
+    # --- Conflict detection: edition already has media files ---
+    if edition.id is not None:
+        existing_count = db.query(MediaFile).filter(
+            MediaFile.edition_id == edition.id
+        ).count()
+        if existing_count > 0:
+            film.needs_review = True
+            _logger.warning(
+                "Potential duplicate for film %r — edition %d already has %d media file(s)",
+                film.title, edition.id, existing_count,
+            )
+
     # --- MediaFile ---
     existing_media = _find_media_by_path(db, candidate.file_path)
     if existing_media is not None:

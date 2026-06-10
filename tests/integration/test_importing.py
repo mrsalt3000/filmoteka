@@ -703,3 +703,26 @@ class TestPipelineBridge:
         # Only one MediaFile was created
         media_files = db_session.query(MediaFile).all()
         assert len(media_files) == 1
+
+    def test_second_file_same_film_flags_needs_review(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """Importing a second file for the same film sets needs_review."""
+        from filmoteka.domain.catalog.models import Film
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+
+        # Two files with same quality in different dirs — map to same edition → conflict
+        v1 = root / "A" / "The.Matrix.1999.1080p.mkv"
+        v2 = root / "B" / "The.Matrix.1999.1080p.mkv"
+        v1.parent.mkdir(parents=True)
+        v2.parent.mkdir(parents=True)
+        _make_test_video(v1)
+        _make_test_video(v2)
+        config = _make_config(root)
+
+        run_import(config, db_session)
+        films = db_session.query(Film).all()
+        assert len(films) == 1
+        assert films[0].needs_review is True
