@@ -157,11 +157,19 @@ nav input::placeholder { color: var(--text2); }
   <input id="search" type="text" placeholder="Search films…" oninput="onSearch(event)">
   <a class="nav-link" id="admin-link" href="#admin" onclick="navigate('admin')" style="display:none">Admin</a>
   <span class="nav-link" id="family-toggle" style="display:none" onclick="toggleFamilyRecs()" title="Toggle family video in recommendations"></span>
+  <span class="nav-link" id="mystats-link" style="display:none" onclick="toggleMyStats()">📊 My Stats</span>
   <span class="nav-link" id="login-btn" onclick="showLogin()">Log in</span>
   <span class="nav-link" id="user-label" style="display:none"></span>
   <span class="nav-link" id="logout-btn" style="display:none" onclick="handleLogout()">Log out</span>
   <button class="nav-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
 </nav>
+<div id="mystats-panel" style="display:none;padding:.75rem 2rem;background:var(--surface);border-bottom:1px solid var(--surface2);font-size:.85rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+    <strong>My Watch History</strong>
+    <span class="nav-link" onclick="toggleMyStats()">Hide ✕</span>
+  </div>
+  <div id="mystats-content"><div class="spinner">Loading…</div></div>
+</div>
 <div id="app" class="page"></div>
 
 <script>
@@ -212,12 +220,39 @@ async function toggleFamilyRecs() {
   renderNav();
 }
 
+async function toggleMyStats() {
+  const panel = document.getElementById('mystats-panel');
+  const content = document.getElementById('mystats-content');
+  if (panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  content.innerHTML = '<div class="spinner">Loading…</div>';
+  try {
+    const data = await apiAuth('/me/watch/history?limit=5');
+    if (data.total === 0) {
+      content.innerHTML = '<p style="color:var(--text2)">No watch history yet.</p>';
+      return;
+    }
+    let html = `<p style="margin-bottom:.5rem;color:var(--text2)">Total: ${data.total} entries</p><table class="jobs-table"><thead><tr><th>Film</th><th>When</th><th>Finished</th></tr></thead><tbody>`;
+    data.items.forEach(w => {
+      html += `<tr><td>${esc(w.film_title)}</td><td>${new Date(w.started_at).toLocaleString()}</td><td>${w.finished ? '✓' : '…'}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    content.innerHTML = html;
+  } catch (e) {
+    content.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+
 function renderNav() {
   const loginBtn = document.getElementById('login-btn');
   const userLabel = document.getElementById('user-label');
   const logoutBtn = document.getElementById('logout-btn');
   const adminLink = document.getElementById('admin-link');
   const familyToggle = document.getElementById('family-toggle');
+  const myStatsLink = document.getElementById('mystats-link');
 
   if (currentUser) {
     loginBtn.style.display = 'none';
@@ -229,12 +264,15 @@ function renderNav() {
     familyToggle.textContent = currentUser.exclude_family_from_recommendations
       ? '👪 Recs: OFF'
       : '👪 Recs: ON';
+    myStatsLink.style.display = 'inline';
   } else {
     loginBtn.style.display = 'inline';
     userLabel.style.display = 'none';
     logoutBtn.style.display = 'none';
     adminLink.style.display = 'none';
     familyToggle.style.display = 'none';
+    myStatsLink.style.display = 'none';
+    document.getElementById('mystats-panel').style.display = 'none';
   }
 }
 
