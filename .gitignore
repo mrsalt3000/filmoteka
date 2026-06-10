@@ -30,6 +30,9 @@ Thumbs.db
 # Docker
 .docker/
 
+# Coverage
+htmlcov/
+
 # Qwen
 .qwen/worktrees/
 .qwen/settings.json.orig

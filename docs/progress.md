@@ -4,6 +4,25 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-028 — 2026-06-10
+
+- Status: `done`
+- Summary: Добавил генерацию отчёта покрытия тестами. `pytest-cov>=6.0` в dev-зависимости. Секции `[tool.coverage.run]` (source=filmoteka, omit=migrations) и `[tool.coverage.report]` (show_missing, skip_covered) в pyproject.toml. Скрипт `scripts/run-coverage.sh` — запускает unit + integration тесты с `--cov=filmoteka --cov-report=html --cov-report=term-missing`, предварительно поднимает PostgreSQL через Docker. `htmlcov/` добавлен в .gitignore.
+- Coverage: 90% (1942 stmts, 199 missing)
+- Changed files:
+  - `pyproject.toml` (+ pytest-cov, + coverage.run/report)
+  - `scripts/run-coverage.sh` (new)
+  - `.gitignore` (+ htmlcov/)
+  - `docs/progress.md` (this report)
+- Checks:
+  - bash scripts/run-coverage.sh: `yes` (HTML report in htmlcov/index.html, 90% coverage)
+  - ruff check: `yes` (13 pre-existing warnings, unchanged)
+- Risks / follow-ups:
+  - 21 pre-existing test failures unaffected by this change
+  - Coverage threshold policy (min %) intentionally omitted — tooling only, not a gate
+- Next task:
+  - V2-029 — Remaining V2 finalization task
+
 ## Task Report: V1-017 — 2026-06-10
 
 - Status: `done`

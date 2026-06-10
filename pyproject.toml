@@ -24,6 +24,7 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
+    "pytest-cov>=6.0",
     "ruff>=0.9",
     "mypy>=1.15",
     "httpx>=0.28",
@@ -55,6 +56,14 @@ extend-exclude = ["migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.coverage.run]
+source = ["filmoteka"]
+omit = ["*/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
 
 [tool.mypy]
 python_version = "3.11"
