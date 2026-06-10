@@ -14,6 +14,9 @@ from filmoteka.api.media import router as media_router
 from filmoteka.api.users import router as users_router
 from filmoteka.domain.access.models import User
 from filmoteka.domain.access.service import hash_password
+from filmoteka.domain.tasks import (
+    models as _tasks_models,  # noqa: F401 — register models for Alembic
+)
 from filmoteka.infrastructure.database import SessionLocal
 from filmoteka.infrastructure.library_config import load_library_config
 from filmoteka.infrastructure.settings import settings

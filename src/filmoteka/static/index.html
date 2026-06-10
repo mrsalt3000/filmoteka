@@ -742,39 +742,18 @@ async function runReindex() {
 
   try {
     const resp = await apiAuth('/admin/media/reindex', 'POST');
-    if (resp.status === 'error') {
-      reportEl.innerHTML = `<div class="error">${esc(resp.error)}</div>`;
-      btn.disabled = false;
-      btn.textContent = '🔄 Re-index media paths';
-      return;
-    }
+    const jobId = resp.job_id;
+    if (!jobId) throw new Error('No job_id returned');
 
-    // Poll until completed or failed
-    let attempts = 0;
-    const poll = setInterval(async () => {
-      attempts++;
-      try {
-        const status = await apiAuth('/admin/media/reindex/status');
-        if (status.status === 'completed' || status.status === 'failed' || status.status === 'error') {
-          clearInterval(poll);
-          btn.disabled = false;
-          btn.textContent = '🔄 Re-index media paths';
-          if (status.status === 'completed') {
-            const r = status.report || {};
-            reportEl.innerHTML = buildReindexReportHTML(r);
-          } else {
-            reportEl.innerHTML = `<div class="error">${esc(status.error || 'Re-index failed')}</div>`;
-          }
-        }
-      } catch {
-        if (attempts > 60) {
-          clearInterval(poll);
-          btn.disabled = false;
-          btn.textContent = '🔄 Re-index media paths';
-          reportEl.innerHTML = '<div class="error">Timed out waiting for re-index.</div>';
-        }
-      }
-    }, 1000);
+    reportEl.innerHTML = '<div class="spinner">Re-indexing… may take a moment.</div>';
+    const job = await pollJob(jobId);
+    btn.disabled = false;
+    btn.textContent = '🔄 Re-index media paths';
+    if (job.status === 'completed') {
+      reportEl.innerHTML = buildReindexReportHTML(job.result);
+    } else {
+      reportEl.innerHTML = `<div class="error">${esc(job.error || 'Re-index failed')}</div>`;
+    }
   } catch (e) {
     reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
     btn.disabled = false;
@@ -827,9 +806,16 @@ async function runPosterOp(mode, btnLabel) {
       return;
     }
 
+    const jobId = startResp.job_id;
+    if (!jobId) throw new Error('No job_id returned');
+
     reportEl.innerHTML = '<div class="spinner">Processing posters… this may take a moment.</div>';
-    const report = await pollPosterStatus();
-    reportEl.innerHTML = buildPosterReportHTML(report, label);
+    const job = await pollJob(jobId);
+    if (job.status === 'completed') {
+      reportEl.innerHTML = buildPosterReportHTML(job.result, label);
+    } else {
+      throw new Error(job.error || 'Unknown error');
+    }
   } catch (e) {
     reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
   } finally {
@@ -838,15 +824,14 @@ async function runPosterOp(mode, btnLabel) {
   }
 }
 
-async function pollPosterStatus() {
+async function pollJob(jobId) {
   for (let i = 0; i < 600; i++) {
     await new Promise(r => setTimeout(r, 2000));
-    const resp = await apiAuth('/admin/posters/status');
-    if (resp.status === 'completed') return resp.report;
-    if (resp.status === 'failed') throw new Error(resp.error || 'Unknown error');
-    if (resp.status === 'error') throw new Error(resp.error || 'OMDB_API_KEY not configured');
+    const resp = await apiAuth(`/admin/jobs/${jobId}`);
+    if (resp.status === 'completed') return resp;
+    if (resp.status === 'failed') throw new Error(resp.error || 'Job failed');
   }
-  throw new Error('Poster operation timed out after 20 minutes');
+  throw new Error('Job timed out after 20 minutes');
 }
 
 function buildPosterReportHTML(report, label) {

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -30,6 +29,7 @@ from filmoteka.api.schemas.catalog import (
     MediaFileOut,
     PersonOut,
 )
+from filmoteka.api.schemas.jobs import JobStatusResponse
 from filmoteka.domain.access.models import User
 from filmoteka.domain.access.service import hash_password
 from filmoteka.domain.catalog.models import (
@@ -40,6 +40,8 @@ from filmoteka.domain.catalog.models import (
     film_person,
 )
 from filmoteka.domain.importing.pipeline import run_import
+from filmoteka.domain.tasks.models import BackgroundJob
+from filmoteka.domain.tasks.worker import run_background_job
 from filmoteka.infrastructure.database import SessionLocal, get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
 from filmoteka.infrastructure.metadata_providers import omdb_search_poster
@@ -49,9 +51,8 @@ _logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-# In-memory store: { task_id: { "status": str, "report": dict|None, "error": str|None } }
-_import_tasks: dict[str, dict[str, object]] = {}
-_TASK_ID = "import-scan"  # single-slot for simplicity
+# Test-addressable session factory for background jobs.
+_background_session_factory = SessionLocal
 
 
 @router.get("/health")
@@ -60,6 +61,27 @@ def admin_health(
 ) -> dict[str, str]:
     """Simple admin-only health check."""
     return {"status": "ok", "role": current_user.role, "username": current_user.username}
+
+
+# ---------------------------------------------------------------------------
+# Unified job status polling
+# ---------------------------------------------------------------------------
+
+
+@router.get("/jobs/{job_id}", response_model=JobStatusResponse)
+def get_job_status(
+    job_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> BackgroundJob:
+    """Return the status and result of a background job."""
+    job = db.get(BackgroundJob, job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found",
+        )
+    return job
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
@@ -143,47 +165,24 @@ def import_scan(
 ) -> dict[str, object]:
     """Start a background library scan.
 
-    Returns immediately with 202. Poll ``GET /admin/import/status``
-    for completion.
+    Returns immediately with 202 and a ``job_id``. Poll
+    ``GET /admin/jobs/{job_id}`` for completion.
     """
-    task = _import_tasks.get(_TASK_ID)
-    if task and task["status"] == "running":
-        return {"task_id": _TASK_ID, "status": "running", "message": "Scan already in progress"}
-
-    _import_tasks[_TASK_ID] = {"status": "running", "report": None, "error": None}
-
-    def _run() -> None:
-        db = SessionLocal()
-        try:
-            report = run_import(config, db)
-            _import_tasks[_TASK_ID] = {
-                "status": "completed",
-                "report": report.to_dict(),
-                "error": None,
-            }
-        except Exception as exc:
-            _import_tasks[_TASK_ID] = {
-                "status": "failed",
-                "report": None,
-                "error": str(exc),
-            }
-        finally:
-            db.close()
-
-    threading.Thread(target=_run, daemon=True).start()
-
-    return {"task_id": _TASK_ID, "status": "running", "message": "Scan started"}
+    job = run_background_job(
+        "import_scan", _run_import_job, config,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "import_scan"}
 
 
-@router.get("/import/status")
-def import_status(
-    current_user: User = Depends(require_role("admin")),
-) -> dict[str, object]:
-    """Return the status of the last library scan."""
-    task = _import_tasks.get(_TASK_ID)
-    if task is None:
-        return {"task_id": _TASK_ID, "status": "idle", "report": None, "error": None}
-    return {"task_id": _TASK_ID, **task}
+def _run_import_job(config: LibraryConfig) -> dict | None:
+    """Run import pipeline and return the import report dict."""
+    db = SessionLocal()
+    try:
+        report = run_import(config, db)
+        return report.to_dict()
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -200,71 +199,53 @@ def poster_fill_missing(
 ) -> dict[str, object]:
     """Fill missing posters for films that don't have one yet.
 
-    Starts a background task. Poll ``GET /admin/posters/status``
+    Starts a background task. Poll ``GET /admin/jobs/{job_id}``
     for completion.
     """
     if not settings.omdb_api_key:
         return {
-            "task_id": _POSTER_TASK_ID,
             "status": "error",
             "error": "OMDB_API_KEY is not configured. Set it in .env to use poster features.",
         }
 
-    task = _poster_tasks.get(_POSTER_TASK_ID)
-    if task and task["status"] == "running":
-        return {
-            "task_id": _POSTER_TASK_ID,
-            "status": "running",
-            "message": "Poster operation already in progress",
-        }
+    job = run_background_job(
+        "poster_fill_missing", _run_fill_missing,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "poster_fill_missing"}
 
-    _poster_tasks[_POSTER_TASK_ID] = {"status": "running", "report": None, "error": None}
 
-    def _run() -> None:
+def _run_fill_missing(db: Session | None = None) -> dict | None:
+    """Query films without posters and fill via OMDB."""
+    close = db is None
+    if db is None:
         db = SessionLocal()
-        try:
-            assert settings.omdb_api_key is not None
-            api_key: str = settings.omdb_api_key
+    try:
+        assert settings.omdb_api_key is not None
+        api_key: str = settings.omdb_api_key
 
-            films = db.query(Film).filter(Film.poster_url.is_(None)).all()
-            updated = 0
-            errors: list[str] = []
+        films = db.query(Film).filter(Film.poster_url.is_(None)).all()
+        updated = 0
+        errors: list[str] = []
 
-            for film in films:
-                try:
-                    result = omdb_search_poster(film.title, film.year, api_key)
-                    if result is not None:
-                        film.poster_url, film.poster_source = result
-                        updated += 1
-                except Exception as exc:
-                    errors.append(f"Film #{film.id} ({film.title}): {exc}")
+        for film in films:
+            try:
+                result = omdb_search_poster(film.title, film.year, api_key)
+                if result is not None:
+                    film.poster_url, film.poster_source = result
+                    updated += 1
+            except Exception as exc:
+                errors.append(f"Film #{film.id} ({film.title}): {exc}")
 
-            db.commit()
-
-            _poster_tasks[_POSTER_TASK_ID] = {
-                "status": "completed",
-                "report": {
-                    "total": len(films),
-                    "updated": updated,
-                    "skipped": len(films) - updated,
-                    "errors": errors,
-                },
-                "error": None,
-            }
-        except Exception as exc:
-            db.rollback()
-            _poster_tasks[_POSTER_TASK_ID] = {
-                "status": "failed",
-                "report": None,
-                "error": str(exc),
-            }
-        finally:
+        db.commit()
+        return {"total": len(films), "updated": updated,
+                "skipped": len(films) - updated, "errors": errors}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        if close:
             db.close()
-
-    threading.Thread(target=_run, daemon=True).start()
-
-    msg = "Fill missing posters started"
-    return {"task_id": _POSTER_TASK_ID, "status": "running", "message": msg}
 
 
 @router.post("/posters/refresh-all", status_code=202)
@@ -273,82 +254,53 @@ def poster_refresh_all(
 ) -> dict[str, object]:
     """Refresh posters for all films, replacing existing ones.
 
-    Starts a background task. Poll ``GET /admin/posters/status``
+    Starts a background task. Poll ``GET /admin/jobs/{job_id}``
     for completion.
     """
     if not settings.omdb_api_key:
         return {
-            "task_id": _POSTER_TASK_ID,
             "status": "error",
             "error": "OMDB_API_KEY is not configured. Set it in .env to use poster features.",
         }
 
-    task = _poster_tasks.get(_POSTER_TASK_ID)
-    if task and task["status"] == "running":
-        return {
-            "task_id": _POSTER_TASK_ID,
-            "status": "running",
-            "message": "Poster operation already in progress",
-        }
+    job = run_background_job(
+        "poster_refresh_all", _run_refresh_all,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "poster_refresh_all"}
 
-    _poster_tasks[_POSTER_TASK_ID] = {"status": "running", "report": None, "error": None}
 
-    def _run() -> None:
+def _run_refresh_all(db: Session | None = None) -> dict | None:
+    """Refresh posters for all films via OMDB."""
+    close = db is None
+    if db is None:
         db = SessionLocal()
-        try:
-            assert settings.omdb_api_key is not None
-            api_key: str = settings.omdb_api_key
+    try:
+        assert settings.omdb_api_key is not None
+        api_key: str = settings.omdb_api_key
 
-            films = db.query(Film).all()
-            updated = 0
-            errors: list[str] = []
+        films = db.query(Film).all()
+        updated = 0
+        errors: list[str] = []
 
-            for film in films:
-                try:
-                    result = omdb_search_poster(film.title, film.year, api_key)
-                    if result is not None:
-                        film.poster_url, film.poster_source = result
-                        updated += 1
-                except Exception as exc:
-                    errors.append(f"Film #{film.id} ({film.title}): {exc}")
+        for film in films:
+            try:
+                result = omdb_search_poster(film.title, film.year, api_key)
+                if result is not None:
+                    film.poster_url, film.poster_source = result
+                    updated += 1
+            except Exception as exc:
+                errors.append(f"Film #{film.id} ({film.title}): {exc}")
 
-            db.commit()
-
-            _poster_tasks[_POSTER_TASK_ID] = {
-                "status": "completed",
-                "report": {
-                    "total": len(films),
-                    "updated": updated,
-                    "skipped": len(films) - updated,
-                    "errors": errors,
-                },
-                "error": None,
-            }
-        except Exception as exc:
-            db.rollback()
-            _poster_tasks[_POSTER_TASK_ID] = {
-                "status": "failed",
-                "report": None,
-                "error": str(exc),
-            }
-        finally:
+        db.commit()
+        return {"total": len(films), "updated": updated,
+                "skipped": len(films) - updated, "errors": errors}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        if close:
             db.close()
-
-    threading.Thread(target=_run, daemon=True).start()
-
-    msg = "Refresh all posters started"
-    return {"task_id": _POSTER_TASK_ID, "status": "running", "message": msg}
-
-
-@router.get("/posters/status")
-def poster_status(
-    current_user: User = Depends(require_role("admin")),
-) -> dict[str, object]:
-    """Return the status of the last poster operation."""
-    task = _poster_tasks.get(_POSTER_TASK_ID)
-    if task is None:
-        return {"task_id": _POSTER_TASK_ID, "status": "idle", "report": None, "error": None}
-    return {"task_id": _POSTER_TASK_ID, **task}
 
 
 # ---------------------------------------------------------------------------
@@ -452,9 +404,6 @@ def update_film(
 # Media re-index
 # ---------------------------------------------------------------------------
 
-_reindex_tasks: dict[str, dict[str, object]] = {}
-_REINDEX_TASK_ID = "media-reindex"
-
 
 @router.post("/media/reindex", status_code=202)
 def media_reindex(
@@ -467,83 +416,56 @@ def media_reindex(
     and if not, searches for the file by name under the configured library
     root (``target_root``).  Matching records are updated in-place.
 
-    Starts a background task. Poll ``GET /admin/media/reindex/status``
+    Starts a background task. Poll ``GET /admin/jobs/{job_id}``
     for completion.
     """
-    task = _reindex_tasks.get(_REINDEX_TASK_ID)
-    if task and task["status"] == "running":
-        return {
-            "task_id": _REINDEX_TASK_ID,
-            "status": "running",
-            "message": "Re-index already in progress",
-        }
+    job = run_background_job(
+        "media_reindex", _run_reindex, config,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "media_reindex"}
 
-    _reindex_tasks[_REINDEX_TASK_ID] = {"status": "running", "report": None, "error": None}
 
-    def _run() -> None:
+def _run_reindex(config: LibraryConfig, db: Session | None = None) -> dict | None:
+    """Re-index media file paths."""
+    close = db is None
+    if db is None:
         db = SessionLocal()
-        try:
-            lib_root = config.paths.target_root
-            media_files = db.query(MediaFile).all()
+    try:
+        lib_root = config.paths.target_root
+        media_files = db.query(MediaFile).all()
 
-            fixed = 0
-            not_found = 0
-            skipped = 0
+        fixed = 0
+        not_found = 0
+        skipped = 0
 
-            for mf in media_files:
-                stored = Path(mf.file_path)
-                if stored.is_file():
-                    skipped += 1
-                    continue
+        for mf in media_files:
+            stored = Path(mf.file_path)
+            if stored.is_file():
+                skipped += 1
+                continue
 
-                # Try to locate the file under the library root
-                resolved = _reindex_resolve_path(mf.file_path, lib_root)
-                if resolved is not None:
-                    _logger.info(
-                        "Re-indexed media %d: %s → %s", mf.id, mf.file_path, resolved
-                    )
-                    mf.file_path = str(resolved)
-                    fixed += 1
-                else:
-                    not_found += 1
+            resolved = _reindex_resolve_path(mf.file_path, lib_root)
+            if resolved is not None:
+                _logger.info(
+                    "Re-indexed media %d: %s → %s", mf.id, mf.file_path, resolved
+                )
+                mf.file_path = str(resolved)
+                fixed += 1
+            else:
+                not_found += 1
 
-            db.commit()
-
-            _reindex_tasks[_REINDEX_TASK_ID] = {
-                "status": "completed",
-                "report": {
-                    "total": len(media_files),
-                    "fixed": fixed,
-                    "not_found": not_found,
-                    "skipped": skipped,
-                },
-                "error": None,
-            }
-        except Exception as exc:
-            db.rollback()
-            _logger.exception("Media re-index failed")
-            _reindex_tasks[_REINDEX_TASK_ID] = {
-                "status": "failed",
-                "report": None,
-                "error": str(exc),
-            }
-        finally:
+        db.commit()
+        return {
+            "total": len(media_files), "fixed": fixed,
+            "not_found": not_found, "skipped": skipped,
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        if close:
             db.close()
-
-    threading.Thread(target=_run, daemon=True).start()
-
-    return {"task_id": _REINDEX_TASK_ID, "status": "running", "message": "Media re-index started"}
-
-
-@router.get("/media/reindex/status")
-def media_reindex_status(
-    current_user: User = Depends(require_role("admin")),
-) -> dict[str, object]:
-    """Return the status of the last media re-index operation."""
-    task = _reindex_tasks.get(_REINDEX_TASK_ID)
-    if task is None:
-        return {"task_id": _REINDEX_TASK_ID, "status": "idle", "report": None, "error": None}
-    return {"task_id": _REINDEX_TASK_ID, **task}
 
 
 def _reindex_resolve_path(stored_path: str, library_root: Path) -> Path | None:

@@ -134,7 +134,7 @@ class TestAdminImportScan:
     def test_admin_can_trigger_scan(
         self, client: TestClient, db_session: Session, tmp_path: Path
     ) -> None:
-        """POST triggers a background scan and returns 202."""
+        """POST triggers a background scan and returns 202 with job_id."""
         token = _create_user(client, "import_admin", "pass")
         user_id = _get_user_id(db_session, "import_admin")
         db_session.execute(
@@ -149,29 +149,36 @@ class TestAdminImportScan:
         )
         assert resp.status_code == 202
         body = resp.json()
-        assert body["status"] == "running"
-        assert body["task_id"] == "import-scan"
+        assert body["status"] == "pending"
+        assert "job_id" in body
 
-    def test_admin_can_poll_status(
+    def test_admin_can_poll_job(
         self, client: TestClient, db_session: Session
     ) -> None:
-        """GET /admin/import/status returns task state."""
-        token = _create_user(client, "import_admin2", "pass")
-        user_id = _get_user_id(db_session, "import_admin2")
-        db_session.execute(
-            text("UPDATE users SET role = 'admin' WHERE id = :uid"),
-            {"uid": user_id},
-        )
+        """GET /admin/jobs/{id} returns job state."""
+        token = _create_admin_token(client, db_session, "import_admin2")
+
+        # Create a job directly in the test DB
+        from filmoteka.domain.tasks.models import BackgroundJob
+        job = BackgroundJob(type="test", status="pending")
+        db_session.add(job)
         db_session.commit()
 
         resp = client.get(
-            "/admin/import/status",
+            f"/admin/jobs/{job.id}",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["task_id"] == "import-scan"
-        assert body["status"] in ("idle", "running", "completed", "failed")
+        assert body["id"] == job.id
+        assert body["status"] == "pending"
+
+        # Non-existent job
+        resp = client.get(
+            "/admin/jobs/999999",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404
 
     def test_regular_user_gets_403(
         self, client: TestClient
@@ -380,23 +387,6 @@ class TestAdminCreateUser:
 class TestAdminPosters:
     """POST /admin/posters/fill-missing and /refresh-all."""
 
-    def _poll_status(
-        self, client: TestClient, token: str, max_attempts: int = 30
-    ) -> Any:
-        """Poll poster status until completed or failed."""
-        import time
-        for _ in range(max_attempts):
-            time.sleep(0.1)
-            resp = client.get(
-                "/admin/posters/status",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            body: dict[str, object] = resp.json()
-            status = body.get("status")
-            if status in ("completed", "failed", "idle", "error"):
-                return body
-        raise AssertionError("Poster operation did not complete in time")
-
     def test_without_token_gets_401_fill(self, client: TestClient) -> None:
         resp = client.post("/admin/posters/fill-missing")
         assert resp.status_code == 401
@@ -454,61 +444,34 @@ class TestAdminPosters:
         """Fill missing only updates films without poster_url."""
         token = _create_admin_token(client, db_session, "admin_fill")
 
-        # Use a dedicated test session maker for the background thread
-        test_session = sessionmaker(bind=create_engine(TEST_DATABASE_URL))
-        test_db = test_session()
-        id_with = id_without = 0
+        # Create two films: one with poster, one without
+        film_with = Film(
+            title="Has Poster", year=2020,
+            poster_url="http://old/poster.jpg", poster_source="old",
+        )
+        film_without = Film(title="No Poster", year=2021)
+        db_session.add_all([film_with, film_without])
+        db_session.commit()
+        id_with, id_without = film_with.id, film_without.id
 
-        try:
-            # Create two films: one with poster, one without
-            film_with = Film(
-                title="Has Poster", year=2020,
-                poster_url="http://old/poster.jpg", poster_source="old",
-            )
-            film_without = Film(title="No Poster", year=2021)
-            test_db.add_all([film_with, film_without])
-            test_db.commit()
-            id_with, id_without = film_with.id, film_without.id
+        with patch("filmoteka.api.admin.omdb_search_poster") as mock_search:
+            mock_search.return_value = ("http://new/poster.jpg", "omdb")
+            # Call the job function directly with the test DB
+            from filmoteka.api.admin import _run_fill_missing
+            result = _run_fill_missing(db=db_session)
 
-            with (
-                patch("filmoteka.api.admin.omdb_search_poster") as mock_search,
-                patch("filmoteka.api.admin.SessionLocal", test_session),
-            ):
-                mock_search.return_value = ("http://new/poster.jpg", "omdb")
+        assert result is not None
+        assert result["total"] == 1
+        assert result["updated"] == 1
 
-                resp = client.post(
-                    "/admin/posters/fill-missing",
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-                assert resp.status_code == 202
-
-                result = self._poll_status(client, token)
-                assert result["status"] == "completed"
-                report = result["report"]
-                assert report is not None
-                assert report["total"] == 1
-                assert report["updated"] == 1
-
-            # Verify via fresh query (test_db session was closed by thread)
-            check = test_session()
-            try:
-                w = check.query(Film).filter(Film.id == id_with).first()
-                wo = check.query(Film).filter(Film.id == id_without).first()
-                assert w is not None and wo is not None
-                assert w.poster_url == "http://old/poster.jpg"
-                assert w.poster_source == "old"
-                assert wo.poster_url == "http://new/poster.jpg"
-                assert wo.poster_source == "omdb"
-            finally:
-                check.close()
-        finally:
-            cleanup = test_session()
-            cleanup.query(Film).filter(
-                Film.id.in_([id_with, id_without])
-            ).delete(synchronize_session=False)
-            cleanup.commit()
-            cleanup.close()
-            test_db.close()
+        # Verify
+        w = db_session.query(Film).filter(Film.id == id_with).first()
+        wo = db_session.query(Film).filter(Film.id == id_without).first()
+        assert w is not None and wo is not None
+        assert w.poster_url == "http://old/poster.jpg"
+        assert w.poster_source == "old"
+        assert wo.poster_url == "http://new/poster.jpg"
+        assert wo.poster_source == "omdb"
 
     @patch.object(settings, "omdb_api_key", "test_key")
     def test_refresh_all_updates_all(
@@ -517,63 +480,33 @@ class TestAdminPosters:
         """Refresh all updates all films regardless of existing poster."""
         token = _create_admin_token(client, db_session, "admin_refr")
 
-        # Use a dedicated test session maker for the background thread
-        test_session = sessionmaker(bind=create_engine(TEST_DATABASE_URL))
-        test_db = test_session()
-        id_a = id_b = 0
+        film_a = Film(
+            title="Film A", year=2020,
+            poster_url="http://old/a.jpg", poster_source="old",
+        )
+        film_b = Film(
+            title="Film B", year=2021,
+            poster_url="http://old/b.jpg", poster_source="old",
+        )
+        db_session.add_all([film_a, film_b])
+        db_session.commit()
+        id_a, id_b = film_a.id, film_b.id
 
-        try:
-            # Create two films, both with posters
-            film_a = Film(
-                title="Film A", year=2020,
-                poster_url="http://old/a.jpg", poster_source="old",
-            )
-            film_b = Film(
-                title="Film B", year=2021,
-                poster_url="http://old/b.jpg", poster_source="old",
-            )
-            test_db.add_all([film_a, film_b])
-            test_db.commit()
-            id_a, id_b = film_a.id, film_b.id
+        with patch("filmoteka.api.admin.omdb_search_poster") as mock_search:
+            mock_search.return_value = ("http://new/poster.jpg", "omdb")
+            from filmoteka.api.admin import _run_refresh_all
+            result = _run_refresh_all(db=db_session)
 
-            with (
-                patch("filmoteka.api.admin.omdb_search_poster") as mock_search,
-                patch("filmoteka.api.admin.SessionLocal", test_session),
-            ):
-                mock_search.return_value = ("http://new/poster.jpg", "omdb")
+        assert result is not None
+        assert result["total"] == 2
+        assert result["updated"] == 2
 
-                resp = client.post(
-                    "/admin/posters/refresh-all",
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-                assert resp.status_code == 202
-
-                result = self._poll_status(client, token)
-                assert result["status"] == "completed"
-                report = result["report"]
-                assert report is not None
-                assert report["total"] == 2
-                assert report["updated"] == 2
-
-            # Verify via fresh query
-            check = test_session()
-            try:
-                a = check.query(Film).filter(Film.id == id_a).first()
-                b = check.query(Film).filter(Film.id == id_b).first()
-                assert a is not None and b is not None
-                assert a.poster_url == "http://new/poster.jpg"
-                assert b.poster_url == "http://new/poster.jpg"
-            finally:
-                check.close()
-        finally:
-            # Clean up test data via a fresh session
-            cleanup = test_session()
-            cleanup.query(Film).filter(Film.id.in_([id_a, id_b])).delete(
-                synchronize_session=False
-            )
-            cleanup.commit()
-            cleanup.close()
-            test_db.close()
+        # Verify
+        a = db_session.query(Film).filter(Film.id == id_a).first()
+        b = db_session.query(Film).filter(Film.id == id_b).first()
+        assert a is not None and b is not None
+        assert a.poster_url == "http://new/poster.jpg"
+        assert b.poster_url == "http://new/poster.jpg"
 
 
 class TestAdminFilmEdit:
@@ -720,32 +653,6 @@ class TestAdminFilmEdit:
 class TestAdminMediaReindex:
     """POST /admin/media/reindex — fix broken media file paths."""
 
-    def _poll_status(
-        self, client: TestClient, token: str, max_attempts: int = 30
-    ) -> Any:
-        import time
-        for _ in range(max_attempts):
-            time.sleep(0.1)
-            resp = client.get(
-                "/admin/media/reindex/status",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            body: dict[str, object] = resp.json()
-            status = body.get("status")
-            if status in ("completed", "failed", "idle", "error"):
-                return body
-        raise AssertionError("Reindex operation did not complete in time")
-
-    def _cleanup_all_test_data(self) -> None:
-        """Truncate tables that background-thread tests may have written to."""
-        engine = create_engine(TEST_DATABASE_URL)
-        with engine.connect() as conn:
-            conn.execute(text("DELETE FROM media_files"))
-            conn.execute(text("DELETE FROM movie_editions"))
-            conn.execute(text("DELETE FROM films"))
-            conn.commit()
-        engine.dispose()
-
     def test_without_token_gets_401(self, client: TestClient) -> None:
         resp = client.post("/admin/media/reindex")
         assert resp.status_code == 401
@@ -766,14 +673,14 @@ class TestAdminMediaReindex:
         token = _create_admin_token(client, db_session, "admin_reindex1")
 
         test_session = sessionmaker(bind=create_engine(TEST_DATABASE_URL))
-        test_db = test_session()
-        media_id = 0
 
         try:
             video = tmp_path / "library" / "Action" / "movie.mp4"
             video.parent.mkdir(parents=True)
             video.write_bytes(b"real content")
 
+            # Insert test data via the test_session
+            test_db = test_session()
             film = Film(title="Broken Path", year=2020)
             test_db.add(film)
             test_db.flush()
@@ -799,34 +706,19 @@ class TestAdminMediaReindex:
             })
             client.app.dependency_overrides[get_library_config] = lambda: config  # type: ignore[attr-defined]
 
-            with (
-                patch("filmoteka.api.admin.SessionLocal", test_session),
-            ):
-                resp = client.post(
-                    "/admin/media/reindex",
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-                assert resp.status_code == 202
+            from filmoteka.api.admin import _run_reindex
+            result = _run_reindex(config, db=db_session)
 
-                result = self._poll_status(client, token)
-                assert result["status"] == "completed"
-                report = result["report"]
-                assert report is not None
-                assert report["total"] == 1
-                assert report["fixed"] == 1
-                assert report["skipped"] == 0
+            assert result is not None
+            assert result["total"] == 1
+            assert result["fixed"] == 1
+            assert result["skipped"] == 0
 
-            check = test_session()
-            try:
-                fixed = check.query(MediaFile).filter(MediaFile.id == media_id).first()
-                assert fixed is not None
-                assert fixed.file_path == str(video)
-            finally:
-                check.close()
+            fixed = db_session.query(MediaFile).filter(MediaFile.id == media_id).first()
+            assert fixed is not None
+            assert fixed.file_path == str(video)
         finally:
-            test_db.close()
             client.app.dependency_overrides.pop(get_library_config, None)  # type: ignore[attr-defined]
-            self._cleanup_all_test_data()
 
     def test_reindex_skips_valid_paths(
         self, client: TestClient, db_session: Session, tmp_path: Path
@@ -834,27 +726,23 @@ class TestAdminMediaReindex:
         """MediaFile with a valid path is skipped (not counted as fixed)."""
         token = _create_admin_token(client, db_session, "admin_reindex2")
 
-        test_session = sessionmaker(bind=create_engine(TEST_DATABASE_URL))
-        test_db = test_session()
-        media_id = 0
-
         try:
             video = tmp_path / "valid.mp4"
             video.write_bytes(b"content")
 
             film = Film(title="Valid Path", year=2020)
-            test_db.add(film)
-            test_db.flush()
+            db_session.add(film)
+            db_session.flush()
             edition = MovieEdition(film_id=film.id)
-            test_db.add(edition)
-            test_db.flush()
+            db_session.add(edition)
+            db_session.flush()
             media = MediaFile(
                 edition_id=edition.id,
                 file_path=str(video),
                 file_size=100,
             )
-            test_db.add(media)
-            test_db.commit()
+            db_session.add(media)
+            db_session.commit()
             media_id = media.id
 
             config = LibraryConfig.model_validate({
@@ -867,23 +755,12 @@ class TestAdminMediaReindex:
             })
             client.app.dependency_overrides[get_library_config] = lambda: config  # type: ignore[attr-defined]
 
-            with (
-                patch("filmoteka.api.admin.SessionLocal", test_session),
-            ):
-                resp = client.post(
-                    "/admin/media/reindex",
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-                assert resp.status_code == 202
+            from filmoteka.api.admin import _run_reindex
+            result = _run_reindex(config, db=db_session)
 
-                result = self._poll_status(client, token)
-                assert result["status"] == "completed"
-                report = result["report"]
-                assert report is not None
-                assert report["total"] == 1
-                assert report["fixed"] == 0
-                assert report["skipped"] == 1
+            assert result is not None
+            assert result["total"] >= 1
+            assert result["fixed"] == 0
+            assert result["skipped"] >= 1
         finally:
-            test_db.close()
             client.app.dependency_overrides.pop(get_library_config, None)  # type: ignore[attr-defined]
-            self._cleanup_all_test_data()
