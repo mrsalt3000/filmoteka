@@ -1247,3 +1247,46 @@ class TestBackup:
         body = resp.json()
         assert body["status"] == "pending"
         assert "job_id" in body
+
+
+class TestRestore:
+    """GET /admin/backups and POST /admin/restore/{filename}."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_list_backups_requires_auth(self, client: TestClient) -> None:
+        resp = client.get("/admin/backups")
+        assert resp.status_code == 401
+
+    def test_list_backups_empty(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "bkp_list")
+        resp = client.get("/admin/backups", headers=self._auth(token))
+        assert resp.status_code == 200
+        assert resp.json() == {"items": [], "total": 0}
+
+    def test_restore_nonexistent(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "bkp_restnf")
+        resp = client.post(
+            "/admin/restore/nonexistent.sql",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 404
+
+    def test_restore_requires_auth(self, client: TestClient) -> None:
+        resp = client.post("/admin/restore/any.sql")
+        assert resp.status_code == 401
+
+    def test_restore_regular_user_gets_403(
+        self, client: TestClient
+    ) -> None:
+        token = _create_user(client, "bkp_restreg", "pass")
+        resp = client.post(
+            "/admin/restore/any.sql",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403

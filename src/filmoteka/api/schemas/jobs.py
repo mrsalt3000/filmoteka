@@ -34,3 +34,14 @@ class DownloadSuggestionItem(BaseModel):
 class DownloadSuggestionsResponse(BaseModel):
     items: list[DownloadSuggestionItem]
     total: int
+
+
+class BackupFileItem(BaseModel):
+    filename: str
+    size_bytes: int
+    created_at: datetime | None = None
+
+
+class BackupListResponse(BaseModel):
+    items: list[BackupFileItem]
+    total: int

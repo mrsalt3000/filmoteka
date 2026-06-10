@@ -36,6 +36,8 @@ from filmoteka.api.schemas.catalog import (
     PersonOut,
 )
 from filmoteka.api.schemas.jobs import (
+    BackupFileItem,
+    BackupListResponse,
     DownloadSuggestionsResponse,
     JobListResponse,
     JobStatusResponse,
@@ -377,6 +379,88 @@ def _run_backup() -> dict | None:
 
     file_size = filepath.stat().st_size
     return {"file": str(filepath), "size_bytes": file_size, "rows": filename}
+
+
+@router.get("/backups", response_model=BackupListResponse)
+def admin_list_backups(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """List available backup files in the backup directory."""
+    backup_dir = Path(settings.backup_dir)
+    if not backup_dir.is_dir():
+        return {"items": [], "total": 0}
+
+    files: list[dict] = []
+    for p in sorted(backup_dir.glob("*.sql"), key=lambda f: f.stat().st_mtime, reverse=True):
+        stat = p.stat()
+        files.append(BackupFileItem(
+            filename=p.name,
+            size_bytes=stat.st_size,
+            created_at=datetime.fromtimestamp(stat.st_mtime),
+        ).model_dump())
+
+    return {"items": files, "total": len(files)}
+
+
+@router.post("/restore/{filename}", status_code=202)
+def admin_restore_backup(
+    filename: str,
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Restore a backup file via ``psql``.
+
+    The *filename* must be a valid ``.sql`` file in the backup directory.
+    Runs in a background job. Poll ``GET /admin/jobs/{job_id}``.
+    """
+    filepath = Path(settings.backup_dir) / filename
+    if not filepath.is_file() or filepath.suffix != ".sql":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Backup file '{filename}' not found",
+        )
+
+    job = run_background_job(
+        "restore", _run_restore, filename,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "restore"}
+
+
+def _run_restore(filename: str) -> dict | None:
+    """Run psql to restore a backup file."""
+    import os
+    import subprocess
+
+    filepath = Path(settings.backup_dir) / filename
+    url = settings.database_url
+    parts = url.replace("postgresql://", "").split("@")
+    user_pass = parts[0].split(":")
+    host_db = parts[1].split("/")
+    host_port = host_db[0].split(":")
+
+    env = os.environ.copy()
+    env["PGPASSWORD"] = user_pass[1]
+
+    with open(filepath) as f:
+        result = subprocess.run(
+            [
+                "psql",
+                "-h", host_port[0],
+                "-p", host_port[1] if len(host_port) > 1 else "5432",
+                "-U", user_pass[0],
+                "-d", host_db[1],
+            ],
+            stdin=f,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"psql restore failed: {result.stderr}")
+
+    return {"file": filename, "status": "restored"}
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
