@@ -46,6 +46,10 @@ nav input::placeholder { color: var(--text2); }
 .nav-btn:hover { border-color: var(--text); }
 .nav-link { color: var(--text2); cursor: pointer; font-size: .9rem; white-space: nowrap; }
 .nav-link:hover { color: var(--text); }
+.view-tabs { display: flex; gap: .5rem; margin-bottom: 1rem; }
+.view-tab { padding: .4rem 1rem; border: 1px solid var(--surface2); border-radius: var(--radius); cursor: pointer; font-size: .9rem; color: var(--text2); background: var(--surface); user-select: none; }
+.view-tab.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.view-tab:hover { border-color: var(--text); }
 .page { padding: 1.5rem 2rem; }
 .film-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
 .film-card { background: var(--surface); border-radius: var(--radius); padding: 1.25rem; cursor: pointer; transition: transform .15s, background .15s; }
@@ -174,6 +178,7 @@ setTheme(getTheme());
 const TOKEN_KEY = 'filmoteka-token';
 let currentUser = null;
 let editingFilmId = null;
+let listMode = 'movies';
 
 function getToken() { return localStorage.getItem(TOKEN_KEY); }
 function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
@@ -315,13 +320,25 @@ async function render() {
   }
 }
 
+function _tabsHtml() {
+  return `
+    <div class="view-tabs">
+      <span class="view-tab ${listMode === 'movies' ? 'active' : ''}" onclick="switchListMode('movies')">Movies</span>
+      <span class="view-tab ${listMode === 'family' ? 'active' : ''}" onclick="switchListMode('family')">Family</span>
+    </div>`;
+}
+
 async function renderList(el) {
   const q = document.getElementById('search').value;
   const params = new URLSearchParams({ limit: '50' });
   if (q) params.set('q', q);
+  if (listMode === 'family') params.set('include_family', 'true');
   const data = await api(`/films?${params}`);
   if (data.items.length === 0) {
-    el.innerHTML = `<div class="empty">${q ? 'No films match your search.' : 'Library is empty.'}</div>`;
+    const emptyMsg = listMode === 'family'
+      ? 'No family videos found.'
+      : (q ? 'No films match your search.' : 'Library is empty.');
+    el.innerHTML = _tabsHtml() + `<div class="empty">${emptyMsg}</div>`;
     return;
   }
 
@@ -335,7 +352,7 @@ async function renderList(el) {
     } catch { /* show grid without watch states */ }
   }
 
-  el.innerHTML = `<div class="film-grid">${data.items.map(f => {
+  el.innerHTML = _tabsHtml() + `<div class="film-grid">${data.items.map(f => {
     const st = watchStates[f.id];
     let badgeHtml = '';
     let progressHtml = '';
@@ -361,6 +378,11 @@ async function renderList(el) {
       <div class="year">${f.year || '—'}</div>
     </div>`;
   }).join('')}</div>`;
+}
+
+function switchListMode(mode) {
+  listMode = mode;
+  render();
 }
 
 async function renderFilm(el, id) {
