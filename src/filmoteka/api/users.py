@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import false as sa_false
@@ -32,6 +34,8 @@ from filmoteka.domain.catalog.models import (
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
 from filmoteka.infrastructure.settings import settings
+
+_logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/me", tags=["users"])
 
@@ -257,12 +261,81 @@ def recommend_by_mood(
     suggest films from the library matching the mood.  Otherwise a
     keyword-based fallback maps mood words to genres.
     """
-    genres = _mood_to_genres(body.query)
+    # Try LLM first if configured
+    if settings.llm_api_url:
+        try:
+            return _llm_mood_recommendations(body.query, limit, db, current_user)
+        except Exception:
+            _logger.warning("LLM mood query failed — falling back to keywords")
+            pass  # fall through to keyword matching
+
+    # Keyword fallback
+    return _keyword_mood_recommendations(body.query, limit, db, current_user)
+
+
+def _llm_mood_recommendations(
+    query: str, limit: int, db: Session, current_user: User
+) -> RecommendationsResponse:
+    """Query LLM for mood-based film suggestions."""
+    import json as _json
+    from urllib.request import Request, urlopen
+
+    # Build film list from user's library
+    all_films = db.query(Film.title, Film.year).all()
+    film_list = "\n".join(f"- {f.title} ({f.year or '?'})" for f in all_films)
+
+    prompt = (
+        f"From the user's film library:\n{film_list}\n\n"
+        f"Suggest up to {limit} films that match the mood '{query}'. "
+        "Return ONLY film titles, one per line, no numbering, no explanation."
+    )
+
+    payload = _json.dumps({
+        "model": "llama3.2",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "max_tokens": 200,
+    }).encode()
+
+    req = Request(
+        f"{settings.llm_api_url}/v1/chat/completions",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    resp = urlopen(req, timeout=15)
+    body: dict = _json.loads(resp.read().decode())
+    content: str = body["choices"][0]["message"]["content"]
+
+    # Parse response — one title per line
+    titles = [line.strip("- •*").strip() for line in content.split("\n") if line.strip()]
+
+    # Look up each title in the library
+    result: list[RecommendationItem] = []
+    seen_ids: set[int] = set()
+    for t in titles:
+        film = db.query(Film).filter(Film.title.ilike(t)).first()
+        if film and film.id not in seen_ids:
+            seen_ids.add(film.id)
+            result.append(RecommendationItem(
+                film_id=film.id, title=film.title, year=film.year,
+                poster_url=film.poster_url,
+                score=1.0, match_reason=f"LLM: {query}",
+            ))
+            if len(result) >= limit:
+                break
+
+    return RecommendationsResponse(items=result[:limit], total=len(result))
+
+
+def _keyword_mood_recommendations(
+    query: str, limit: int, db: Session, current_user: User
+) -> RecommendationsResponse:
+    """Keyword-based mood→genre matching (fallback when no LLM)."""
+    genres = _mood_to_genres(query)
 
     if not genres:
         return RecommendationsResponse(items=[], total=0)
 
-    # Find films matching these genres, excluding watched/blacklisted/etc.
     watched = (
         db.query(MovieEdition.film_id)
         .join(MediaFile).join(WatchEvent)
@@ -287,8 +360,8 @@ def recommend_by_mood(
     items = [
         RecommendationItem(
             film_id=f.id, title=f.title, year=f.year,
-            poster_url=f.poster_url,
-            score=1.0, match_reason=f"mood: {body.query}",
+            poster_url=f.poster_url, score=1.0,
+            match_reason=f"mood: {query}",
         )
         for f in films
     ]
