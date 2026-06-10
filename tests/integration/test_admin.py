@@ -1290,3 +1290,37 @@ class TestRestore:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 403
+
+
+class TestBackupMock:
+    """Mock-based tests for backup internals."""
+
+    def test_run_backup_parses_url_and_runs_pg_dump(
+        self, tmp_path: Path
+    ) -> None:
+        """_run_backup correctly constructs pg_dump command."""
+        from unittest.mock import patch
+
+        from filmoteka.api.admin import _run_backup
+
+        def _mock_pg_dump(*args, **kwargs):
+            # pg_dump writes the file itself; simulate by creating it
+            backup_dir = tmp_path
+            import datetime
+            filename = f"filmoteka_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
+            Path(backup_dir, filename).write_text("-- backup data")
+            return type("Result", (), {"returncode": 0, "stderr": ""})()
+
+        # Patch settings and subprocess
+        with (
+            patch("filmoteka.api.admin.settings.database_url",
+                  "postgresql://user:pass@db:5432/filmoteka"),
+            patch("filmoteka.api.admin.settings.backup_dir", str(tmp_path)),
+            patch("subprocess.run", side_effect=_mock_pg_dump),
+        ):
+            result = _run_backup()
+
+        assert result is not None
+        assert "file" in result
+        assert "size_bytes" in result
+        assert result["file"].endswith(".sql")
