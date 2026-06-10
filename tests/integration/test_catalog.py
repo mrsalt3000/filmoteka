@@ -796,6 +796,46 @@ class TestListFilms:
         body = resp.json()
         assert body["total"] == 1
 
+    def test_exclude_watched_hides_started_films(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """When exclude_watched is ON, started films are hidden from listing."""
+        token = self._create_user(client, "ew_user")
+        f = Film(title="Watched Film", year=2020)
+        db_session.add(f)
+        db_session.flush()
+        ed = MovieEdition(film_id=f.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/ew.mkv")
+        db_session.add(m)
+        db_session.commit()
+
+        # Start watching
+        client.post(f"/media/{m.id}/watch/start", headers=self._auth_header(token))
+
+        # Toggle exclude_watched ON
+        client.put(
+            "/me/exclude-watched",
+            headers=self._auth_header(token),
+            json={"exclude": True},
+        )
+
+        # Film should be hidden
+        resp = client.get("/films", headers=self._auth_header(token))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Watched Film" not in titles
+
+        # Toggle OFF — film visible again
+        client.put(
+            "/me/exclude-watched",
+            headers=self._auth_header(token),
+            json={"exclude": False},
+        )
+        resp = client.get("/films", headers=self._auth_header(token))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Watched Film" in titles
+
     def test_age_rating_16plus_filtered(
         self, client: TestClient, db_session: Session
     ) -> None:

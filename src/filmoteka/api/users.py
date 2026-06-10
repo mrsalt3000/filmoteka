@@ -44,6 +44,10 @@ class ExcludeFamilyRequest(BaseModel):
     exclude: bool
 
 
+class ExcludeWatchedRequest(BaseModel):
+    exclude: bool
+
+
 @router.get("/blacklist", response_model=BlacklistResponse)
 def list_blacklist(
     db: Session = Depends(get_db),
@@ -130,6 +134,19 @@ def set_exclude_family(
 ) -> UserOut:
     """Set whether family videos are excluded from recommendations."""
     current_user.exclude_family_from_recommendations = body.exclude
+    db.commit()
+    db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
+@router.put("/exclude-watched")
+def set_exclude_watched(
+    body: ExcludeWatchedRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> UserOut:
+    """Set whether already-watched films are excluded from the catalog."""
+    current_user.exclude_watched = body.exclude
     db.commit()
     db.refresh(current_user)
     return UserOut.model_validate(current_user)

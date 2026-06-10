@@ -157,6 +157,7 @@ nav input::placeholder { color: var(--text2); }
   <input id="search" type="text" placeholder="Search films…" oninput="onSearch(event)">
   <a class="nav-link" id="admin-link" href="#admin" onclick="navigate('admin')" style="display:none">Admin</a>
   <span class="nav-link" id="family-toggle" style="display:none" onclick="toggleFamilyRecs()" title="Toggle family video in recommendations"></span>
+  <span class="nav-link" id="watched-toggle" style="display:none" onclick="toggleExcludeWatched()" title="Toggle exclude watched"></span>
   <span class="nav-link" id="mystats-link" style="display:none" onclick="toggleMyStats()">📊 My Stats</span>
   <span class="nav-link" id="login-btn" onclick="showLogin()">Log in</span>
   <span class="nav-link" id="user-label" style="display:none"></span>
@@ -220,6 +221,12 @@ async function toggleFamilyRecs() {
   renderNav();
 }
 
+async function toggleExcludeWatched() {
+  const newVal = !currentUser.exclude_watched;
+  currentUser = await apiAuth('/me/exclude-watched', 'PUT', { exclude: newVal });
+  renderNav();
+}
+
 async function toggleMyStats() {
   const panel = document.getElementById('mystats-panel');
   const content = document.getElementById('mystats-content');
@@ -253,6 +260,7 @@ function renderNav() {
   const adminLink = document.getElementById('admin-link');
   const familyToggle = document.getElementById('family-toggle');
   const myStatsLink = document.getElementById('mystats-link');
+  const watchedToggle = document.getElementById('watched-toggle');
 
   if (currentUser) {
     loginBtn.style.display = 'none';
@@ -265,6 +273,10 @@ function renderNav() {
       ? '👪 Recs: OFF'
       : '👪 Recs: ON';
     myStatsLink.style.display = 'inline';
+    watchedToggle.style.display = 'inline';
+    watchedToggle.textContent = currentUser.exclude_watched
+      ? '👁 Watched: OFF'
+      : '👁 Watched: ON';
   } else {
     loginBtn.style.display = 'inline';
     userLabel.style.display = 'none';
@@ -272,6 +284,7 @@ function renderNav() {
     adminLink.style.display = 'none';
     familyToggle.style.display = 'none';
     myStatsLink.style.display = 'none';
+    watchedToggle.style.display = 'none';
     document.getElementById('mystats-panel').style.display = 'none';
   }
 }

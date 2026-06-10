@@ -31,6 +31,9 @@ class User(Base):
     exclude_family_from_recommendations: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=sa_true(), nullable=False
     )
+    exclude_watched: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false(), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
     def __repr__(self) -> str:

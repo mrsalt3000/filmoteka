@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import false as sa_false
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -27,6 +28,7 @@ from filmoteka.domain.catalog.models import (
     Person,
     film_person,
 )
+from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
 
 router = APIRouter(prefix="/films", tags=["catalog"])
@@ -211,6 +213,22 @@ def list_films(
 
     if not include_family:
         query = query.filter(Film.is_family_video == False)  # noqa: E712
+
+    # ── Exclude watched: hide films the user has started ─────────
+
+    if current_user is not None and current_user.exclude_watched:
+        watched_ids = (
+            db.query(MovieEdition.film_id)
+            .join(MediaFile)
+            .join(WatchEvent)
+            .filter(
+                WatchEvent.user_id == current_user.id,
+                WatchEvent.incognito == sa_false(),
+            )
+            .distinct()
+            .subquery()
+        )
+        query = query.filter(Film.id.notin_(watched_ids))
 
     total = query.count()
     items = query.order_by(Film.created_at.desc()).offset(skip).limit(limit).all()
