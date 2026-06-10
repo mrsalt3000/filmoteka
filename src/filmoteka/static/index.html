@@ -704,17 +704,28 @@ async function loadWatchStats() {
       return;
     }
     el.innerHTML = `<table class="jobs-table">
-      <thead><tr><th>User</th><th>Film</th><th>Watched At</th><th>Finished</th></tr></thead>
+      <thead><tr><th>User</th><th>Film</th><th>Watched At</th><th>Finished</th><th></th></tr></thead>
       <tbody>${data.items.map(w => `
         <tr>
           <td>${esc(w.username)}</td>
           <td>${esc(w.film_title)}</td>
           <td>${new Date(w.started_at).toLocaleString()}</td>
           <td>${w.finished ? '✓' : '…'}</td>
+          <td><button class="poster-btn" style="padding:.2rem .5rem;font-size:.8rem" onclick="resetUserStats(${w.user_id}, '${esc(w.username)}')">Reset</button></td>
         </tr>`).join('')}</tbody>
     </table>`;
   } catch (e) {
     el.innerHTML = `<div class="error">Failed to load stats: ${esc(e.message)}</div>`;
+  }
+}
+
+async function resetUserStats(userId, username) {
+  if (!confirm(`Reset watch history for user "${username}"? This cannot be undone.`)) return;
+  try {
+    await apiAuth(`/admin/watch-stats/${userId}`, 'DELETE');
+    loadWatchStats();
+  } catch (e) {
+    alert(`Failed to reset: ${e.message}`);
   }
 }
 async function loadJobs() {

@@ -124,6 +124,7 @@ def admin_watch_stats(
     """
     query = (
         db.query(
+            User.id.label("user_id"),
             User.username,
             Film.title,
             WatchEvent.started_at,
@@ -147,15 +148,40 @@ def admin_watch_stats(
 
     items = [
         AdminWatchStatItem(
-            username=r[0],
-            film_title=r[1],
-            started_at=r[2],
-            finished=r[3],
+            user_id=r[0],
+            username=r[1],
+            film_title=r[2],
+            started_at=r[3],
+            finished=r[4],
         )
         for r in rows
     ]
 
     return {"items": items, "total": total}
+
+
+@router.delete("/watch-stats/{user_id}", status_code=204)
+def admin_clear_user_stats(
+    user_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> None:
+    """Delete all non-incognito watch events for a specific user.
+
+    Admin-only. Returns 404 if the user does not exist.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    db.query(WatchEvent).filter(
+        WatchEvent.user_id == user_id,
+        WatchEvent.incognito == sa_false(),
+    ).delete(synchronize_session=False)
+    db.commit()
 
 
 @router.post("/users", response_model=UserOut, status_code=201)

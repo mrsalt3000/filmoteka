@@ -915,3 +915,68 @@ class TestAdminWatchStats:
     def test_without_token_gets_401(self, client: TestClient) -> None:
         resp = client.get("/admin/watch-stats")
         assert resp.status_code == 401
+
+    def test_clear_user_stats(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """DELETE /admin/watch-stats/{user_id} clears a user's events."""
+        token = _create_admin_token(client, db_session, "ws_clear_admin")
+
+        # Register a user and create a watch event
+        user_token = _create_user(client, "ws_clear_user", "pass")
+        me = client.get("/auth/me", headers={"Authorization": f"Bearer {user_token}"})
+        user_id = me.json()["id"]
+
+        # Need a film with media to watch
+        f = Film(title="Clear Test", year=2020)
+        db_session.add(f)
+        db_session.flush()
+        ed = MovieEdition(film_id=f.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/clear_test.mkv")
+        db_session.add(m)
+        db_session.commit()
+
+        client.post(f"/media/{m.id}/watch/start", headers={"Authorization": f"Bearer {user_token}"})
+
+        # Verify event exists
+        stats = client.get("/admin/watch-stats", headers={"Authorization": f"Bearer {token}"})
+        assert stats.json()["total"] >= 1
+
+        # Clear via admin
+        resp = client.delete(
+            f"/admin/watch-stats/{user_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 204
+
+        # Verify cleared
+        stats2 = client.get("/admin/watch-stats", headers={"Authorization": f"Bearer {token}"})
+        assert stats2.json()["total"] == 0
+
+    def test_clear_user_stats_nonexistent(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "ws_clear_nf")
+        resp = client.delete(
+            "/admin/watch-stats/99999",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404
+
+    def test_clear_user_stats_regular_user_gets_403(
+        self, client: TestClient
+    ) -> None:
+        token = _create_user(client, "ws_clear_reg", "pass")
+        resp = client.delete(
+            "/admin/watch-stats/1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403
+
+    def test_clear_user_stats_requires_auth(
+        self, client: TestClient
+    ) -> None:
+        resp = client.delete("/admin/watch-stats/1")
+        assert resp.status_code == 401

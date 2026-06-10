@@ -74,6 +74,7 @@ class RecommendationsResponse(BaseModel):
 
 
 class AdminWatchStatItem(BaseModel):
+    user_id: int
     username: str
     film_title: str
     started_at: datetime
