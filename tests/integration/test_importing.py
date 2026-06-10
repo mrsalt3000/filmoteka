@@ -676,3 +676,30 @@ class TestPipelineBridge:
         assert len(films) == 2
         assert films[0].year == 1999
         assert films[1].year == 2021
+
+
+    # ── Dedup: re-import idempotency ──────────────────────────────
+
+    def test_mediafile_dedup_on_reimport(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """Re-importing the same file does not create duplicate MediaFile."""
+        from filmoteka.domain.catalog.models import MediaFile
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        video = root / "The.Matrix.1999.1080p.mkv"
+        _make_test_video(video)
+        config = _make_config(root)
+
+        # First import
+        r1 = run_import(config, db_session)
+        assert r1.files_indexed == 1
+
+        # Second import (same file)
+        r2 = run_import(config, db_session)
+        assert r2.files_indexed == 0  # skipped as duplicate
+
+        # Only one MediaFile was created
+        media_files = db_session.query(MediaFile).all()
+        assert len(media_files) == 1

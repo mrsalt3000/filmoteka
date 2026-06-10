@@ -6,6 +6,7 @@ entries are created without moving or copying any files.
 
 from __future__ import annotations
 
+import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,8 @@ from filmoteka.infrastructure.filename_parser import parse_filename
 from filmoteka.infrastructure.library_config import LibraryConfig
 from filmoteka.infrastructure.metadata_providers import omdb_search_poster
 from filmoteka.infrastructure.settings import settings
+
+_logger = logging.getLogger(__name__)
 
 
 def _ffprobe_available() -> bool:
@@ -141,6 +144,11 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
     )
 
     # --- MediaFile ---
+    existing_media = _find_media_by_path(db, candidate.file_path)
+    if existing_media is not None:
+        _logger.info("MediaFile already exists for path %s — skipping", candidate.file_path)
+        return
+
     media = MediaFile(
         edition_id=edition.id,
         file_path=candidate.file_path,
@@ -156,13 +164,22 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
 
 
 def _find_film(db: Session, title: str, year: int | None) -> Film | None:
-    """Look up a Film by title (case-insensitive) and optional year."""
-    query = db.query(Film).filter(Film.title.ilike(title))
+    """Look up a Film by title (case-insensitive) and optional year.
+
+    Title is normalised (stripped, whitespace collapsed) before matching.
+    """
+    norm = " ".join(title.split())
+    query = db.query(Film).filter(Film.title.ilike(norm))
     if year is not None:
         query = query.filter(Film.year == year)
     else:
         query = query.filter(Film.year.is_(None))
     return query.first()
+
+
+def _find_media_by_path(db: Session, file_path: str) -> MediaFile | None:
+    """Look up a MediaFile by its ``file_path``."""
+    return db.query(MediaFile).filter(MediaFile.file_path == file_path).first()
 
 
 def _find_or_create_edition(
