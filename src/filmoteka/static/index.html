@@ -538,6 +538,7 @@ async function renderFilm(el, id) {
             <input class="edit-field" id="edit-title" type="text" value="${esc(f.title)}" placeholder="Title">
             <input class="edit-field" id="edit-year" type="number" value="${f.year || ''}" placeholder="Year">
             <textarea class="edit-textarea" id="edit-description" placeholder="Description">${esc(f.description || '')}</textarea>
+            <input class="edit-field" id="edit-poster-url" type="text" value="${esc(f.poster_url || '')}" placeholder="Poster URL (optional)">
             <div class="edit-actions">
               <button class="edit-save-btn" onclick="saveFilmEdit(${f.id})">Save</button>
               <button class="edit-cancel-btn" onclick="cancelFilmEdit()">Cancel</button>
@@ -585,10 +586,12 @@ async function saveFilmEdit(id) {
   const title = document.getElementById('edit-title').value.trim();
   const year = document.getElementById('edit-year').value.trim();
   const description = document.getElementById('edit-description').value.trim();
+  const posterUrl = document.getElementById('edit-poster-url').value.trim();
   const body = {};
   if (title) body.title = title;
   if (year) body.year = parseInt(year, 10);
   if (description) body.description = description;
+  if (posterUrl) body.poster_url = posterUrl;
   try {
     await apiAuth(`/admin/films/${id}`, 'PUT', body);
     editingFilmId = null;

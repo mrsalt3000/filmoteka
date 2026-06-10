@@ -82,6 +82,7 @@ class FilmUpdateSchema(BaseModel):
     description: str | None = None
     age_rating: str | None = None
     is_family_video: bool | None = None
+    poster_url: str | None = None
 
 
 class FilmDetailOut(BaseModel):

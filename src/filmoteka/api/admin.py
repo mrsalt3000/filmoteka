@@ -650,6 +650,10 @@ def update_film(
     if body.is_family_video is not None and body.is_family_video != film.is_family_video:
         film.is_family_video = body.is_family_video
         changed = True
+    if body.poster_url is not None and body.poster_url != film.poster_url:
+        film.poster_url = body.poster_url
+        film.poster_source = "manual"
+        changed = True
 
     if changed:
         film.needs_review = False
