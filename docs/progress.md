@@ -4,6 +4,22 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-012 — 2026-06-10
+
+- Status: `done`
+- Summary: Добавил 5 cross-category integration-тестов для фильтров и поиска: search+genre, search+codec, year_from>year_to (empty), audio_lang+subtitle_lang, genre+resolution.
+- Changed files:
+  - `tests/integration/test_catalog.py` (+5 тестов)
+  - `agent-tasklist.md` (V1-012 marked [x])
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff check: `yes`
+  - mypy: `yes`
+  - pytest integration test_catalog.py: `yes` (46/46, +5 new)
+- Next task:
+  - V1-006 — Реализовать ручную правку карточки админом *(already done)*
+  - V1-013 — Реализовать child аккаунт
+
 ## Task Report: V1-011 — 2026-06-10
 
 - Status: `done`

@@ -569,6 +569,125 @@ class TestListFilms:
         assert body["total"] == 1
         assert body["items"][0]["title"] == "Multi Sub"
 
+    # ── Cross-category filter combinations ────────────────────────
+
+    def test_search_plus_genre(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Search text + genre slug combo."""
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        drama = Genre(name="Drama", slug="drama")
+        f1 = Film(title="Interstellar", year=2014, genres=[sci_fi],
+                   description="Space exploration")
+        f2 = Film(title="Arrival", year=2016, genres=[sci_fi],
+                   description="Alien linguistics")
+        f3 = Film(title="The Father", year=2020, genres=[drama])
+        db_session.add_all([f1, f2, f3])
+        db_session.commit()
+
+        resp = client.get("/films?q=space&genre=sci-fi")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Interstellar"
+
+    def test_search_plus_codec(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Search text + tech attribute combo."""
+        f1 = Film(title="The Matrix", year=1999, description="Reality is a simulation")
+        f2 = Film(title="Matrix Reloaded", year=2003, description="More reality")
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/matrix.mkv", codec="hevc"),
+            MediaFile(edition_id=ed2.id, file_path="/b/reloaded.mkv", codec="h264"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?q=matrix&codec=hevc")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "The Matrix"
+
+    def test_year_from_gt_year_to(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """year_from > year_to returns empty result."""
+        db_session.add_all([
+            Film(title="Old", year=2000),
+            Film(title="New", year=2020),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?year_from=2020&year_to=2010")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 0
+
+    def test_audio_plus_subtitle_lang(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """audio_lang + subtitle_lang combo."""
+        f1 = Film(title="Russian with Eng subs", year=2020)
+        f2 = Film(title="English only", year=2021)
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/rus_eng.mkv",
+                      audio_codec="rus", subtitle_languages="eng"),
+            MediaFile(edition_id=ed2.id, file_path="/b/eng.mkv",
+                      audio_codec="eng", subtitle_languages=None),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?audio_lang=rus&subtitle_lang=eng")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Russian with Eng subs"
+
+    def test_genre_plus_resolution(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Genre slug + resolution combo."""
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        action = Genre(name="Action", slug="action")
+        f1 = Film(title="Sci-Fi HD", year=2020, genres=[sci_fi])
+        f2 = Film(title="Action HD", year=2021, genres=[action])
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/sci.mkv", height=1080),
+            MediaFile(edition_id=ed2.id, file_path="/b/act.mkv", height=1080),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?genre=sci-fi&resolution=1080")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Sci-Fi HD"
+
     # ── Full-text search: description, genres, persons ─────────────
 
     def test_search_by_description(
