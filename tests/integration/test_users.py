@@ -989,3 +989,51 @@ class TestRecommendByMood:
             json={"query": "xyznonexistent"},
         )
         assert resp.json() == {"items": [], "total": 0}
+
+    def test_fallback_no_llm(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Without LLM_API_URL, by-mood uses keyword fallback."""
+        from filmoteka.infrastructure.settings import settings
+        from unittest.mock import patch
+
+        with patch.object(settings, "llm_api_url", None):
+            comedy = Genre(name="Comedy", slug="comedy")
+            db_session.add(comedy)
+            db_session.flush()
+            db_session.add(Film(title="Funny", year=2020, genres=[comedy]))
+            db_session.commit()
+
+            token = _register(client, "mood_fallback1")
+            resp = client.post(
+                "/me/recommendations/by-mood",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"query": "comedy"},
+            )
+            assert resp.status_code == 200
+            titles = [i["title"] for i in resp.json()["items"]]
+            assert "Funny" in titles
+
+    def test_fallback_llm_unreachable(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """With LLM_API_URL set to unreachable, falls back to keywords."""
+        from filmoteka.infrastructure.settings import settings
+        from unittest.mock import patch
+
+        comedy = Genre(name="Comedy", slug="comedy")
+        db_session.add(comedy)
+        db_session.flush()
+        db_session.add(Film(title="Funny", year=2020, genres=[comedy]))
+        db_session.commit()
+
+        token = _register(client, "mood_fallback2")
+        with patch.object(settings, "llm_api_url", "http://localhost:19999"):
+            resp = client.post(
+                "/me/recommendations/by-mood",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"query": "comedy"},
+            )
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Funny" in titles

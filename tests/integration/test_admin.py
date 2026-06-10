@@ -1175,3 +1175,40 @@ class TestAdminConflicts:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 403
+
+
+
+
+# ── Offline mode ────────────────────────────────────────────────
+
+
+class TestOfflineMode:
+    """Graceful degradation when external services are unavailable."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_health_response_structure(
+        self, client: TestClient
+    ) -> None:
+        """Health endpoint returns proper component structure."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["version"] == "2.0.0"
+        assert body["database"]["status"] in ("ok", "degraded")
+        assert body["external"]["status"] in ("ok", "degraded", "unavailable")
+
+    def test_poster_ops_graceful_without_key(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Poster operations return error, not 500, when key is unset."""
+        token = _create_admin_token(client, db_session, "off_poster")
+        with patch.object(settings, "omdb_api_key", None):
+            resp = client.post(
+                "/admin/posters/fill-missing",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 202
+        assert resp.json()["status"] == "error"
+        assert "OMDB_API_KEY" in str(resp.json().get("error", ""))
