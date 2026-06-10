@@ -1,0 +1,25 @@
+# Caddy reverse proxy for Filmoteka
+# Serves on port 80 (HTTP) — accessible at http://filmoteka.local/
+
+:80 {
+    # Reverse proxy to the FastAPI application
+    reverse_proxy api:8000 {
+        # Pass the real client IP
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Security headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Log all requests
+    log {
+        output file /data/access.log
+        format json
+    }
+}

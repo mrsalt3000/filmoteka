@@ -89,17 +89,21 @@ services:
     volumes:
       - ./specs:/app/specs:ro
       - ${LIBRARY_ROOT:-./media/library}:/media/library
-
-  nginx:
-    image: nginx:alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    volumes:
-      - ./docker/nginx:/etc/nginx/conf.d:ro
     depends_on:
       api:
         condition: service_started
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - api
+
 volumes:
   pgdata:
+  caddy_data:
