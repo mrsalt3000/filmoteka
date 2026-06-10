@@ -15,6 +15,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from filmoteka.api.auth import require_role
 from filmoteka.api.dependencies import get_library_config
+from filmoteka.api.schemas.auth import (
+    VALID_ROLES,
+    AdminCreateUserRequest,
+    UserOut,
+)
 from filmoteka.api.schemas.catalog import (
     EditionOut,
     FilmDetailOut,
@@ -24,6 +29,7 @@ from filmoteka.api.schemas.catalog import (
     PersonOut,
 )
 from filmoteka.domain.access.models import User
+from filmoteka.domain.access.service import hash_password
 from filmoteka.domain.catalog.models import (
     Film,
     MediaFile,
@@ -52,6 +58,40 @@ def admin_health(
 ) -> dict[str, str]:
     """Simple admin-only health check."""
     return {"status": "ok", "role": current_user.role, "username": current_user.username}
+
+
+@router.post("/users", response_model=UserOut, status_code=201)
+def admin_create_user(
+    body: AdminCreateUserRequest,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> User:
+    """Create a new user with a specified role (user or child).
+
+    Admin-only. Returns the created user.
+    """
+    if body.role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid role '{body.role}'. Allowed: {', '.join(sorted(VALID_ROLES))}",
+        )
+
+    existing = db.query(User).filter(User.username == body.username).first()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already taken",
+        )
+
+    user = User(
+        username=body.username,
+        hashed_password=hash_password(body.password),
+        role=body.role,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @router.post("/import/scan", status_code=202)

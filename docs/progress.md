@@ -4,6 +4,22 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-013 — 2026-06-10
+
+- Status: `done`
+- Summary: Реализовал создание child-аккаунта через админку. Добавлен `POST /admin/users` (admin-only), который принимает username/password/role (user или child). Схема `AdminCreateUserRequest` с валидацией роли через `VALID_ROLES`. 6 новых integration тестов (401, 403, create user, create child, duplicate, invalid role).
+- Changed files:
+  - `src/filmoteka/api/schemas/auth.py` (+ VALID_ROLES, AdminCreateUserRequest)
+  - `src/filmoteka/api/admin.py` (+ POST /admin/users; импорты hash_password, AdminCreateUserRequest, UserOut, VALID_ROLES)
+  - `tests/integration/test_admin.py` (+ TestAdminCreateUser — 6 тестов)
+  - `agent-tasklist.md` (V1-013 marked [x])
+- Checks:
+  - ruff check: `yes` (pre-existing warning only)
+  - mypy: `yes`
+  - pytest integration test_admin.py: `yes` (35/35, +6 new)
+- Next task:
+  - V1-014 — Implement age groups for child profile
+
 ## Task Report: V1-012 — 2026-06-10
 
 - Status: `done`

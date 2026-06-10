@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+VALID_ROLES = frozenset({"user", "child"})
+
 
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=2, max_length=128)
@@ -30,3 +32,9 @@ class UserOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AdminCreateUserRequest(BaseModel):
+    username: str = Field(min_length=2, max_length=128)
+    password: str = Field(min_length=4, max_length=256)
+    role: str = Field(default="user")

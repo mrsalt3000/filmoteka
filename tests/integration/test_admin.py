@@ -196,6 +196,93 @@ def _create_admin_token(
 
 
 # ---------------------------------------------------------------------------
+# Admin create user
+# ---------------------------------------------------------------------------
+
+
+class TestAdminCreateUser:
+    """POST /admin/users — create user with role."""
+
+    def test_without_token_gets_401(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        resp = client.post(
+            "/admin/users",
+            json={"username": "newbie", "password": "pass", "role": "user"},
+        )
+        assert resp.status_code == 401
+
+    def test_regular_user_gets_403(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_user(client, "regular_joe", "pass")
+        resp = client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"username": "newbie", "password": "pass", "role": "user"},
+        )
+        assert resp.status_code == 403
+
+    def test_create_user(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "admin_cu")
+        resp = client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"username": "new_user", "password": "secret", "role": "user"},
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["username"] == "new_user"
+        assert body["role"] == "user"
+        assert body["is_active"] is True
+
+    def test_create_child(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "admin_cc")
+        resp = client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"username": "kid", "password": "pass", "role": "child"},
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["username"] == "kid"
+        assert body["role"] == "child"
+
+    def test_create_user_duplicate(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "admin_dup")
+        # First creation
+        client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"username": "dup_user", "password": "pass", "role": "user"},
+        )
+        # Duplicate
+        resp = client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"username": "dup_user", "password": "pass", "role": "user"},
+        )
+        assert resp.status_code == 409
+
+    def test_create_user_invalid_role(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "admin_badrole")
+        resp = client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"username": "bad", "password": "pass", "role": "superadmin"},
+        )
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # Poster management
 # ---------------------------------------------------------------------------
 
