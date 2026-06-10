@@ -204,3 +204,155 @@ class TestWatchHistory:
         body = resp.json()
         assert body["total"] == 5
         assert len(body["items"]) == 2
+
+
+# ── Blacklist ────────────────────────────────────────────────────
+
+
+def _create_film(db_session: Session, title: str = "Test Film") -> Film:
+    f = Film(title=title, year=2020)
+    db_session.add(f)
+    db_session.commit()
+    return f
+
+
+class TestBlacklist:
+    """Blacklist endpoints — POST/DELETE /me/blacklist and GET /me/blacklist."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_without_token_gets_401(self, client: TestClient) -> None:
+        resp = client.get("/me/blacklist")
+        assert resp.status_code == 401
+
+    def test_list_empty(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "bl_empty")
+        resp = client.get("/me/blacklist", headers=self._auth(token))
+        assert resp.status_code == 200
+        assert resp.json() == {"film_ids": []}
+
+    def test_add_and_list(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "bl_addlist")
+        f = _create_film(db_session, "Blacklist Me")
+
+        resp = client.post(
+            f"/me/blacklist/{f.id}",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 204
+
+        resp = client.get("/me/blacklist", headers=self._auth(token))
+        assert resp.json() == {"film_ids": [f.id]}
+
+    def test_add_nonexistent_film_returns_404(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "bl_notfound")
+        resp = client.post(
+            "/me/blacklist/99999",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 404
+
+    def test_add_idempotent(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "bl_idem")
+        f = _create_film(db_session)
+
+        # Add twice
+        client.post(f"/me/blacklist/{f.id}", headers=self._auth(token))
+        resp2 = client.post(
+            f"/me/blacklist/{f.id}",
+            headers=self._auth(token),
+        )
+        assert resp2.status_code == 204
+
+        resp = client.get("/me/blacklist", headers=self._auth(token))
+        assert resp.json() == {"film_ids": [f.id]}
+
+    def test_remove(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "bl_remove")
+        f = _create_film(db_session)
+
+        client.post(f"/me/blacklist/{f.id}", headers=self._auth(token))
+        resp = client.delete(
+            f"/me/blacklist/{f.id}",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 204
+
+        resp = client.get("/me/blacklist", headers=self._auth(token))
+        assert resp.json() == {"film_ids": []}
+
+    def test_remove_idempotent(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "bl_remidem")
+        f = _create_film(db_session)
+
+        # Remove without adding first
+        resp = client.delete(
+            f"/me/blacklist/{f.id}",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 204
+
+        resp = client.get("/me/blacklist", headers=self._auth(token))
+        assert resp.json() == {"film_ids": []}
+
+    def test_user_isolation(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Two users have separate blacklists."""
+        t1 = _register(client, "bl_iso1")
+        t2 = _register(client, "bl_iso2")
+        f = _create_film(db_session)
+
+        client.post(f"/me/blacklist/{f.id}", headers=self._auth(t1))
+
+        r1 = client.get("/me/blacklist", headers=self._auth(t1))
+        r2 = client.get("/me/blacklist", headers=self._auth(t2))
+        assert r1.json() == {"film_ids": [f.id]}
+        assert r2.json() == {"film_ids": []}
+
+    def test_blacklist_excludes_from_catalog(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Blacklisted film does not appear in GET /films."""
+        token = _register(client, "bl_cat")
+        f = _create_film(db_session, "Hidden Film")
+
+        # Before blacklist — film is visible
+        resp = client.get("/films", headers=self._auth(token))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Hidden Film" in titles
+
+        # Add to blacklist
+        client.post(f"/me/blacklist/{f.id}", headers=self._auth(token))
+
+        # After blacklist — film is hidden
+        resp = client.get("/films", headers=self._auth(token))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Hidden Film" not in titles
+
+    def test_blacklist_does_not_affect_other_users(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Film blacklisted by user A is still visible to user B."""
+        t_a = _register(client, "bl_aff_a")
+        t_b = _register(client, "bl_aff_b")
+        f = _create_film(db_session, "Shared Film")
+
+        client.post(f"/me/blacklist/{f.id}", headers=self._auth(t_a))
+
+        resp = client.get("/films", headers=self._auth(t_b))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Shared Film" in titles

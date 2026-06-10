@@ -4,6 +4,24 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-015 — 2026-06-10
+
+- Status: `done`
+- Summary: Реализовал пользовательский blacklist фильмов. Новая таблица `user_film_blacklist` (user_id + film_id, composite PK). API: `GET /me/blacklist` (список film_id), `POST /me/blacklist/{film_id}` (добавить, 404 если фильма нет), `DELETE /me/blacklist/{film_id}` (удалить). В `GET /films` добавлен subquery-фильтр, исключающий blacklisted фильмы для аутентифицированного пользователя. 10 новых integration тестов.
+- Changed files:
+  - `src/filmoteka/domain/access/models.py` (+ UserFilmBlacklist; +ForeignKey, +relationship import)
+  - `migrations/versions/55d833302f6b_add_user_film_blacklist_table.py` (new)
+  - `src/filmoteka/api/users.py` (+ 3 blacklist endpoints; +BlacklistResponse schema; импорты)
+  - `src/filmoteka/api/catalog.py` (+ blacklist filter; +UserFilmBlacklist import)
+  - `tests/integration/test_users.py` (+ TestBlacklist — 10 тестов)
+  - `agent-tasklist.md` (V1-015 marked [x])
+- Checks:
+  - ruff check: `yes` (pre-existing warning only)
+  - mypy: `yes` (57 source files, clean)
+  - pytest integration test_users.py + test_catalog.py: `yes` (66/66, +10 new)
+- Next task:
+  - V1-016 — Implement incognito mode
+
 ## Task Report: V1-014 — 2026-06-10
 
 - Status: `done`

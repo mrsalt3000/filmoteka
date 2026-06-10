@@ -18,7 +18,7 @@ from filmoteka.api.schemas.catalog import (
     MediaFileOut,
     PersonOut,
 )
-from filmoteka.domain.access.models import User
+from filmoteka.domain.access.models import User, UserFilmBlacklist
 from filmoteka.domain.catalog.models import (
     Film,
     Genre,
@@ -195,6 +195,16 @@ def list_films(
                     Film.age_rating.in_(allowed_ratings),
                 )
             )
+
+    # ── Blacklist: exclude films the user has blacklisted ────────
+
+    if current_user is not None:
+        blacklisted_ids = (
+            db.query(UserFilmBlacklist.film_id)
+            .filter(UserFilmBlacklist.user_id == current_user.id)
+            .scalar_subquery()
+        )
+        query = query.filter(Film.id.notin_(blacklisted_ids))
 
     total = query.count()
     items = query.order_by(Film.created_at.desc()).offset(skip).limit(limit).all()

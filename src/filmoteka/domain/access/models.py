@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from filmoteka.infrastructure.database import Base
@@ -27,3 +27,21 @@ class User(Base):
 
     def __repr__(self) -> str:
         return f"<User id={self.id} username={self.username!r}>"
+
+
+class UserFilmBlacklist(Base):
+    """Many-to-many relationship: users blacklisting films."""
+
+    __tablename__ = "user_film_blacklist"
+
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    film_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("films.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<UserFilmBlacklist user_id={self.user_id} film_id={self.film_id}>"
+        )
