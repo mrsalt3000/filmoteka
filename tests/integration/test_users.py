@@ -452,3 +452,93 @@ class TestIncognito:
             headers=self._auth(token),
         )
         assert resp.json()["total"] == 1
+
+
+# ── Clear history ────────────────────────────────────────────────
+
+
+class TestClearHistory:
+    """DELETE /me/watch/history and /me/watch/history/{film_id}."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_clear_all(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "clr_all")
+        media = _make_incognito_media(db_session)
+        client.post(f"/media/{media.id}/watch/start", headers=self._auth(token))
+
+        resp = client.delete(
+            "/me/watch/history",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 204
+
+        hist = client.get("/me/watch/history", headers=self._auth(token))
+        assert hist.json()["total"] == 0
+
+    def test_clear_all_idempotent(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "clr_idem")
+        resp = client.delete(
+            "/me/watch/history",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 204
+
+    def test_clear_all_requires_auth(
+        self, client: TestClient
+    ) -> None:
+        resp = client.delete("/me/watch/history")
+        assert resp.status_code == 401
+
+    def test_clear_by_film(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "clr_film")
+
+        # Create two films with media
+        f1 = Film(title="Film One", year=2020)
+        f2 = Film(title="Film Two", year=2021)
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        m1 = MediaFile(edition_id=ed1.id, file_path="/a/one.mp4")
+        m2 = MediaFile(edition_id=ed2.id, file_path="/b/two.mp4")
+        db_session.add_all([m1, m2])
+        db_session.commit()
+
+        # Watch both
+        client.post(f"/media/{m1.id}/watch/start", headers=self._auth(token))
+        client.post(f"/media/{m2.id}/watch/start", headers=self._auth(token))
+
+        hist = client.get("/me/watch/history", headers=self._auth(token))
+        assert hist.json()["total"] == 2
+
+        # Clear only film one
+        resp = client.delete(
+            f"/me/watch/history/{f1.id}",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 204
+
+        hist = client.get("/me/watch/history", headers=self._auth(token))
+        assert hist.json()["total"] == 1
+
+    def test_clear_by_film_nonexistent(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _register(client, "clr_nf")
+        resp = client.delete(
+            "/me/watch/history/99999",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 204  # idempotent

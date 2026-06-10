@@ -106,6 +106,44 @@ def set_incognito(
     return UserOut.model_validate(current_user)
 
 
+@router.delete("/watch/history", status_code=204)
+def clear_watch_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> None:
+    """Delete all non-incognito watch events for the current user."""
+    db.query(WatchEvent).filter(
+        WatchEvent.user_id == current_user.id,
+        WatchEvent.incognito == sa_false(),
+    ).delete(synchronize_session=False)
+    db.commit()
+
+
+@router.delete("/watch/history/{film_id}", status_code=204)
+def clear_watch_history_for_film(
+    film_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> None:
+    """Delete watch events for a specific film for the current user.
+
+    Finds all ``MediaFile`` IDs belonging to the film (via
+    ``MovieEdition``) and deletes matching non-incognito watch events.
+    """
+    media_ids = (
+        db.query(MediaFile.id)
+        .join(MovieEdition)
+        .filter(MovieEdition.film_id == film_id)
+        .scalar_subquery()
+    )
+    db.query(WatchEvent).filter(
+        WatchEvent.media_file_id.in_(media_ids),
+        WatchEvent.user_id == current_user.id,
+        WatchEvent.incognito == sa_false(),
+    ).delete(synchronize_session=False)
+    db.commit()
+
+
 @router.get("/watch/history", response_model=WatchHistoryResponse)
 def watch_history(
     skip: int = Query(0, ge=0),
