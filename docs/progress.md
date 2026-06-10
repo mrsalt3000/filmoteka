@@ -4,6 +4,21 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-017 — 2026-06-10
+
+- Status: `done`
+- Summary: Реализовал очистку истории просмотров. `DELETE /me/watch/history` удаляет все WatchEvent пользователя (кроме incognito). `DELETE /me/watch/history/{film_id}` удаляет события для конкретного фильма через subquery MediaFile → MovieEdition. 5 новых integration тестов.
+- Changed files:
+  - `src/filmoteka/api/users.py` (+ 2 clear history endpoints)
+  - `tests/integration/test_users.py` (+ TestClearHistory — 5 тестов)
+  - `agent-tasklist.md` (V1-017 marked [x])
+- Checks:
+  - ruff check: `yes` (src + tests clean)
+  - mypy: `yes`
+  - pytest integration test_users.py: `yes` (26/26, +5 new)
+- Next task:
+  - V1-018 — Write tests for child restrictions, blacklist, incognito, clear history
+
 ## Task Report: V1-016 — 2026-06-10
 
 - Status: `done`
