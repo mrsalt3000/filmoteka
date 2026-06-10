@@ -1108,3 +1108,70 @@ class TestAdminConflicts:
             headers=self._auth(token),
         )
         assert resp.status_code == 404
+
+    def test_conflict_list_shows_duplicates(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Film with 2 MediaFiles in same edition appears in conflicts."""
+        token = _create_admin_token(client, db_session, "cf_dup")
+        f = Film(title="Dup Film", year=2020, needs_review=True)
+        db_session.add(f)
+        db_session.flush()
+        ed = MovieEdition(film_id=f.id)
+        db_session.add(ed)
+        db_session.flush()
+        db_session.add_all([
+            MediaFile(edition_id=ed.id, file_path="/tmp/cf_a.mkv"),
+            MediaFile(edition_id=ed.id, file_path="/tmp/cf_b.mkv"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/admin/conflicts", headers=self._auth(token))
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] >= 1
+        titles = [i["title"] for i in body["items"]]
+        assert "Dup Film" in titles
+
+    def test_resolve_removes_from_list(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """After resolve, film no longer appears in conflicts list."""
+        token = _create_admin_token(client, db_session, "cf_rem")
+        f = Film(title="Remove Me", year=2020, needs_review=True)
+        db_session.add(f)
+        db_session.flush()
+        ed = MovieEdition(film_id=f.id)
+        db_session.add(ed)
+        db_session.flush()
+        db_session.add(MediaFile(edition_id=ed.id, file_path="/tmp/cf_rem.mkv"))
+        db_session.commit()
+
+        client.patch(
+            f"/admin/conflicts/{f.id}/resolve",
+            headers=self._auth(token),
+        )
+
+        resp = client.get("/admin/conflicts", headers=self._auth(token))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Remove Me" not in titles
+
+    def test_regular_user_cannot_resolve(
+        self, client: TestClient
+    ) -> None:
+        token = _create_user(client, "cf_nor", "pass")
+        resp = client.patch(
+            "/admin/conflicts/1/resolve",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403
+
+    def test_regular_user_cannot_delete_media(
+        self, client: TestClient
+    ) -> None:
+        token = _create_user(client, "cf_nodel", "pass")
+        resp = client.delete(
+            "/admin/media/1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403
