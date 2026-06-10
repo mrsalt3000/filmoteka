@@ -475,6 +475,100 @@ class TestListFilms:
         assert body["total"] == 1
         assert body["items"][0]["title"] == "HD HEVC"
 
+    # ── Language filters (audio_lang, subtitle_lang) ──────────────
+
+    def test_filter_audio_lang(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Filter by audio language code."""
+        f1 = Film(title="Russian Audio", year=2020)
+        f2 = Film(title="English Audio", year=2021)
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/rus.mp4", audio_codec="rus"),
+            MediaFile(edition_id=ed2.id, file_path="/b/eng.mp4", audio_codec="eng"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?audio_lang=rus")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Russian Audio"
+
+    def test_filter_subtitle_lang(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Filter by subtitle language code."""
+        f1 = Film(title="English Subs", year=2020)
+        f2 = Film(title="No Subs", year=2021)
+        db_session.add_all([f1, f2])
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f1.id)
+        ed2 = MovieEdition(film_id=f2.id)
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/a/en_subs.mkv",
+                      subtitle_languages="eng,rus"),
+            MediaFile(edition_id=ed2.id, file_path="/b/no_subs.mkv",
+                      subtitle_languages=None),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films?subtitle_lang=eng")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "English Subs"
+
+    def test_filter_audio_lang_no_results(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Audio language filter returns empty when nothing matches."""
+        db_session.add(Film(title="Only English", year=2020))
+        db_session.flush()
+        ed = MovieEdition(film_id=db_session.query(Film).one().id)
+        db_session.add(ed)
+        db_session.flush()
+        db_session.add(MediaFile(edition_id=ed.id, file_path="/a/en.mp4",
+                                 audio_codec="eng"))
+        db_session.commit()
+
+        resp = client.get("/films?audio_lang=fre")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 0
+
+    def test_filter_subtitle_lang_partial(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Subtitle language filter works with partial match."""
+        f1 = Film(title="Multi Sub", year=2020)
+        db_session.add(f1)
+        db_session.flush()
+        ed = MovieEdition(film_id=f1.id)
+        db_session.add(ed)
+        db_session.flush()
+        db_session.add(MediaFile(edition_id=ed.id, file_path="/a/multi.mkv",
+                                 subtitle_languages="eng,fre,ger,spa"))
+        db_session.commit()
+
+        resp = client.get("/films?subtitle_lang=ger")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Multi Sub"
+
     # ── Full-text search: description, genres, persons ─────────────
 
     def test_search_by_description(

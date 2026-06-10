@@ -68,11 +68,13 @@ def list_films(
     codec: str | None = Query(None, min_length=1),
     audio_codec: str | None = Query(None, min_length=1),
     has_subtitles: bool | None = Query(None),
+    audio_lang: str | None = Query(None, min_length=1),
+    subtitle_lang: str | None = Query(None, min_length=1),
     db: Session = Depends(get_db),
 ) -> FilmListResponse:
     """Return a paginated list of films, optionally filtered by year range,
     genre slug, exact year, free-text search, or tech attributes (resolution,
-    video codec, audio codec, subtitle presence).
+    video codec, audio codec, subtitle presence, audio/subtitle language).
 
     Tech attributes are matched against ``MediaFile`` records reachable
     through ``Film → MovieEdition → MediaFile``.
@@ -135,6 +137,24 @@ def list_films(
                 db.query(MovieEdition.film_id)
                 .join(MediaFile)
                 .filter(MediaFile.subtitle_languages.isnot(None))
+            )
+        )
+
+    if audio_lang is not None:
+        query = query.filter(
+            Film.id.in_(
+                db.query(MovieEdition.film_id)
+                .join(MediaFile)
+                .filter(MediaFile.audio_codec.ilike(f"%{audio_lang}%"))
+            )
+        )
+
+    if subtitle_lang is not None:
+        query = query.filter(
+            Film.id.in_(
+                db.query(MovieEdition.film_id)
+                .join(MediaFile)
+                .filter(MediaFile.subtitle_languages.ilike(f"%{subtitle_lang}%"))
             )
         )
 

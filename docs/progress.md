@@ -4,6 +4,21 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-011 — 2026-06-10
+
+- Status: `done`
+- Summary: Реализовал фильтры по языку аудио и субтитров на `GET /films`. Добавлены query-параметры `audio_lang` (ilike по `MediaFile.audio_codec`) и `subtitle_lang` (ilike по `MediaFile.subtitle_languages`). Оба через subquery Film → MovieEdition → MediaFile, аналогично V1-010. 4 новых integration теста.
+- Changed files:
+  - `src/filmoteka/api/catalog.py` (+ audio_lang, subtitle_lang params; +2 subquery filters)
+  - `tests/integration/test_catalog.py` (+4 tests: audio_lang, subtitle_lang, no-results, partial match)
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff check: `yes` (pre-existing warning only)
+  - mypy: `yes` (57 source files, clean)
+  - pytest integration test_catalog.py: `yes` (41/41, +4 new)
+- Next task:
+  - V1-012 — Написать integration тесты поиска и фильтров (оставшиеся сценарии)
+
 ## Task Report: V1-039 — 2026-06-10
 
 - Status: `done`
