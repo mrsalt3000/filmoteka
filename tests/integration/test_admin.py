@@ -998,3 +998,31 @@ class TestAdminWatchStats:
         # admin has no watch events, but should appear with 0
         users = [i["username"] for i in body["items"]]
         assert "ws_summary" in users
+
+    def test_download_suggestions_no_key(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Without OMDB_API_KEY, returns empty."""
+        token = _create_admin_token(client, db_session, "dl_nokey")
+        resp = client.get(
+            "/admin/recommendations/download",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"items": [], "total": 0}
+
+    def test_download_suggestions_requires_auth(
+        self, client: TestClient
+    ) -> None:
+        resp = client.get("/admin/recommendations/download")
+        assert resp.status_code == 401
+
+    def test_download_suggestions_regular_user_gets_403(
+        self, client: TestClient
+    ) -> None:
+        token = _create_user(client, "dl_user", "pass")
+        resp = client.get(
+            "/admin/recommendations/download",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403

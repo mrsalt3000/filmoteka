@@ -31,7 +31,11 @@ from filmoteka.api.schemas.catalog import (
     MediaFileOut,
     PersonOut,
 )
-from filmoteka.api.schemas.jobs import JobListResponse, JobStatusResponse
+from filmoteka.api.schemas.jobs import (
+    DownloadSuggestionsResponse,
+    JobListResponse,
+    JobStatusResponse,
+)
 from filmoteka.api.schemas.watch import (
     AdminWatchStatItem,
     AdminWatchStatsResponse,
@@ -42,6 +46,7 @@ from filmoteka.domain.access.models import User
 from filmoteka.domain.access.service import hash_password
 from filmoteka.domain.catalog.models import (
     Film,
+    Genre,
     MediaFile,
     MovieEdition,
     Person,
@@ -226,6 +231,79 @@ def admin_watch_stats_summary(
     ]
 
     return {"items": items, "total": len(items)}
+
+
+# ---------------------------------------------------------------------------
+# Download suggestions
+# ---------------------------------------------------------------------------
+
+
+@router.get("/recommendations/download", response_model=DownloadSuggestionsResponse)
+def admin_download_suggestions(
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Suggest films to download based on library genres.
+
+    For the top 3 genres in the library, searches OMDB for notable films
+    and filters out those already present. Requires ``OMDB_API_KEY``.
+    """
+    if not settings.omdb_api_key:
+        return {"items": [], "total": 0}
+
+    # 1. Find top 3 genres by film count
+    top_genres = (
+        db.query(Genre.name)
+        .join(Film.genres)
+        .group_by(Genre.name)
+        .order_by(sa_func.count(Genre.id).desc())
+        .limit(3)
+        .all()
+    )
+    genre_names = [g[0] for g in top_genres]
+
+    if not genre_names:
+        return {"items": [], "total": 0}
+
+    # 2. Search OMDB for each genre
+    import json as _json
+    from urllib.parse import urlencode
+    from urllib.request import Request, urlopen
+
+    existing_titles = {f.lower() for f, in db.query(Film.title).all()}
+    suggestions: list[dict[str, object]] = []
+    seen_titles: set[str] = set()
+
+    for genre in genre_names:
+        try:
+            params = {"apikey": settings.omdb_api_key, "s": genre, "type": "movie"}
+            url = f"http://www.omdbapi.com/?{urlencode(params)}"
+            req = Request(url, headers={"Accept": "application/json"})
+            resp = urlopen(req, timeout=10)
+            if resp.status != 200:
+                continue
+            body: dict = _json.loads(resp.read().decode("utf-8"))
+            if body.get("Response") != "True":
+                continue
+            results: list[dict] = body.get("Search", [])
+            for r in results:
+                title = r.get("Title", "")
+                title_lower = title.lower()
+                year = r.get("Year", "")
+                if title_lower in existing_titles or title_lower in seen_titles:
+                    continue
+                seen_titles.add(title_lower)
+                suggestions.append({
+                    "title": title,
+                    "year": year,
+                    "poster": r.get("Poster") if r.get("Poster") != "N/A" else None,
+                    "genre": genre,
+                    "reason": f"Popular in {genre}",
+                })
+        except Exception:
+            continue
+
+    return {"items": suggestions[:30], "total": len(suggestions[:30])}
 
 
 @router.post("/users", response_model=UserOut, status_code=201)

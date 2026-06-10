@@ -21,3 +21,16 @@ class JobStatusResponse(BaseModel):
 class JobListResponse(BaseModel):
     items: list[JobStatusResponse]
     total: int
+
+
+class DownloadSuggestionItem(BaseModel):
+    title: str
+    year: str
+    poster: str | None = None
+    genre: str
+    reason: str = ""
+
+
+class DownloadSuggestionsResponse(BaseModel):
+    items: list[DownloadSuggestionItem]
+    total: int
