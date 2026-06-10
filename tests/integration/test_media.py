@@ -765,6 +765,48 @@ class TestWatchStatesByFilm:
 
         assert body["states"][str(film_c.id)]["has_state"] is False
 
+    def test_incognito_excluded_from_states_by_film(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Incognito watch events are excluded from states-by-film."""
+        token = _register_user(client, "inc_sbf", "pass")
+
+        film = Film(title="Incognito SBF", year=2020)
+        db_session.add(film)
+        db_session.flush()
+        edition = MovieEdition(film_id=film.id)
+        db_session.add(edition)
+        db_session.flush()
+        media = MediaFile(
+            edition_id=edition.id, file_path="/tmp/inc_sbf.mkv",
+            duration_secs=100.0,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        # Enable incognito
+        client.put(
+            "/me/incognito",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"incognito": True},
+        )
+
+        # Start watch (creates incognito event)
+        client.post(
+            f"/media/{media.id}/watch/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # States-by-film should not show it
+        resp = client.post(
+            "/media/watch/states-by-film",
+            json={"film_ids": [film.id]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        state = resp.json()["states"][str(film.id)]
+        assert state["has_state"] is False
+
 
 def _register_user(client: TestClient, username: str, password: str) -> str:
     """Register a user and return token."""

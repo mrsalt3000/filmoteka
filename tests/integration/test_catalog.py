@@ -796,6 +796,88 @@ class TestListFilms:
         body = resp.json()
         assert body["total"] == 1
 
+    def test_age_rating_16plus_filtered(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Child with age_group=7_12 cannot see 16+ or 18+ films."""
+        admin_token = self._create_user(client, "admin_16f")
+        self._make_admin(db_session, "admin_16f")
+
+        create = client.post(
+            "/admin/users",
+            headers=self._auth_header(admin_token),
+            json={"username": "kid_16f", "password": "pass", "role": "child", "age_group": "7_12"},
+        )
+        assert create.status_code == 201
+        login = client.post("/auth/login", json={"username": "kid_16f", "password": "pass"})
+        token = login.json()["access_token"]
+
+        db_session.add_all([
+            Film(title="Safe", year=2020, age_rating="6+"),
+            Film(title="Risky", year=2021, age_rating="16+"),
+            Film(title="Adult", year=2022, age_rating="18+"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films", headers=self._auth_header(token))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Safe" in titles
+        assert "Risky" not in titles
+        assert "Adult" not in titles
+
+    def test_age_rating_16plus_allowed_for_older(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Child with age_group=13_17 can see 16+ but not 18+."""
+        admin_token = self._create_user(client, "admin_16o")
+        self._make_admin(db_session, "admin_16o")
+
+        create = client.post(
+            "/admin/users",
+            headers=self._auth_header(admin_token),
+            json={"username": "kid_16o", "password": "pass", "role": "child", "age_group": "13_17"},
+        )
+        assert create.status_code == 201
+        login = client.post("/auth/login", json={"username": "kid_16o", "password": "pass"})
+        token = login.json()["access_token"]
+
+        db_session.add_all([
+            Film(title="Teen", year=2020, age_rating="16+"),
+            Film(title="Adult", year=2021, age_rating="18+"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films", headers=self._auth_header(token))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Teen" in titles
+        assert "Adult" not in titles
+
+    def test_film_without_age_rating_visible_to_child(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Films with no age_rating are visible to children."""
+        admin_token = self._create_user(client, "admin_norating")
+        self._make_admin(db_session, "admin_norating")
+
+        create = client.post(
+            "/admin/users",
+            headers=self._auth_header(admin_token),
+            json={
+                "username": "kid_norating", "password": "pass",
+                "role": "child", "age_group": "0_6",
+            },
+        )
+        assert create.status_code == 201
+        login = client.post("/auth/login", json={"username": "kid_norating", "password": "pass"})
+        token = login.json()["access_token"]
+
+        db_session.add(Film(title="Unrated", year=2020))  # age_rating=None
+        db_session.commit()
+
+        resp = client.get("/films", headers=self._auth_header(token))
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Unrated" in titles
+
     # ── Full-text search: description, genres, persons ─────────────
 
     def test_search_by_description(

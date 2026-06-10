@@ -94,6 +94,24 @@ class TestAdminHealth:
         assert resp.status_code == 403
         assert "Insufficient permissions" in resp.json()["detail"]
 
+    def test_child_user_gets_403(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Child user cannot access admin endpoints."""
+        token = _create_user(client, "child_admin_test", "pass")
+        user_id = _get_user_id(db_session, "child_admin_test")
+        db_session.execute(
+            text("UPDATE users SET role = 'child' WHERE id = :uid"),
+            {"uid": user_id},
+        )
+        db_session.commit()
+
+        resp = client.get(
+            "/admin/health",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403
+
     def test_without_token_gets_401(
         self, client: TestClient
     ) -> None:

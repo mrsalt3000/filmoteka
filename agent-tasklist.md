@@ -515,7 +515,7 @@
   Проверка результата:
   1. Можно очистить историю полностью или по фильму.
 
-- [ ] **V1-018** Написать тесты на child restrictions, blacklist, incognito, clear-history.
+- [x] **V1-018** Написать тесты на child restrictions, blacklist, incognito, clear-history.
   
   Проверка результата:
   1. Все пользовательские ограничения проверяются тестами.
