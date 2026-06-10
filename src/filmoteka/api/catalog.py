@@ -87,6 +87,7 @@ def list_films(
     has_subtitles: bool | None = Query(None),
     audio_lang: str | None = Query(None, min_length=1),
     subtitle_lang: str | None = Query(None, min_length=1),
+    include_family: bool = Query(False),
     current_user: User | None = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ) -> FilmListResponse:
@@ -206,6 +207,11 @@ def list_films(
         )
         query = query.filter(Film.id.notin_(blacklisted_ids))
 
+    # ── Family video: exclude by default ─────────────────────────
+
+    if not include_family:
+        query = query.filter(Film.is_family_video == False)  # noqa: E712
+
     total = query.count()
     items = query.order_by(Film.created_at.desc()).offset(skip).limit(limit).all()
 
@@ -256,6 +262,7 @@ def get_film(
         year=film.year,
         description=film.description,
         age_rating=film.age_rating,
+        is_family_video=film.is_family_video,
         needs_review=film.needs_review,
         created_at=film.created_at,
         genres=[GenreOut.model_validate(g) for g in film.genres],

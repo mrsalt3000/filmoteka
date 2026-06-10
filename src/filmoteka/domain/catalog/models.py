@@ -22,6 +22,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -80,6 +81,9 @@ class Film(Base):
     metadata_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     metadata_enriched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_family_video: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text('false'), nullable=False
+    )
     age_rating: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(

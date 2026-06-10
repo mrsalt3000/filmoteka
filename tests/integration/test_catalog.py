@@ -878,7 +878,68 @@ class TestListFilms:
         titles = [i["title"] for i in resp.json()["items"]]
         assert "Unrated" in titles
 
-    # ── Full-text search: description, genres, persons ─────────────
+    # ── Family video ──────────────────────────────────────────────
+
+    def test_family_video_excluded_by_default(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Family video is excluded from GET /films by default."""
+        db_session.add_all([
+            Film(title="Normal Movie", year=2020),
+            Film(title="Family Clip", year=2021, is_family_video=True),
+        ])
+        db_session.commit()
+
+        resp = client.get("/films")
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Normal Movie" in titles
+        assert "Family Clip" not in titles
+
+    def test_family_video_included_with_flag(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Family video appears when include_family=true."""
+        db_session.add(Film(title="Family Clip", year=2021, is_family_video=True))
+        db_session.commit()
+
+        resp = client.get("/films?include_family=true")
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Family Clip" in titles
+
+    def test_family_video_flag_in_detail(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Film detail exposes is_family_video flag."""
+        f = Film(title="Family", year=2020, is_family_video=True)
+        db_session.add(f)
+        db_session.commit()
+
+        resp = client.get(f"/films/{f.id}")
+        assert resp.status_code == 200
+        assert resp.json()["is_family_video"] is True
+
+    def test_admin_can_set_family_video(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Admin can mark a film as family video via PUT /admin/films/{id}."""
+        f = Film(title="Toggleable", year=2020)
+        db_session.add(f)
+        db_session.commit()
+
+        admin_token = self._create_user(client, "admin_fam")
+        self._make_admin(db_session, "admin_fam")
+
+        resp = client.put(
+            f"/admin/films/{f.id}",
+            headers=self._auth_header(admin_token),
+            json={"is_family_video": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["is_family_video"] is True
+
+        # Also check detail reflects it
+        detail = client.get(f"/films/{f.id}")
+        assert detail.json()["is_family_video"] is True
 
     def test_search_by_description(
         self, client: TestClient, db_session: Session

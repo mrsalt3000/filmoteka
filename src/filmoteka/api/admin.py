@@ -396,6 +396,9 @@ def update_film(
     if body.age_rating is not None and body.age_rating != film.age_rating:
         film.age_rating = body.age_rating
         changed = True
+    if body.is_family_video is not None and body.is_family_video != film.is_family_video:
+        film.is_family_video = body.is_family_video
+        changed = True
 
     if changed:
         film.needs_review = False
@@ -427,6 +430,7 @@ def update_film(
         description=film.description,
         poster_url=film.poster_url,
         age_rating=film.age_rating,
+        is_family_video=film.is_family_video,
         needs_review=film.needs_review,
         created_at=film.created_at,
         genres=[GenreOut.model_validate(g) for g in film.genres],
