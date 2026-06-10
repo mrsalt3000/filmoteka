@@ -99,3 +99,31 @@ class FilmDetailOut(BaseModel):
     editions: list[EditionOut] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ConflictMediaItem(BaseModel):
+    media_id: int
+    file_path: str
+    file_size: int | None = None
+    codec: str | None = None
+    audio_codec: str | None = None
+    height: int | None = None
+
+
+class ConflictEditionItem(BaseModel):
+    edition_id: int
+    quality: str | None = None
+    language: str | None = None
+    media_files: list[ConflictMediaItem]
+
+
+class ConflictItem(BaseModel):
+    film_id: int
+    title: str
+    year: int | None = None
+    editions: list[ConflictEditionItem]
+
+
+class ConflictListResponse(BaseModel):
+    items: list[ConflictItem]
+    total: int

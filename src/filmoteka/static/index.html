@@ -772,10 +772,57 @@ async function renderAdmin(el) {
         <p>Total unique films started per user (incognito excluded).</p>
         <div id="user-summary-list"><div class="spinner">Loading…</div></div>
       </div>
+
+      <div class="poster-section">
+        <h3>⚠️ Conflicts</h3>
+        <p>Films with potential duplicates (needs review).</p>
+        <div id="conflicts-list"><div class="spinner">Loading…</div></div>
+      </div>
     </div>`;
   loadJobs();
   loadWatchStats();
   loadUserSummary();
+  loadConflicts();
+}
+
+async function loadConflicts() {
+  const el = document.getElementById('conflicts-list');
+  if (!el) return;
+  try {
+    const data = await apiAuth('/admin/conflicts');
+    if (data.items.length === 0) {
+      el.innerHTML = '<p style="color:var(--text2)">No conflicts.</p>';
+      return;
+    }
+    let html = '<table class="jobs-table"><thead><tr><th>Film</th><th>Year</th><th>Files</th><th></th></tr></thead><tbody>';
+    data.items.forEach(f => {
+      const fileCount = f.editions.reduce((s, e) => s + e.media_files.length, 0);
+      html += `<tr>
+        <td>${esc(f.title)}</td>
+        <td>${f.year ?? '—'}</td>
+        <td>${fileCount}</td>
+        <td><button class="poster-btn" style="padding:.2rem .5rem;font-size:.8rem" onclick="resolveConflict(${f.film_id})">✓ Resolve</button></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+
+async function resolveConflict(filmId) {
+  if (!confirm(`Mark film as resolved?`)) return;
+  try {
+    const token = getToken();
+    await fetch(`/admin/conflicts/${filmId}/resolve`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    loadConflicts();
+  } catch (e) {
+    alert(`Failed: ${e.message}`);
+  }
 }
 
 async function loadUserSummary() {

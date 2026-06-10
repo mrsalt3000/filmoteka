@@ -1026,3 +1026,85 @@ class TestAdminWatchStats:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 403
+
+
+# ── Conflict resolution ─────────────────────────────────────────
+
+
+class TestAdminConflicts:
+    """Conflict detection and resolution endpoints."""
+
+    def _auth(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_list_conflicts_empty(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "cf_empty")
+        resp = client.get("/admin/conflicts", headers=self._auth(token))
+        assert resp.status_code == 200
+        assert resp.json() == {"items": [], "total": 0}
+
+    def test_list_conflicts_requires_auth(
+        self, client: TestClient
+    ) -> None:
+        resp = client.get("/admin/conflicts")
+        assert resp.status_code == 401
+
+    def test_resolve_conflict(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "cf_resolve")
+        f = Film(title="Conflict", year=2020, needs_review=True)
+        db_session.add(f)
+        db_session.commit()
+
+        resp = client.patch(
+            f"/admin/conflicts/{f.id}/resolve",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 204
+
+        db_session.refresh(f)
+        assert f.needs_review is False
+
+    def test_resolve_nonexistent(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "cf_nf")
+        resp = client.patch(
+            "/admin/conflicts/99999/resolve",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 404
+
+    def test_delete_media(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "cf_del")
+        f = Film(title="Del Me", year=2020)
+        db_session.add(f)
+        db_session.flush()
+        ed = MovieEdition(film_id=f.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/cf_del.mkv")
+        db_session.add(m)
+        db_session.commit()
+
+        resp = client.delete(
+            f"/admin/media/{m.id}",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 204
+        assert db_session.get(MediaFile, m.id) is None
+
+    def test_delete_media_nonexistent(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        token = _create_admin_token(client, db_session, "cf_delnf")
+        resp = client.delete(
+            "/admin/media/99999",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 404

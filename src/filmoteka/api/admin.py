@@ -24,6 +24,10 @@ from filmoteka.api.schemas.auth import (
     UserOut,
 )
 from filmoteka.api.schemas.catalog import (
+    ConflictEditionItem,
+    ConflictItem,
+    ConflictListResponse,
+    ConflictMediaItem,
     EditionOut,
     FilmDetailOut,
     FilmUpdateSchema,
@@ -405,6 +409,79 @@ def _run_import_job(config: LibraryConfig) -> dict | None:
         return report.to_dict()
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Conflict resolution
+# ---------------------------------------------------------------------------
+
+
+@router.get("/conflicts", response_model=ConflictListResponse)
+def admin_list_conflicts(
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """List films with potential duplicates."""
+    films = (
+        db.query(Film)
+        .options(joinedload(Film.editions).joinedload(MovieEdition.media_files))
+        .filter(Film.needs_review == True)  # noqa: E712
+        .all()
+    )
+
+    items: list[dict] = []
+    for film in films:
+        editions = []
+        for ed in film.editions:
+            media_list = [
+                ConflictMediaItem(
+                    media_id=m.id, file_path=m.file_path,
+                    file_size=m.file_size, codec=m.codec,
+                    audio_codec=m.audio_codec, height=m.height,
+                )
+                for m in ed.media_files
+            ]
+            if not media_list:
+                continue
+            editions.append(ConflictEditionItem(
+                edition_id=ed.id, quality=ed.quality,
+                language=ed.language, media_files=media_list,
+            ))
+        if editions:
+            items.append(ConflictItem(
+                film_id=film.id, title=film.title,
+                year=film.year, editions=editions,
+            ))
+
+    return {"items": items, "total": len(items)}
+
+
+@router.patch("/conflicts/{film_id}/resolve", status_code=204)
+def admin_resolve_conflict(
+    film_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> None:
+    """Mark a film as resolved (sets needs_review=False)."""
+    film = db.get(Film, film_id)
+    if film is None:
+        raise HTTPException(status_code=404, detail="Film not found")
+    film.needs_review = False
+    db.commit()
+
+
+@router.delete("/media/{media_id}", status_code=204)
+def admin_delete_media(
+    media_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> None:
+    """Delete a specific MediaFile record (admin-only)."""
+    media = db.get(MediaFile, media_id)
+    if media is None:
+        raise HTTPException(status_code=404, detail="MediaFile not found")
+    db.delete(media)
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
