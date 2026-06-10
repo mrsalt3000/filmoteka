@@ -4,7 +4,32 @@
 
 > Этот файл ведёт агент.
 
-## Task Report: BUGFIX-004 — 2026-06-09
+## Task Report: V1-039 — 2026-06-10
+
+- Status: `done`
+- Summary: Заменил TMDb на OMDB как единственный источник постеров. Полностью удалена интеграция с TMDb (постеры, Kinopoisk ссылки). Добавлена `omdb_search_poster()` с двухуровневым поиском: exact match через `?t=title&y=year` → fuzzy fallback через `?s=title&y=year`. `TMDB_API_KEY` → `OMDB_API_KEY` в settings, .env, docker-compose. Удалён `Film.kinopoisk_url` из модели, схем API и фронтенда. Удалены TMDb/Kinopoisk unit-тесты (14), добавлены OMDB unit-тесты (10). Обновлены интеграционные тесты.
+- Changed files:
+  - `agent-tasklist.md` (+ V1-039 task)
+  - `src/filmoteka/infrastructure/settings.py` (tmdb_api_key → omdb_api_key; extra='ignore')
+  - `src/filmoteka/infrastructure/metadata_providers.py` (полностью переписан — OMDB вместо TMDb)
+  - `src/filmoteka/domain/importing/pipeline.py` (OMDB poster, удалён Kinopoisk)
+  - `src/filmoteka/api/admin.py` (OMDB poster, удалён Kinopoisk из FilmDetailOut)
+  - `src/filmoteka/domain/catalog/models.py` (удалён kinopoisk_url)
+  - `src/filmoteka/api/schemas/catalog.py` (удалён kinopoisk_url из FilmOut, FilmDetailOut)
+  - `src/filmoteka/static/index.html` (удалён Kinopoisk link, TMDb→OMDB в тексте)
+  - `.env.example` (TMDB_API_KEY → OMDB_API_KEY)
+  - `docker-compose.yml` (TMDB_API_KEY → OMDB_API_KEY ×2)
+  - `tests/unit/test_metadata_providers.py` (полностью переписан — 10 OMDB тестов)
+  - `tests/integration/test_importing.py` (моки OMDB, удалены Kinopoisk)
+  - `tests/integration/test_admin.py` (моки OMDB, OMDB_API_KEY)
+  - `tests/integration/test_catalog.py` (удалены kinopoisk_url assertions)
+- Checks:
+  - ruff check: `yes` (только предсуществующее предупреждение в test_admin.py:681)
+  - mypy: `yes` (57 source files, clean)
+  - pytest unit: `yes` (144/144, +10 OMDB, −14 TMDb/Kinopoisk)
+  - pytest integration: `yes` (144/144, excluding pre-existing migration test failure)
+- Next task:
+  - V1-011 — Implement language filter for audio and subtitles
 
 - Status: `done`
 - Summary: Починил исходящие соединения из Docker-контейнера к TMDb. Добавил `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` в `environment:` обоих сервисов (`docker-compose.yml`). Если в `.env` указан proxy — Docker Compose подставит его в контейнер, `urllib` подхватит автоматически. В `metadata_providers.py` разделил обработку `URLError` — теперь в лог пишется понятное сообщение с рекомендацией проверить proxy/файрвол.

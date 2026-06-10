@@ -474,20 +474,16 @@ class TestPipelineBridge:
         assert media_files[0].duration_secs is not None
         assert media_files[0].width is not None
 
-        # Poster enrichment gracefully skipped (no TMDB_API_KEY in tests)
+        # Poster enrichment gracefully skipped (no OMDB_API_KEY in tests by default)
         assert films[0].poster_url is None
         assert films[0].poster_source is None
 
-        # Kinopoisk enrichment gracefully skipped (no TMDB_API_KEY in tests)
-        assert films[0].kinopoisk_url is None
-
-        # Metadata quality fields — TMDb is configured in .env, so it is
-        # attempted.  Since the test environment has no network, the TMDb
-        # lookups fail and needs_review is set to True.
+        # Metadata quality fields — no OMDB_API_KEY in default test env,
+        # so enrichment is skipped and needs_review stays False.
         assert films[0].metadata_source == "filename_parse"
         assert films[0].metadata_confidence == 0.6  # title + year
         assert films[0].metadata_enriched_at is None
-        assert films[0].needs_review is True
+        assert films[0].needs_review is False
 
     def test_pipeline_dedup_skips_existing_film(
         self, db_session: Session, tmp_path: Path
@@ -532,29 +528,28 @@ class TestPipelineBridge:
         assert film.title == "Some Movie"
         assert film.year is None
 
-        # Metadata quality: no year → lower confidence; TMDb attempted but fails
+        # Metadata quality: no year → lower confidence; no OMDB_API_KEY in
+        # default test env, so enrichment is skipped.
         assert film.metadata_source == "filename_parse"
         assert film.metadata_confidence == 0.3  # title only, no year
         assert film.metadata_enriched_at is None
-        assert film.needs_review is True
+        assert film.needs_review is False
 
-    # ── Quality flags: TMDb enrichment ────────────────────────────
+    # ── Quality flags: OMDB enrichment ────────────────────────────
 
-    @patch("filmoteka.domain.importing.pipeline.tmdb_search_poster")
-    @patch("filmoteka.domain.importing.pipeline.tmdb_find_kinopoisk_url")
-    def test_bridge_tmdb_success_upgrades_quality(
+    @patch.object(settings, "omdb_api_key", "test_key")
+    @patch("filmoteka.domain.importing.pipeline.omdb_search_poster")
+    def test_bridge_omdb_success_upgrades_quality(
         self,
-        mock_kinopoisk: object,
         mock_poster: object,
         db_session: Session,
         tmp_path: Path,
     ) -> None:
-        """When TMDb finds poster or kinopoisk link, quality is upgraded."""
+        """When OMDB finds a poster, quality is upgraded."""
         from filmoteka.domain.catalog.models import Film
         from filmoteka.domain.importing.pipeline import run_import
 
-        mock_poster.return_value = ("http://img/poster.jpg", "tmdb")  # type: ignore[attr-defined]
-        mock_kinopoisk.return_value = "https://kinopoisk.ru/film/123/"  # type: ignore[attr-defined]
+        mock_poster.return_value = ("http://img/poster.jpg", "omdb")  # type: ignore[attr-defined]
 
         root = tmp_path
         video = root / "The.Matrix.1999.1080p.mkv"
@@ -564,28 +559,25 @@ class TestPipelineBridge:
         run_import(config, db_session)
 
         film = db_session.query(Film).one()
-        assert film.metadata_source == "tmdb"
+        assert film.metadata_source == "omdb"
         assert film.metadata_confidence == 0.9
         assert film.metadata_enriched_at is not None
         assert film.needs_review is False
         assert film.poster_url == "http://img/poster.jpg"
-        assert film.kinopoisk_url == "https://kinopoisk.ru/film/123/"
 
-    @patch("filmoteka.domain.importing.pipeline.tmdb_search_poster")
-    @patch("filmoteka.domain.importing.pipeline.tmdb_find_kinopoisk_url")
-    def test_bridge_tmdb_empty_sets_needs_review(
+    @patch.object(settings, "omdb_api_key", "test_key")
+    @patch("filmoteka.domain.importing.pipeline.omdb_search_poster")
+    def test_bridge_omdb_empty_sets_needs_review(
         self,
-        mock_kinopoisk: object,
         mock_poster: object,
         db_session: Session,
         tmp_path: Path,
     ) -> None:
-        """When TMDb is reachable but returns nothing, needs_review=True."""
+        """When OMDB is reachable but returns nothing, needs_review=True."""
         from filmoteka.domain.catalog.models import Film
         from filmoteka.domain.importing.pipeline import run_import
 
         mock_poster.return_value = None  # type: ignore[attr-defined]
-        mock_kinopoisk.return_value = None  # type: ignore[attr-defined]
 
         root = tmp_path
         video = root / "The.Matrix.1999.1080p.mkv"
@@ -600,15 +592,14 @@ class TestPipelineBridge:
         assert film.metadata_enriched_at is None
         assert film.needs_review is True
         assert film.poster_url is None
-        assert film.kinopoisk_url is None
 
-    @patch.object(settings, "tmdb_api_key", None)
-    def test_bridge_without_tmdb_key_keeps_filename_level(
+    @patch.object(settings, "omdb_api_key", None)
+    def test_bridge_without_omdb_key_keeps_filename_level(
         self,
         db_session: Session,
         tmp_path: Path,
     ) -> None:
-        """Without TMDB_API_KEY, quality stays at filename_parse level."""
+        """Without OMDB_API_KEY, quality stays at filename_parse level."""
         from filmoteka.domain.catalog.models import Film
         from filmoteka.domain.importing.pipeline import run_import
 
@@ -622,9 +613,8 @@ class TestPipelineBridge:
         film = db_session.query(Film).one()
         assert film.metadata_source == "filename_parse"
         assert film.metadata_confidence == 0.6
-        assert film.needs_review is False  # no TMDB → no reason to flag
+        assert film.needs_review is False  # no OMDB key → no reason to flag
         assert film.poster_url is None
-        assert film.kinopoisk_url is None
 
     # ── Dedup: film and edition matching ───────────────────────────
 

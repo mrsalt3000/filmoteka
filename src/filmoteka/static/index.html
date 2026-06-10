@@ -428,7 +428,6 @@ async function renderFilm(el, id) {
             </h2>
             <div class="meta">${f.year || '—'}${f.description ? ' · ' + esc(f.description) : ''}</div>
           `}
-          ${f.kinopoisk_url ? `<a class="external-link" href="${esc(f.kinopoisk_url)}" target="_blank" rel="noopener">View on Kinopoisk →</a>` : ''}
           ${playBtnHtml}
           ${progressHtml}
           ${watchedHtml}
@@ -628,7 +627,7 @@ async function renderAdmin(el) {
 
       <div class="poster-section">
         <h3>Posters</h3>
-        <p>Fetch posters from TMDb. Existing posters are not affected unless you choose to refresh all.</p>
+        <p>Fetch posters from OMDB. Existing posters are not affected unless you choose to refresh all.</p>
         <div class="poster-btns">
           <button class="poster-btn" id="fill-poster-btn" onclick="runFillPosters()">🖼 Fill missing posters</button>
           <button class="poster-btn" id="refresh-poster-btn" onclick="runRefreshPosters()">🔄 Refresh all posters</button>
@@ -779,7 +778,7 @@ async function runPosterOp(mode, btnLabel) {
   if (!btn || !reportEl) return;
 
   const label = mode === 'fill-missing' ? 'Fill missing posters' : 'Refresh all posters';
-  if (!confirm(`Start "${label}"? This will query TMDb for each film.`)) return;
+  if (!confirm(`Start "${label}"? This will query OMDB for each film.`)) return;
 
   btn.disabled = true;
   btn.textContent = '⏳ Working…';
@@ -810,7 +809,7 @@ async function pollPosterStatus() {
     const resp = await apiAuth('/admin/posters/status');
     if (resp.status === 'completed') return resp.report;
     if (resp.status === 'failed') throw new Error(resp.error || 'Unknown error');
-    if (resp.status === 'error') throw new Error(resp.error || 'TMDB_API_KEY not configured');
+    if (resp.status === 'error') throw new Error(resp.error || 'OMDB_API_KEY not configured');
   }
   throw new Error('Poster operation timed out after 20 minutes');
 }

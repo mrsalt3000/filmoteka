@@ -244,7 +244,7 @@ class TestAdminPosters:
         )
         assert resp.status_code == 403
 
-    @patch.object(settings, "tmdb_api_key", None)
+    @patch.object(settings, "omdb_api_key", None)
     def test_fill_missing_no_api_key(
         self, client: TestClient, db_session: Session
     ) -> None:
@@ -255,9 +255,9 @@ class TestAdminPosters:
         )
         body = resp.json()
         assert body["status"] == "error"
-        assert "TMDB_API_KEY" in str(body.get("error", ""))
+        assert "OMDB_API_KEY" in str(body.get("error", ""))
 
-    @patch.object(settings, "tmdb_api_key", None)
+    @patch.object(settings, "omdb_api_key", None)
     def test_refresh_all_no_api_key(
         self, client: TestClient, db_session: Session
     ) -> None:
@@ -268,9 +268,9 @@ class TestAdminPosters:
         )
         body = resp.json()
         assert body["status"] == "error"
-        assert "TMDB_API_KEY" in str(body.get("error", ""))
+        assert "OMDB_API_KEY" in str(body.get("error", ""))
 
-    @patch.object(settings, "tmdb_api_key", "test_key")
+    @patch.object(settings, "omdb_api_key", "test_key")
     def test_fill_missing_updates_only_none(
         self, client: TestClient, db_session: Session
     ) -> None:
@@ -294,10 +294,10 @@ class TestAdminPosters:
             id_with, id_without = film_with.id, film_without.id
 
             with (
-                patch("filmoteka.api.admin.tmdb_search_poster") as mock_search,
+                patch("filmoteka.api.admin.omdb_search_poster") as mock_search,
                 patch("filmoteka.api.admin.SessionLocal", test_session),
             ):
-                mock_search.return_value = ("http://new/poster.jpg", "tmdb")
+                mock_search.return_value = ("http://new/poster.jpg", "omdb")
 
                 resp = client.post(
                     "/admin/posters/fill-missing",
@@ -321,7 +321,7 @@ class TestAdminPosters:
                 assert w.poster_url == "http://old/poster.jpg"
                 assert w.poster_source == "old"
                 assert wo.poster_url == "http://new/poster.jpg"
-                assert wo.poster_source == "tmdb"
+                assert wo.poster_source == "omdb"
             finally:
                 check.close()
         finally:
@@ -333,7 +333,7 @@ class TestAdminPosters:
             cleanup.close()
             test_db.close()
 
-    @patch.object(settings, "tmdb_api_key", "test_key")
+    @patch.object(settings, "omdb_api_key", "test_key")
     def test_refresh_all_updates_all(
         self, client: TestClient, db_session: Session
     ) -> None:
@@ -360,10 +360,10 @@ class TestAdminPosters:
             id_a, id_b = film_a.id, film_b.id
 
             with (
-                patch("filmoteka.api.admin.tmdb_search_poster") as mock_search,
+                patch("filmoteka.api.admin.omdb_search_poster") as mock_search,
                 patch("filmoteka.api.admin.SessionLocal", test_session),
             ):
-                mock_search.return_value = ("http://new/poster.jpg", "tmdb")
+                mock_search.return_value = ("http://new/poster.jpg", "omdb")
 
                 resp = client.post(
                     "/admin/posters/refresh-all",

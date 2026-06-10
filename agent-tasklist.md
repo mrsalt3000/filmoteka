@@ -757,6 +757,27 @@
 
 ---
 
+## 3.12. Provider migration
+
+- [x] **V1-039** Заменить TMDb на OMDB как единственный источник постеров.
+
+  Полностью удалить интеграцию с TMDb (постеры, Kinopoisk ссылки).
+  Добавить интеграцию с OMDB API (`www.omdbapi.com`) для поиска постеров.
+  `OMDB_API_KEY` в `.env` — новый обязательный ключ для постеров.
+  Kinopoisk ссылки убираются (TMDb был единственным источником).
+
+  Проверка результата:
+  1. `settings.tmdb_api_key` отсутствует, вместо него `settings.omdb_api_key`.
+  2. `metadata_providers.py` не содержит TMDb-кода, только `omdb_search_poster()`.
+  3. В `pipeline.py` постер ищется через OMDB, Kinopoisk шаг удалён.
+  4. В админке кнопки постеров работают через OMDB.
+  5. `Film.kinopoisk_url` удалён из модели, схем, API и фронтенда.
+  6. `.env.example` и `docker-compose.yml` обновлены.
+  7. Тесты обновлены: моки OMDB, удалены TMDb/Kinopoisk тесты.
+  8. Unit + integration тесты проходят.
+
+---
+
 # 4. V2
 
 > V2 = интеллектуальная и устойчивая семейная платформа:

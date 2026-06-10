@@ -22,10 +22,7 @@ from filmoteka.domain.importing.models import (
 from filmoteka.domain.importing.scan import probe_candidates, scan_downloads
 from filmoteka.infrastructure.filename_parser import parse_filename
 from filmoteka.infrastructure.library_config import LibraryConfig
-from filmoteka.infrastructure.metadata_providers import (
-    tmdb_find_kinopoisk_url,
-    tmdb_search_poster,
-)
+from filmoteka.infrastructure.metadata_providers import omdb_search_poster
 from filmoteka.infrastructure.settings import settings
 
 
@@ -116,26 +113,18 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
     film.metadata_enriched_at = None
     film.needs_review = False
 
-    # --- Poster enrichment (best-effort) ---
+    # --- Poster enrichment via OMDB (best-effort) ---
     poster_found = False
-    if film.poster_url is None and settings.tmdb_api_key:
-        result = tmdb_search_poster(parsed.title, parsed.year, settings.tmdb_api_key)
+    if film.poster_url is None and settings.omdb_api_key:
+        result = omdb_search_poster(parsed.title, parsed.year, settings.omdb_api_key)
         if result is not None:
             film.poster_url, film.poster_source = result
             poster_found = True
 
-    # --- Kinopoisk link enrichment (best-effort) ---
-    kinopoisk_found = False
-    if film.kinopoisk_url is None and settings.tmdb_api_key:
-        url = tmdb_find_kinopoisk_url(parsed.title, parsed.year, settings.tmdb_api_key)
-        if url is not None:
-            film.kinopoisk_url = url
-            kinopoisk_found = True
-
-    # --- Metadata quality: upgrade if TMDb found anything ---
-    if settings.tmdb_api_key:
-        if poster_found or kinopoisk_found:
-            film.metadata_source = "tmdb"
+    # --- Metadata quality: upgrade if OMDB found a poster ---
+    if settings.omdb_api_key:
+        if poster_found:
+            film.metadata_source = "omdb"
             film.metadata_confidence = 0.9
             film.metadata_enriched_at = datetime.now()
             film.needs_review = False

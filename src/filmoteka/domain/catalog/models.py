@@ -76,7 +76,6 @@ class Film(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     poster_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     poster_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    kinopoisk_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     metadata_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
     metadata_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     metadata_enriched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

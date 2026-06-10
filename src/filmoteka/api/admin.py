@@ -34,7 +34,7 @@ from filmoteka.domain.catalog.models import (
 from filmoteka.domain.importing.pipeline import run_import
 from filmoteka.infrastructure.database import SessionLocal, get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
-from filmoteka.infrastructure.metadata_providers import tmdb_search_poster
+from filmoteka.infrastructure.metadata_providers import omdb_search_poster
 from filmoteka.infrastructure.settings import settings
 
 _logger = logging.getLogger(__name__)
@@ -121,11 +121,11 @@ def poster_fill_missing(
     Starts a background task. Poll ``GET /admin/posters/status``
     for completion.
     """
-    if not settings.tmdb_api_key:
+    if not settings.omdb_api_key:
         return {
             "task_id": _POSTER_TASK_ID,
             "status": "error",
-            "error": "TMDB_API_KEY is not configured. Set it in .env to use poster features.",
+            "error": "OMDB_API_KEY is not configured. Set it in .env to use poster features.",
         }
 
     task = _poster_tasks.get(_POSTER_TASK_ID)
@@ -141,8 +141,8 @@ def poster_fill_missing(
     def _run() -> None:
         db = SessionLocal()
         try:
-            assert settings.tmdb_api_key is not None
-            api_key: str = settings.tmdb_api_key
+            assert settings.omdb_api_key is not None
+            api_key: str = settings.omdb_api_key
 
             films = db.query(Film).filter(Film.poster_url.is_(None)).all()
             updated = 0
@@ -150,7 +150,7 @@ def poster_fill_missing(
 
             for film in films:
                 try:
-                    result = tmdb_search_poster(film.title, film.year, api_key)
+                    result = omdb_search_poster(film.title, film.year, api_key)
                     if result is not None:
                         film.poster_url, film.poster_source = result
                         updated += 1
@@ -194,11 +194,11 @@ def poster_refresh_all(
     Starts a background task. Poll ``GET /admin/posters/status``
     for completion.
     """
-    if not settings.tmdb_api_key:
+    if not settings.omdb_api_key:
         return {
             "task_id": _POSTER_TASK_ID,
             "status": "error",
-            "error": "TMDB_API_KEY is not configured. Set it in .env to use poster features.",
+            "error": "OMDB_API_KEY is not configured. Set it in .env to use poster features.",
         }
 
     task = _poster_tasks.get(_POSTER_TASK_ID)
@@ -214,8 +214,8 @@ def poster_refresh_all(
     def _run() -> None:
         db = SessionLocal()
         try:
-            assert settings.tmdb_api_key is not None
-            api_key: str = settings.tmdb_api_key
+            assert settings.omdb_api_key is not None
+            api_key: str = settings.omdb_api_key
 
             films = db.query(Film).all()
             updated = 0
@@ -223,7 +223,7 @@ def poster_refresh_all(
 
             for film in films:
                 try:
-                    result = tmdb_search_poster(film.title, film.year, api_key)
+                    result = omdb_search_poster(film.title, film.year, api_key)
                     if result is not None:
                         film.poster_url, film.poster_source = result
                         updated += 1
@@ -341,7 +341,6 @@ def update_film(
         year=film.year,
         description=film.description,
         poster_url=film.poster_url,
-        kinopoisk_url=film.kinopoisk_url,
         needs_review=film.needs_review,
         created_at=film.created_at,
         genres=[GenreOut.model_validate(g) for g in film.genres],
