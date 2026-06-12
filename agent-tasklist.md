@@ -1189,5 +1189,32 @@
 ### Риски / хвосты
 - ...
 
+---
+
+# 4. Operations
+
+## 4.1. LAN / Network
+
+- [ ] **OPS-001** Опубликовать Filmoteka в локальную WiFi-сеть.
+
+  Добавить документацию и admin-виджет для доступа с других устройств
+  в локальной сети (WiFi).
+
+  **Что меняется:**
+  - README: новый раздел "🌐 LAN Access" (ipconfig, firewall, Docker
+    Desktop mirrored networking, performance notes, mDNS advanced)
+  - Admin page: виджет "🌐 Network Access" в renderAdmin()
+    - При входе через localhost → инструкция с ipconfig
+    - При входе через LAN IP → URL + QR-код (api.qrserver.com)
+  - **НЕ меняется:** docker-compose.yml, Caddyfile, Python-код
+
+  Проверка результата:
+  1. README содержит полную инструкцию для LAN доступа
+  2. Admin page: при входе через localhost — инструкция
+  3. Admin page: при входе через LAN IP — URL + QR-код
+  4. QR-код ведёт на корректный URL
+  5. Стек не изменился (не сломался)
+  6. ruff / mypy — не требуется (только static + README)
+
 ### Следующая рекомендуемая задача
 - ...

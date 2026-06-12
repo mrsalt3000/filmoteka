@@ -2264,6 +2264,31 @@
   - V3-003 — Алиасы имён файлов через LLM
   - Или BUGFIX-007 — Установить postgresql-client в Docker-образ
 
+## Task Report: OPS-001 — 2026-06-12
+
+- Status: `done`
+- Summary: Добавил документацию и admin-виджет для LAN/WiFi доступа к Filmoteka.
+  README: новый раздел "🌐 LAN Access" (ipconfig, firewall, Docker Desktop
+  mirrored networking, performance notes, mDNS advanced). Admin page: виджет
+  "🌐 Network Access" — при localhost показывает инструкцию с ipconfig,
+  при доступе через LAN IP — URL + QR-код (api.qrserver.com). Без изменений
+  docker-compose.yml, Caddyfile, Python-код.
+- Changed files:
+  - `README.md` (+ раздел "🌐 LAN Access")
+  - `src/filmoteka/static/index.html` (+ CSS, + секция в renderAdmin, + renderNetworkAccess())
+  - `agent-tasklist.md` (+ раздел 4, задача OPS-001)
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff check: не требуется (только static + README)
+  - mypy: не требуется
+  - Manual: admin page при localhost — инструкция, при LAN IP — URL + QR
+- Risks / follow-ups:
+  - mDNS не работает на Windows Docker Desktop (нет host networking)
+  - QR-код через внешний сервис — не работает офлайн
+  - Для production: заменить на локальную генерацию QR через canvas
+- Next task:
+  - BUGFIX-007 — Установить postgresql-client в Docker-образ для backup/restore
+
 ## Task Report: V3-003 — 2026-06-12
 
 - Status: `done`

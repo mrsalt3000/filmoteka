@@ -180,6 +180,70 @@ scripts/                — run-all-checks.sh, run-coverage.sh
 docs/                   — project docs
 ```
 
+## 🌐 LAN Access
+
+Доступ к Filmoteka с других устройств в локальной сети (WiFi).
+
+### Quick connect
+
+```bash
+# 1. Найти IP вашего Windows-компьютера
+ipconfig
+# Найдите строку "IPv4-адрес" — например 192.168.1.100
+
+# 2. Открыть на другом устройстве (телефон, планшет, TV)
+# → http://<ваш-IP>/
+# Например: http://192.168.1.100/
+```
+
+Всё должно работать сразу — Docker пробрасывает порт 80 на все сетевые
+интерфейсы автоматически.
+
+### Возможные проблемы
+
+**1. Windows Firewall блокирует порт 80**
+
+```powershell
+# Windows Admin PowerShell — открыть порт 80 для локальной сети
+New-NetFirewallRule -DisplayName "Filmoteka HTTP" -Direction Inbound `
+  -Protocol TCP -LocalPort 80 -Action Allow -Profile Private
+```
+
+**2. Docker Desktop — WSL2 NAT**
+
+В Docker Desktop → Settings → Resources → Network включите
+`Enable host networking` (требуется WSL 2.0+). Без этой опции
+некоторые старые версии WSL2 изолируют контейнеры за NAT.
+
+**3. Антивирус блокирует WSL2**
+
+Добавьте исключение для Docker Desktop / WSL2 в настройках
+антивируса (Kaspersky, ESET и т.д.).
+
+### Performance notes
+
+- **MP4** — играет напрямую, без нагрузки на сервер
+- **MKV** — требует ffmpeg ремукс на сервере (CPU). WiFi может
+  быть узким местом для 4K HDR с высоким битрейтом.
+  Для стабильного просмотра 4K предпочтительно проводное
+  подключение сервера к роутеру.
+- Обычное HD (1080p) работает без проблем даже по WiFi.
+
+### mDNS (продвинутый вариант)
+
+Чтобы открывать `http://filmoteka.local/` вместо IP-адреса,
+на Windows-хосте можно установить **Bonjour** (входит в iTunes
+или отдельно от Apple) или **mDNSResponder**. После установки
+добавьте в `C:\Windows\System32\drivers\etc\hosts` строку:
+
+```
+127.0.0.1  filmoteka.local
+```
+
+Это сделает `http://filmoteka.local/` доступным только на
+самом Windows-хосте. Для полноценного mDNS в LAN требуется
+настроить mDNS reflector на роутере или в локальной сети.
+
 ## Development
 
 ### Prerequisites

@@ -149,6 +149,11 @@ nav input::placeholder { color: var(--text2); }
 .edit-save-btn:hover { opacity: .9; }
 .edit-cancel-btn { padding: .4rem 1rem; background: none; border: 1px solid var(--text2); color: var(--text); border-radius: var(--radius); font-size: .85rem; cursor: pointer; }
 .edit-cancel-btn:hover { border-color: var(--text); }
+.network-url { font-size: 1.1rem; font-weight: 600; color: var(--accent); word-break: break-all; }
+.network-qr { margin-top: .75rem; text-align: center; }
+.network-qr img { width: 160px; height: 160px; border-radius: var(--radius); background: #fff; padding: 8px; }
+.network-hint { font-size: .85rem; color: var(--text2); margin-top: .5rem; }
+.network-hint code { background: var(--surface2); padding: .15rem .4rem; border-radius: 3px; font-size: .8rem; }
 </style>
 </head>
 <body>
@@ -806,12 +811,19 @@ async function renderAdmin(el) {
         <p>Connectivity status of external providers.</p>
         <div id="ext-status"><div class="spinner">Checking…</div></div>
       </div>
+
+      <div class="poster-section">
+        <h3>🌐 Network Access</h3>
+        <p>Access Filmoteka from other devices on your local network.</p>
+        <div id="network-access"><div class="spinner">Detecting…</div></div>
+      </div>
     </div>`;
   loadJobs();
   loadWatchStats();
   loadUserSummary();
   loadConflicts();
   loadExtStatus();
+  renderNetworkAccess();
 }
 
 async function loadExtStatus() {
@@ -829,6 +841,37 @@ async function loadExtStatus() {
       <p style="margin-top:.5rem;font-size:.8rem;color:var(--text2)">Version: ${h.version}</p>`;
   } catch {
     el.innerHTML = '<div class="error">Could not reach health endpoint.</div>';
+  }
+}
+
+function renderNetworkAccess() {
+  const el = document.getElementById('network-access');
+  if (!el) return;
+  const host = window.location.hostname;
+  const proto = window.location.protocol;
+  const port = window.location.port;
+  const baseUrl = proto + '//' + host + (port ? ':' + port : '');
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  if (isLocal) {
+    el.innerHTML = `
+      <div class="network-hint">
+        💡 To access from another device, find your computer's LAN IP first:
+      </div>
+      <div class="network-hint">
+        1. Open <strong>Command Prompt</strong> on this computer<br>
+        2. Run: <code>ipconfig</code><br>
+        3. Find <strong>IPv4 Address</strong> (e.g. <code>192.168.1.100</code>)<br>
+        4. On the other device, open: <code>http://<em>&lt;that-IP&gt;</em>/</code>
+      </div>
+      <div class="network-hint" style="margin-top:.75rem">
+        🔒 Ensure Windows Firewall allows inbound port 80 on Private networks.
+      </div>`;
+  } else {
+    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(baseUrl + '/');
+    el.innerHTML = `
+      <div class="network-url">🔗 <a href="${baseUrl}/" target="_blank">${baseUrl}/</a></div>
+      <div class="network-qr"><img src="${qrUrl}" alt="QR Code" loading="lazy"></div>
+      <div class="network-hint">Scan the QR code or open the URL on another device connected to the same WiFi network.</div>`;
   }
 }
 
