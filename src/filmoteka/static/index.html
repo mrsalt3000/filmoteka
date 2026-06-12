@@ -65,6 +65,22 @@ nav input::placeholder { color: var(--text2); }
 .film-card .watch-badge.watched { background: #2e7d32; color: #fff; }
 .film-card .progress-track { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--surface2); border-radius: 0 0 calc(var(--radius) - 2px) calc(var(--radius) - 2px); overflow: hidden; }
 .film-card .progress-fill { height: 100%; background: var(--accent); transition: width .3s; }
+
+/* ── Continue Watching section ──────────────────── */
+.continue-section { margin-bottom: 1.5rem; }
+.continue-section h2 { font-size: 1.1rem; margin-bottom: .75rem; color: var(--text); }
+.continue-row { display: flex; gap: .75rem; overflow-x: auto; padding-bottom: .5rem; scrollbar-width: thin; }
+.continue-card { flex: 0 0 140px; background: var(--surface); border-radius: var(--radius); overflow: hidden; cursor: pointer; transition: transform .15s; position: relative; }
+.continue-card:hover { transform: translateY(-2px); }
+.continue-card .poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; display: block; background: var(--surface2); }
+.continue-card .poster-placeholder { width: 100%; aspect-ratio: 2/3; background: var(--surface2); display: flex; align-items: center; justify-content: center; color: var(--text2); font-size: 1.5rem; }
+.continue-card .info { padding: .5rem .6rem .4rem; }
+.continue-card .info h4 { font-size: .8rem; line-height: 1.2; margin-bottom: .25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.continue-card .info .mini-progress { height: 3px; background: var(--surface2); border-radius: 2px; overflow: hidden; margin-top: .25rem; }
+.continue-card .info .mini-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+.continue-card .dismiss-btn { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border: none; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; font-size: .8rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .15s; }
+.continue-card:hover .dismiss-btn { opacity: 1; }
+.continue-card .dismiss-btn:hover { background: var(--accent); }
 .detail { max-width: 720px; }
 .detail-layout { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
 .detail-poster { flex: 0 0 200px; }
@@ -464,7 +480,13 @@ async function renderList(el) {
     } catch { /* show grid without watch states */ }
   }
 
-  el.innerHTML = _tabsHtml() + `<div class="film-grid">${data.items.map(f => {
+  // Fetch continue-watching section if search is empty and logged in
+  let continueHtml = '';
+  if (!q && currentUser) {
+    continueHtml = await _fetchContinueWatching();
+  }
+
+  el.innerHTML = _tabsHtml() + continueHtml + `<div class="film-grid">${data.items.map(f => {
     const st = watchStates[f.id];
     let badgeHtml = '';
     let progressHtml = '';
@@ -1287,6 +1309,62 @@ async function runTranscodeAudio() {
   } finally {
     btn.disabled = false;
     btn.textContent = '🎵 Transcode AC3 audio';
+  }
+}
+
+// ── Continue Watching ───────────────────────────────────────────────
+async function _fetchContinueWatching() {
+  try {
+    const resp = await api('/media/watch/continue');
+    if (!resp || !resp.items || resp.items.length === 0) return '';
+    const dismissed = _getDismissedContinue();
+    const items = resp.items.filter(i => !dismissed.has(i.film_id));
+    if (items.length === 0) return '';
+    return `<div class="continue-section">
+      <h2>▶ Continue Watching</h2>
+      <div class="continue-row">${items.map(i => {
+        const pct = i.duration_secs > 0 ? Math.min(100, Math.round((i.last_position / i.duration_secs) * 100)) : 0;
+        const poster = i.poster_url
+          ? `<img class="poster" src="${esc(i.poster_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+          : `<div class="poster-placeholder">🎬</div>`;
+        return `<div class="continue-card" onclick="navigate('film/${i.film_id}')">
+          ${poster}
+          <button class="dismiss-btn" onclick="event.stopPropagation();_dismissContinue(${i.film_id})" title="Dismiss">✕</button>
+          <div class="info">
+            <h4>${esc(i.title)}</h4>
+            <div class="mini-progress"><div class="mini-progress-fill" style="width:${pct}%"></div></div>
+          </div>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+  } catch {
+    return '';
+  }
+}
+
+function _getDismissedContinue() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('dismissedContinue') || '[]'));
+  } catch {
+    return new Set();
+  }
+}
+
+function _dismissContinue(filmId) {
+  const dismissed = _getDismissedContinue();
+  dismissed.add(filmId);
+  localStorage.setItem('dismissedContinue', JSON.stringify([...dismissed]));
+  // Re-render the continue section without touching the film grid
+  const section = document.querySelector('.continue-section');
+  if (section) {
+    const parent = section.parentElement;
+    _fetchContinueWatching().then(html => {
+      if (html) {
+        section.outerHTML = html;
+      } else {
+        section.remove();
+      }
+    });
   }
 }
 

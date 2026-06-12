@@ -110,3 +110,17 @@ class AdminWatchStatsSummaryItem(BaseModel):
 class AdminWatchStatsSummaryResponse(BaseModel):
     items: list[AdminWatchStatsSummaryItem]
     total: int
+
+
+class ContinueWatchingItem(BaseModel):
+    film_id: int
+    media_id: int
+    title: str
+    year: int | None = None
+    poster_url: str | None = None
+    last_position: float
+    duration_secs: float | None = None
+
+
+class ContinueWatchingResponse(BaseModel):
+    items: list[ContinueWatchingItem]

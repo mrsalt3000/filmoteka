@@ -20,6 +20,8 @@ from sqlalchemy.orm import Session, joinedload
 from filmoteka.api.auth import _get_current_user
 from filmoteka.api.dependencies import get_library_config
 from filmoteka.api.schemas.watch import (
+    ContinueWatchingItem,
+    ContinueWatchingResponse,
     FilmWatchState,
     FilmWatchStatesRequest,
     FilmWatchStatesResponse,
@@ -387,6 +389,59 @@ def watch_states_by_film(
             )
 
     return FilmWatchStatesResponse(states=states)
+
+
+@router.get("/watch/continue", response_model=ContinueWatchingResponse)
+def watch_continue(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user),
+) -> ContinueWatchingResponse:
+    """Return films with unfinished watch events (in progress).
+
+    Returns films the current user has started but not finished,
+    ordered by most recently started first.  Only non-incognito
+    events with ``last_position > 0`` are included.
+    """
+    events = (
+        db.query(WatchEvent)
+        .options(
+            joinedload(WatchEvent.media_file)
+            .joinedload(MediaFile.edition)
+            .joinedload(MovieEdition.film),
+        )
+        .filter(
+            WatchEvent.user_id == current_user.id,
+            WatchEvent.finished == False,  # noqa: E712
+            WatchEvent.incognito == sa_false(),
+            WatchEvent.last_position > 0,
+        )
+        .order_by(WatchEvent.started_at.desc())
+        .all()
+    )
+
+    items: list[ContinueWatchingItem] = []
+    seen_film_ids: set[int] = set()
+    for ev in events:
+        mf = ev.media_file
+        if not mf or not mf.edition or not mf.edition.film:
+            continue
+        film = mf.edition.film
+        if film.id in seen_film_ids:
+            continue
+        seen_film_ids.add(film.id)
+        items.append(
+            ContinueWatchingItem(
+                film_id=film.id,
+                media_id=mf.id,
+                title=film.title,
+                year=film.year,
+                poster_url=film.poster_url,
+                last_position=ev.last_position,
+                duration_secs=mf.duration_secs,
+            )
+        )
+
+    return ContinueWatchingResponse(items=items)
 
 
 @router.get("/{media_id}/watch/state", response_model=WatchStateResponse)
