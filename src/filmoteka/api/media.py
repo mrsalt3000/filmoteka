@@ -32,6 +32,7 @@ from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
+from filmoteka.infrastructure.media_probe import MediaProbeError, probe_media
 
 _logger = logging.getLogger(__name__)
 
@@ -68,15 +69,20 @@ def _ffmpeg_available() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _ffmpeg_remux_stream(path: Path) -> StreamingResponse:
+def _ffmpeg_remux_stream(path: Path, *, delay_moov: bool = False) -> StreamingResponse:
     """Remux *path* (typically .mkv) to fragmented MP4 via ffmpeg.
 
     Uses stream copy (no re-encoding) so it is fast and lossless.
     The output is a fragmented MP4 that browsers can play progressively.
 
-    For AC3 audio tracks the ``+delay_moov`` flag is used to work around
-    an ffmpeg incompatibility with ``empty_moov`` + AC3.
+    Set *delay_moov* to ``True`` for files with AC3/E-AC3 audio tracks
+    to work around an ffmpeg incompatibility with ``empty_moov`` + AC3.
+    Without this flag the browser receives full duration metadata in the
+    init segment, enabling a proper seekable progress bar.
     """
+
+    _base_movflags = "frag_keyframe+empty_moov+default_base_moof"
+    movflags = _base_movflags + "+delay_moov" if delay_moov else _base_movflags
 
     def generate() -> Generator[bytes, None, None]:
         cmd = [
@@ -84,7 +90,7 @@ def _ffmpeg_remux_stream(path: Path) -> StreamingResponse:
             "-i", str(path),
             "-c", "copy",
             "-f", "mp4",
-            "-movflags", "frag_keyframe+empty_moov+default_base_moof+delay_moov",
+            "-movflags", movflags,
             "pipe:1",
         ]
         process = subprocess.Popen(
@@ -265,7 +271,21 @@ def stream_media(
 
     # MKV with ffmpeg — streaming remux
     if suffix == ".mkv":
-        return _ffmpeg_remux_stream(path)
+        # Probe audio codec: AC3/E-AC3 needs delay_moov to avoid
+        # "Cannot write moov atom before AC3 packets" error.
+        # Without delay_moov the init segment carries full duration
+        # metadata, enabling a proper seekable progress bar.
+        use_delay_moov = True  # safe default
+        try:
+            probe = probe_media(path)
+            if probe.audio_codec and probe.audio_codec.lower() in ("ac3", "eac3"):
+                use_delay_moov = True
+            else:
+                use_delay_moov = False
+        except MediaProbeError:
+            _logger.warning("ffprobe failed for %s, falling back to delay_moov", path.name)
+
+        return _ffmpeg_remux_stream(path, delay_moov=use_delay_moov)
 
     # All other formats — standard FileResponse with Range support
     return FileResponse(

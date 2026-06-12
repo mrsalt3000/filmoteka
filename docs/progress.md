@@ -2178,3 +2178,22 @@
 - отметить `partial`,
 - зафиксировать уже сделанное,
 - предложить разбиение на подзадачи.
+
+## Task Report: BUGFIX-008 — 2026-06-12
+
+- Status: `done`
+- Summary: Починил прогресс-бар при ffmpeg remux для файлов без AC3. **Корневая причина:** BUGFIX-006 добавил `+delay_moov` для всех MKV, что откладывает moov-атом в конец потока — браузер не знает длительность видео и показывает ~10 сек, постепенно наращивая. **Фикс:** перед ffmpeg вызывается `probe_media()` (из `media_probe.py`), определяется аудиокодек. Для AC3/E-AC3 — `delay_moov=True` (совместимость), для остальных — `delay_moov=False` (полная длительность в init-сегменте, нормальный прогресс-бар).
+- Changed files:
+  - `src/filmoteka/api/media.py` — `_ffmpeg_remux_stream()` теперь принимает `delay_moov: bool`, выбирает movflags условно; `stream_media()` вызывает `probe_media()` перед ремуксом, определяет AC3
+  - `agent-tasklist.md` — BUGFIX-008 marked [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff check src/filmoteka/api/media.py: ✅
+  - mypy src/filmoteka/api/media.py: ✅
+  - pytest tests/integration/test_media.py: ✅ (33/33 passed)
+- Risks / follow-ups:
+  - AC3-файлы по-прежнему имеют ограниченный прогресс-бар — `delay_moov` неизбежен для AC3. Можно позже добавить перекодирование AC3→AAC для полной совместимости.
+  - ffprobe добавляет ~0.5-1с latency перед началом стрима — приемлемо для домашнего сервера.
+- Next task:
+  - BUGFIX-007 — Установить `postgresql-client` в Docker-образ (backup не работает)
+  - Или V3-001 — DeepSeek enrichment при импорте

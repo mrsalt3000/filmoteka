@@ -777,6 +777,37 @@
   2. MKV с обычным (AAC) аудио продолжает работать как раньше.
   3. При недоступности ffmpeg возвращается 415 как и раньше.
 
+- [ ] **BUGFIX-007** Установить `postgresql-client` в Docker-образ для работы backup/restore.
+
+  Проблема: `pg_dump` и `psql` отсутствуют в Docker-образе. Admin endpoint `/admin/backup/create` возвращает ошибку, backup полностью нерабочий. Найдено при V2-029 (manual acceptance).
+
+  Решение: добавить `apt-get install -y postgresql-client` в `docker/Dockerfile.api` (и опционально в `docker/Dockerfile.worker`).
+
+  Проверка результата:
+  1. `docker compose build` проходит успешно.
+  2. `pg_dump --version` и `psql --version` работают внутри контейнера.
+  3. `POST /admin/backup/create` создаёт валидный .sql.gz файл.
+  4. `POST /admin/restore/upload` восстанавливает данные.
+
+- [x] **BUGFIX-008** Починить прогресс-бар при ffmpeg remux для не-AC3 файлов.
+
+  Проблема: BUGFIX-006 добавил `+delay_moov` в movflags для всех MKV, чтобы
+  починить AC3. Но `delay_moov` откладывает moov-атом в конец потока — браузер
+  не знает длительность видео, прогресс-бар показывает ~10 сек и растёт
+  постепенно. Фильмы >1 часа нелья листать.
+
+  Решение: перед ffmpeg вызывать `probe_media()` (уже есть в `media_probe.py`)
+  для определения аудиокодека. Если AC3 → `+delay_moov`, иначе →
+  `frag_keyframe+empty_moov+default_base_moof` (без `delay_moov`, длительность
+  корректна).
+
+  Проверка результата:
+  1. MKV без AC3 (AAC, MP3 и т.д.) — прогресс-бар показывает полную длительность,
+     листание работает.
+  2. MKV с AC3 — видео играет (не сломался BUGFIX-006), прогресс-бар может быть
+     ограничен (меньшая проблема, чем ошибка).
+  3. Без ffmpeg — 415 как раньше.
+
 ---
 
 ## 3.12. Provider migration
@@ -1032,6 +1063,53 @@
   
   Проверка результата:
   1. Новый человек или новый агент может поднять проект без устных пояснений.
+
+---
+
+# 5. V3 — DeepSeek Integration
+
+> DeepSeek как внешняя нейросеть для enrichment метаданных при импорте
+> и для mood-based рекомендаций.
+
+## 5.1. DeepSeek enrichment + recommendations
+
+- [ ] **V3-001** Интегрировать DeepSeek API для enrichment метаданных при импорте.
+
+  Проблема: сейчас импорт парсит только имя файла (title, year) и берёт постер из OMDB.
+  Жанры, описание, актёры, страна остаются пустыми.
+
+  Решение: при импорте (или по отдельной admin-кнопке) отправлять название фильма
+  в DeepSeek, получать structured ответ с полями: genre, description, actors, country,
+  year. Сохранять в Film с source="deepseek" и confidence=0.9.
+
+  Требования:
+  - `DEEPSEEK_API_KEY` в `.env` (опционально; без ключа — текущее поведение)
+  - graceful degradation: если ключа нет или API недоступен — импорт не ломается
+  - DeepSeek API endpoint: `https://api.deepseek.com/v1/chat/completions`
+  - structured output через prompt engineering (JSON schema в system prompt)
+  - флаг `needs_review` для записей, где confidence < порога
+
+  Проверка результата:
+  1. С DeepSeek API ключом: у новых фильмов появляются жанры, описание, актёры, страна.
+  2. Без ключа: импорт работает как раньше, enrichment пропускается.
+  3. При таймауте/ошибке DeepSeek: импорт завершается, ошибка логируется.
+  4. Metadata source фиксируется как "deepseek".
+
+- [ ] **V3-002** Подключить DeepSeek к рекомендациям по настроению.
+
+  Заменить/дополнить текущий hardcoded `llama3.2` в `_llm_mood_recommendations()`
+  на DeepSeek, когда `DEEPSEEK_API_KEY` задан. Оставить `LLM_API_URL` как fallback
+  для локальных моделей (Ollama).
+
+  Порядок выбора LLM:
+  1. Если есть `DEEPSEEK_API_KEY` → использовать DeepSeek
+  2. Если есть `LLM_API_URL` → использовать локальную модель (как сейчас)
+  3. Иначе → keyword fallback
+
+  Проверка результата:
+  1. С `DEEPSEEK_API_KEY` — рекомендации используют DeepSeek.
+  2. С `LLM_API_URL` (без `DEEPSEEK_API_KEY`) — работает как сейчас.
+  3. Без обоих — keyword fallback.
 
 ---
 
