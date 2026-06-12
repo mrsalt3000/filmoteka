@@ -1,84 +1,73 @@
-# Handoff — 2026-06-12 (sixth session)
+# Handoff — 2026-06-13 (seventh session)
 
 ## Stopped at
 
-- Phase: **V3 complete** (V3-001..003 + BUGFIX-008). Все задачи по DeepSeek интеграции закрыты.
-- Git: `9701665` — clean upstream, working tree has only local artifacts (`.qwen/`, `docs/agent-tasklist.md` deleted, `tests/conftest.py` deleted).
-- Docker stack: running (db, redis healthy; api, worker, caddy not started — expected).
-- Last commit: `9701665` — `feat: add media file aliases with DeepSeek LLM generation`
+- Phase: bugfixes + minor features после V3. Все 5 задач закрыты.
+- Git: `401d12b` — clean upstream, working tree has only local artifacts.
+- Last commit: `401d12b` — `feat: add Continue Watching section with dismiss button`
 
-## Completed this session (4 tasks)
+## Completed this session (5 tasks)
 
-### BUGFIX-008 — AC3 progress bar
-- **Problem:** BUGFIX-006 added `+delay_moov` for all MKV files. This defers the moov atom to the end of the stream — browser doesn't know video duration, progress bar shows ~10 sec and grows gradually.
-- **Fix:** Before ffmpeg, call `probe_media()` to detect audio codec. AC3/E-AC3 → `delay_moov=True`, everything else → `delay_moov=False` (full duration in init segment, proper progress bar).
-- Files: `src/filmoteka/api/media.py`
+### OPS-001 — LAN access documentation and admin widget
+- README: new "🌐 LAN Access" section (ipconfig, firewall, Docker network, mDNS advanced)
+- Admin page: "🌐 Network Access" widget — localhost → ipconfig instructions; LAN IP → URL + QR code
+- **No changes** to docker-compose, Caddyfile, Python code
+- Files: `README.md`, `index.html`, `agent-tasklist.md`
 
-### V3-001 — DeepSeek metadata enrichment during import
-- New `src/filmoteka/infrastructure/deepseek_provider.py` — `deepseek_enrich_metadata()` posts to `api.deepseek.com/v1/chat/completions`, returns genres/description/actors/country.
-- Import pipeline: after OMDB poster, if `DEEPSEEK_API_KEY` set → call DeepSeek, upsert genres/actors, set `source="deepseek"`, `confidence=0.9`.
-- Admin batch endpoints: `POST /admin/enrich/deepseek` (only where source != deepseek) and `/admin/enrich/deepseek/all` (force re-process).
-- New field `Film.country` + migration `a97c8e6f5d4a`.
-- Files: `deepseek_provider.py` (new), `models.py`, `admin.py`, `pipeline.py`, `settings.py`, `.env.example`, `docker-compose.yml`, migration
+### BUGFIX-007 — Install postgresql-client in Docker images
+- `postgresql-client` added to both `docker/Dockerfile.api` and `docker/Dockerfile.worker`
+- `pg_dump`/`psql` (17.10) now available in both containers
+- Backup endpoint no longer crashes
 
-### V3-002 — DeepSeek for mood recommendations
-- 3-way priority: **DeepSeek** (`DEEPSEEK_API_KEY`) → **Ollama** (`LLM_API_URL`) → **Keyword fallback**.
-- `_llm_mood_recommendations()` refactored to accept `api_url`, `api_key`, `model` params — single code path for both providers.
-- `LLM_API_URL` documented in `.env.example`.
-- Files: `users.py`, `.env.example`, `test_users.py`
+### BUGFIX-009 — AC3→AAC audio transcoding admin task
+- New `POST /admin/media/transcode-audio` → background job
+- Worker probes all MediaFiles via ffprobe → AC3/E-AC3 detected → `ffmpeg -c:v copy -c:a aac -b:a 256k` → replaces file in-place → updates `audio_codec='aac'`
+- Admin button "🎵 Transcode AC3 audio" with confirm/spinner/poll/report
+- Files: `admin.py`, `index.html`
 
-### V3-003 — Media file aliases via LLM
-- `MediaFile.media_alias` column (VARCHAR 512) + migration `b8c9d0e1f2a3` with backfill.
-- `deepseek_generate_alias()` — parses filename stem → human-readable alias (e.g. "Брат (1997)").
-- Admin endpoints: `POST /admin/aliases/generate` (NULL only) and `/admin/aliases/generate-all` (all).
-- Content-Disposition uses `media_alias` for both MKV remux and native formats.
-- Frontend: 2 buttons in admin page with confirm + spinner + report.
-- Files: `models.py`, migration, `deepseek_provider.py`, `admin.py`, `schemas/catalog.py`, `media.py`, `pipeline.py`, `index.html`
+### BUGFIX-009b — Fix AC3 transcode errors
+- **Bug 1:** temp file `.file.mkv.ac3fix` — ffmpeg can't detect muxer from `.ac3fix` → fixed to `.file.ac3fix.mkv`
+- **Bug 2:** `subprocess.run(text=True)` with `errors='strict'` crashes on non-UTF8 stderr → fixed to `errors='replace'`
+- Expanded error logging (500 chars + `_logger.warning()`)
+
+### Continue Watching section
+- New `GET /media/watch/continue` endpoint — unfinished films with progress
+- Horizontal scrollable row above film grid when search is empty
+- Dismiss (✕) stores film_id in localStorage
+- Files: `schemas/watch.py`, `media.py`, `index.html`
 
 ## Changed files (this session)
 
 ```
-src/filmoteka/api/media.py                    # BUGFIX-008: conditional delay_moov; V3-003: display_name
-src/filmoteka/infrastructure/deepseek_provider.py   # new — V3-001 + V3-003 functions
-src/filmoteka/domain/catalog/models.py              # +country, +media_alias
-src/filmoteka/domain/importing/pipeline.py          # V3-001 DeepSeek enrichment; V3-003 default alias
-src/filmoteka/api/admin.py                          # V3-001 + V3-003 admin endpoints
-src/filmoteka/api/users.py                          # V3-002 3-way priority recommendations
-src/filmoteka/api/schemas/catalog.py                # +media_alias in response schemas
-src/filmoteka/infrastructure/settings.py            # +deepseek_api_key
-src/filmoteka/static/index.html                     # V3-003 admin UI buttons
-.env.example                                        # +DEEPSEEK_API_KEY, LLM_API_URL
-docker-compose.yml                                  # +DEEPSEEK_API_KEY to api + worker
-migrations/versions/a97c8e6f5d4a_add_country_to_films.py       # new
-migrations/versions/b8c9d0e1f2a3_add_media_alias_to_media_files.py  # new
-tests/integration/test_importing.py                 # +DeepSeek mock fixture
-tests/integration/test_users.py                     # +DeepSeek mood tests
-agent-tasklist.md                                   # 4 tasks marked [x]
-docs/progress.md                                    # 4 task reports
+README.md                                         # OPS-001: LAN access section
+src/filmoteka/static/index.html                    # OPS-001 widget + BUGFIX-009 button + Continue Watching
+src/filmoteka/api/admin.py                          # BUGFIX-009 endpoint + BUGFIX-009b fixes
+src/filmoteka/api/schemas/watch.py                  # ContinueWatchingItem/Response
+src/filmoteka/api/media.py                          # GET /media/watch/continue
+docker/Dockerfile.api                               # BUGFIX-007: +postgresql-client
+docker/Dockerfile.worker                            # BUGFIX-007: +postgresql-client
+agent-tasklist.md                                   # OPS-001, BUGFIX-007, BUGFIX-009 marked
+docs/progress.md                                    # all 5 task reports
 ```
 
 ## Known open issues
 
-1. **Backup broken** — `pg_dump` not in Docker image. Need `postgresql-client` in Dockerfile. (BUGFIX-007, pending)
-2. **21 pre-existing test failures** — isolation issues in `test_catalog.py`, `test_importing.py`, `test_migrations.py` + OMDB real API calls from host env.
-3. **Docker volume mount `H:/downloads`** — not resolvable from WSL CLI.
-4. **No frontend admin buttons for DeepSeek enrichment** — only API endpoints exist (V3-001). User must call `POST /admin/enrich/deepseek` directly.
-5. **LLM recommendation path doesn't filter watched/blacklisted** — differs from keyword fallback behavior.
-6. **`docs/agent-tasklist.md` deleted from git** — still present on disk, tracked as deleted.
+1. **21 pre-existing test failures** — isolation issues + OMDB real API calls from host env.
+2. **Docker volume mount `H:/downloads`** — not resolvable from WSL CLI.
+3. **LLM recommendation path doesn't filter watched/blacklisted** — differs from keyword fallback.
+4. **No frontend admin buttons for DeepSeek enrichment** — only API endpoints exist (V3-001).
+5. **`docs/agent-tasklist.md` deleted from git** — still present on disk, tracked as deleted.
 
 ## First things to verify on next run
 
 1. `docker compose up -d db redis` — start database and cache
-2. `bash scripts/run-all-checks.sh` — full test matrix (ruff → mypy → unit → int → e2e)
-3. Login as `mrsalt3000` / `dev` — verify admin user exists
-4. Check `GET /health` — returns `{"status":"ok"}`
-5. Hit `http://localhost/` — frontend loads, film grid shows 3622 items
-6. Test new DeepSeek features:
-   - `POST /admin/enrich/deepseek` — batch enrich existing films (requires `DEEPSEEK_API_KEY`)
-   - `POST /me/recommendations/by-mood` — verify 3-way priority (DeepSeek first)
-   - `POST /admin/aliases/generate` — generate aliases for media files
-7. Test BUGFIX-008 regression: play a non-AC3 MKV — progress bar should show full duration
+2. `bash scripts/run-all-checks.sh` — full test matrix
+3. Check `GET /health` — `{"status":"ok"}`
+4. Login as `mrsalt3000` / `dev`
+5. Test Continue Watching: start a film → see it in the new section
+6. Test AC3 transcode: click "🎵 Transcode AC3 audio" in admin
+7. Test LAN access: open `http://<windows-ip>/` from another device
 
 ## Next recommended task
 
-**BUGFIX-007** — Install `postgresql-client` in `docker/Dockerfile.api` (and optionally worker) so `pg_dump` / `psql` are available. This is the most impactful open issue — backup is completely non-functional without it. Found at V2-029 acceptance and still unresolved.
+Определяется владельцем проекта.

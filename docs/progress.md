@@ -2340,6 +2340,43 @@
 - Next task:
   - Определяется владельцем проекта
 
+## Task Report: BUGFIX-009b — 2026-06-12
+
+- Status: `done`
+- Summary: Починил ошибки AC3-транскодирования.
+  **Баг 1** — temp-файл `.file.mkv.ac3fix` — ffmpeg не распознаёт расширение `.ac3fix`,
+  не может определить muxer → падает. Фикс: `.file.ac3fix.mkv` (расширение сохранено).
+  **Баг 2** — `subprocess.run(text=True)` с `errors='strict'` падает на не-UTF8 stderr
+  от ffmpeg (метаданные с кириллицей). Фикс: `errors='replace'`.
+  + расширено логгирование ошибок (500 символов + `_logger.warning()`).
+- Changed files:
+  - `src/filmoteka/api/admin.py` (3 правки в `_run_transcode_audio`)
+- Checks:
+  - ruff: ✅
+  - mypy: только pre-existing (25 шт)
+  - Manual: после фикса ffmpeg не падает на неизвестном расширении
+- Next task:
+  - Определяется владельцем проекта
+
+## Task Report: Continue Watching — 2026-06-13
+
+- Status: `done`
+- Summary: Добавил секцию "▶ Continue Watching" над сеткой фильмов.
+  Показывает фильмы, которые пользователь начал но не закончил.
+  Только когда поле поиска пустое. ✕ кнопка прячет фильм (localStorage).
+  Новый endpoint `GET /media/watch/continue` — отдаёт unfinished WatchEvent-ы
+  с прогрессом, отсортированные по последнему просмотру.
+- Changed files:
+  - `src/filmoteka/api/schemas/watch.py` (+ ContinueWatchingItem, ContinueWatchingResponse)
+  - `src/filmoteka/api/media.py` (+ GET /media/watch/continue)
+  - `src/filmoteka/static/index.html` (+ CSS, + `_fetchContinueWatching()`, модификация renderList)
+- Checks:
+  - ruff: ✅
+  - mypy: ✅ (clean)
+  - Manual: секция появляется, dismiss работает, при поиске скрывается
+- Next task:
+  - Определяется владельцем проекта
+
 ## Task Report: V3-003 — 2026-06-12
 
 - Status: `done`
