@@ -795,6 +795,16 @@ async function renderAdmin(el) {
       </div>
 
       <div class="poster-section">
+        <h3>🤖 DeepSeek Enrichment</h3>
+        <p>Enrich film metadata (genres, description, actors) using DeepSeek LLM. Requires <code>DEEPSEEK_API_KEY</code> in <code>.env</code>.</p>
+        <div class="poster-btns">
+          <button class="poster-btn" id="deepseek-btn" onclick="runDeepseekEnrich()">🤖 Fill missing (DeepSeek)</button>
+          <button class="poster-btn" id="deepseek-all-btn" onclick="runDeepseekEnrichAll()">🔄 Re-enrich all (DeepSeek)</button>
+        </div>
+        <div id="deepseek-report"></div>
+      </div>
+
+      <div class="poster-section">
         <h3>Media Aliases</h3>
         <p>Generate human-readable aliases for media files using DeepSeek LLM. Aliases replace raw filenames in the player and downloads.</p>
         <div class="poster-btns">
@@ -1202,6 +1212,68 @@ function buildPosterReportHTML(report, label) {
         <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
       </div>` : ''}
   </div>`;
+}
+
+// ── DeepSeek Enrichment ────────────────────────────────────────────
+async function runDeepseekEnrich() {
+  await runDeepseekOp('enrich', '🤖 Fill missing (DeepSeek)');
+}
+
+async function runDeepseekEnrichAll() {
+  await runDeepseekOp('enrich-all', '🔄 Re-enrich all (DeepSeek)');
+}
+
+async function runDeepseekOp(mode, btnLabel) {
+  const btn = document.getElementById(mode === 'enrich' ? 'deepseek-btn' : 'deepseek-all-btn');
+  const reportEl = document.getElementById('deepseek-report');
+  if (!btn || !reportEl) return;
+
+  const label = mode === 'enrich' ? 'Fill missing (DeepSeek)' : 'Re-enrich all (DeepSeek)';
+  const endpoint = mode === 'enrich' ? '/admin/enrich/deepseek' : '/admin/enrich/deepseek/all';
+  if (!confirm(`Start "${label}"? This will query DeepSeek for each film.`)) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Working…';
+  reportEl.innerHTML = '<div class="spinner">Starting…</div>';
+
+  try {
+    const startResp = await apiAuth(endpoint, 'POST');
+
+    if (startResp.status === 'error') {
+      reportEl.innerHTML = `<div class="error">${esc(startResp.error || 'Unknown error')}</div>`;
+      return;
+    }
+
+    const jobId = startResp.job_id;
+    if (!jobId) throw new Error('No job_id returned');
+
+    reportEl.innerHTML = '<div class="spinner">Enriching films via DeepSeek… this may take a while.</div>';
+    const job = await pollJob(jobId);
+    if (job.status === 'completed') {
+      const r = job.result;
+      const errors = (r && r.errors) || [];
+      reportEl.innerHTML = `<div class="admin-report">
+        <h3>${esc(label)} — Complete</h3>
+        <table>
+          <tr><td>Total films processed</td><td>${r ? r.total : '?'}</td></tr>
+          <tr><td>Updated</td><td>${r ? r.updated : '?'}</td></tr>
+          <tr><td>Skipped</td><td>${r ? r.skipped : '?'}</td></tr>
+        </table>
+        ${errors.length > 0 ? `
+          <div class="report-errors">
+            <strong>Errors (${errors.length})</strong>
+            <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+          </div>` : ''}
+      </div>`;
+    } else {
+      throw new Error(job.error || 'Unknown error');
+    }
+  } catch (e) {
+    reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = btnLabel;
+  }
 }
 
 // ── Media Aliases ──────────────────────────────────────────────────

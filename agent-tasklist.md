@@ -1171,6 +1171,25 @@
      кнопки показывают сообщение «LLM not configured».
   4. Поиск по алиасу находит фильм.
 
+- [ ] **V3-004** Добавить frontend-кнопки для DeepSeek enrichment в админку.
+
+  Проблема: `POST /admin/enrich/deepseek` и `/enrich/deepseek/all` существуют
+  как API, но в admin UI нет кнопок для их запуска.
+
+  Решение: добавить секцию "🤖 DeepSeek Enrichment" в админку с двумя
+  кнопками — "Fill missing (DeepSeek)" и "Re-enrich all (DeepSeek)".
+  Pattern как у poster/alias кнопок: confirm → apiAuth → pollJob → отчёт.
+  Без `DEEPSEEK_API_KEY` показывать ошибку из `startResp.error`.
+
+  **Что меняется:**
+  - `index.html` — секция в renderAdmin() + JS функции
+
+  Проверка результата:
+  1. Кнопки видны в админке
+  2. Confirm dialog работает
+  3. Без DEEPSEEK_API_KEY — показывается сообщение об ошибке
+  4. С ключом — запускается background job, отчёт отображается
+
 # Definition of Done
 
 - [ ] Все обязательные сценарии из PRD реализованы, протестированы или имеют documented decision.

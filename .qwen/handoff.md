@@ -36,6 +36,13 @@
 - Dismiss (✕) stores film_id in localStorage
 - Files: `schemas/watch.py`, `media.py`, `index.html`
 
+### V3-004 — DeepSeek enrichment frontend buttons
+- New "🤖 DeepSeek Enrichment" section in admin page with two buttons
+- "Fill missing (DeepSeek)" → `POST /admin/enrich/deepseek`
+- "Re-enrich all (DeepSeek)" → `POST /admin/enrich/deepseek/all`
+- Pattern: confirm → apiAuth → pollJob → report; shows error if no API key
+- Files: `index.html` only (backend endpoints already existed)
+
 ## Changed files (this session)
 
 ```
