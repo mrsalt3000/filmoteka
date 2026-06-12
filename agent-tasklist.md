@@ -1095,7 +1095,7 @@
   3. При таймауте/ошибке DeepSeek: импорт завершается, ошибка логируется.
   4. Metadata source фиксируется как "deepseek".
 
-- [ ] **V3-002** Подключить DeepSeek к рекомендациям по настроению.
+- [x] **V3-002** Подключить DeepSeek к рекомендациям по настроению.
 
   Заменить/дополнить текущий hardcoded `llama3.2` в `_llm_mood_recommendations()`
   на DeepSeek, когда `DEEPSEEK_API_KEY` задан. Оставить `LLM_API_URL` как fallback

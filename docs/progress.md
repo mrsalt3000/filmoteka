@@ -2237,3 +2237,29 @@
 - Next task:
   - V3-002 — Подключить DeepSeek к рекомендациям по настроению
   - Или BUGFIX-007 — Установить postgresql-client в Docker-образ
+
+## Task Report: V3-002 — 2026-06-12
+
+- Status: `done`
+- Summary: Подключил DeepSeek к mood-рекомендациям. Изменён порядок выбора LLM:
+  **1. DeepSeek** (`DEEPSEEK_API_KEY`) → **2. Локальная LLM** (`LLM_API_URL`) → **3. Keyword fallback**.
+  `_llm_mood_recommendations()` теперь принимает параметры `api_url`, `api_key`, `model` — единый
+  код для DeepSeek и Ollama. Добавлен `LLM_API_URL` в `.env.example`. 2 новых теста:
+  DeepSeek возвращает рекомендации и fallback при недоступности.
+- Changed files:
+  - `src/filmoteka/api/users.py` — рефакторинг `recommend_by_mood()` (3-way priority),
+    `_llm_mood_recommendations()` (generic params)
+  - `.env.example` — + LLM_API_URL
+  - `tests/integration/test_users.py` — + autouse mock DeepSeek, +2 теста DeepSeek path
+  - `agent-tasklist.md` — V3-002 marked [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ (only pre-existing errors unchanged)
+  - mypy: ✅ (only pre-existing errors unchanged)
+  - pytest TestRecommendByMood: ✅ 7/7 passed (+2 new)
+- Risks / follow-ups:
+  - LLM-путь (DeepSeek и Ollama) не фильтрует watched/blacklisted — разойдётся с keyword path
+  - DeepSeek-путь расходует API токены (~$0.0003/запрос)
+- Next task:
+  - V3-003 — Алиасы имён файлов через LLM
+  - Или BUGFIX-007 — Установить postgresql-client в Docker-образ

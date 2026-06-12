@@ -257,26 +257,62 @@ def recommend_by_mood(
 ) -> RecommendationsResponse:
     """Return recommendations based on mood/query.
 
-    If ``LLM_API_URL`` is configured (e.g. Ollama), the LLM is asked to
-    suggest films from the library matching the mood.  Otherwise a
-    keyword-based fallback maps mood words to genres.
+    Priority:
+    1. DeepSeek (when ``DEEPSEEK_API_KEY`` is set).
+    2. Local LLM (when ``LLM_API_URL`` is set, e.g. Ollama).
+    3. Keyword-based mood→genre fallback.
     """
-    # Try LLM first if configured
+    # Priority 1 — DeepSeek
+    if settings.deepseek_api_key:
+        try:
+            return _llm_mood_recommendations(
+                body.query, limit, db, current_user,
+                api_url="https://api.deepseek.com",
+                api_key=settings.deepseek_api_key,
+                model="deepseek-chat",
+            )
+        except Exception:
+            _logger.exception("DeepSeek mood query failed — falling back")
+            pass  # fall through
+
+    # Priority 2 — local LLM (Ollama)
     if settings.llm_api_url:
         try:
-            return _llm_mood_recommendations(body.query, limit, db, current_user)
+            return _llm_mood_recommendations(
+                body.query, limit, db, current_user,
+                api_url=settings.llm_api_url,
+                api_key=None,
+                model="llama3.2",
+            )
         except Exception:
-            _logger.exception("LLM mood query failed — falling back to keywords")
-            pass  # fall through to keyword matching
+            _logger.exception("Local LLM mood query failed — falling back to keywords")
+            pass  # fall through
 
-    # Keyword fallback
+    # Priority 3 — keyword fallback
     return _keyword_mood_recommendations(body.query, limit, db, current_user)
 
 
 def _llm_mood_recommendations(
-    query: str, limit: int, db: Session, current_user: User
+    query: str,
+    limit: int,
+    db: Session,
+    current_user: User,
+    api_url: str,
+    api_key: str | None,
+    model: str,
 ) -> RecommendationsResponse:
-    """Query LLM for mood-based film suggestions."""
+    """Query any OpenAI-compatible LLM for mood-based film suggestions.
+
+    *api_url* — base URL (e.g. ``"https://api.deepseek.com"`` or
+    ``"http://localhost:11434"``).  The ``/v1/chat/completions``
+    path is appended automatically.
+
+    *api_key* — bearer token for authenticated providers (e.g. DeepSeek).
+    Pass ``None`` for local models (Ollama).
+
+    *model* — model name passed in the request body
+    (e.g. ``"deepseek-chat"`` or ``"llama3.2"``).
+    """
     import json as _json
     from urllib.request import Request, urlopen
 
@@ -291,16 +327,20 @@ def _llm_mood_recommendations(
     )
 
     payload = _json.dumps({
-        "model": "llama3.2",
+        "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.3,
         "max_tokens": 200,
     }).encode()
 
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
     req = Request(
-        f"{settings.llm_api_url}/v1/chat/completions",
+        f"{api_url}/v1/chat/completions",
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
     )
     resp = urlopen(req, timeout=15)
     body: dict = _json.loads(resp.read().decode())

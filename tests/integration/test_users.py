@@ -945,6 +945,16 @@ class TestRecommendations:
 class TestRecommendByMood:
     """POST /me/recommendations/by-mood — mood-based suggestions."""
 
+    @pytest.fixture(autouse=True)
+    def _no_deepseek(self) -> Generator[None, None, None]:
+        """Prevent DeepSeek from intercepting keyword/LLM path tests."""
+        from unittest.mock import patch
+
+        from filmoteka.infrastructure.settings import settings
+
+        with patch.object(settings, "deepseek_api_key", None):
+            yield
+
     def _auth(self, token: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {token}"}
 
@@ -1034,6 +1044,80 @@ class TestRecommendByMood:
                 headers={"Authorization": f"Bearer {token}"},
                 json={"query": "comedy"},
             )
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Funny" in titles
+
+    def test_deepseek_returns_recommendations(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """With DEEPSEEK_API_KEY, DeepSeek path is used."""
+        from unittest.mock import patch
+
+        from filmoteka.infrastructure.settings import settings
+
+        db_session.add(Film(title="The Matrix", year=1999))
+        db_session.add(Film(title="Inception", year=2010))
+        db_session.commit()
+
+        token = _register(client, "mood_deepseek1")
+
+        # Mock urlopen to return a controlled response
+        class FakeResponse:
+            status = 200
+
+            def read(self) -> bytes:
+                return b'{"choices":[{"message":{"content":"The Matrix\\nInception"}}]}'
+
+            def __enter__(self) -> FakeResponse:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                pass
+
+        with (
+            patch.object(settings, "deepseek_api_key", "sk-fake"),
+            patch("urllib.request.urlopen", return_value=FakeResponse()),
+        ):
+            resp = client.post(
+                "/me/recommendations/by-mood",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"query": "action"},
+            )
+
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "The Matrix" in titles
+        assert "Inception" in titles
+
+    def test_deepseek_unreachable_falls_back_to_keywords(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """DeepSeek unreachable -> falls back to keyword path."""
+        from unittest.mock import patch
+
+        from filmoteka.infrastructure.settings import settings
+
+        comedy = Genre(name="Comedy", slug="comedy")
+        db_session.add(comedy)
+        db_session.flush()
+        db_session.add(Film(title="Funny", year=2020, genres=[comedy]))
+        db_session.commit()
+
+        token = _register(client, "mood_deepseek2")
+
+        # urlopen to an unreachable port will raise URLError -> fall through
+        with (
+            patch.object(settings, "deepseek_api_key", "sk-fake"),
+            patch.object(settings, "llm_api_url", None),
+            patch("urllib.request.urlopen", side_effect=Exception("unreachable")),
+        ):
+            resp = client.post(
+                "/me/recommendations/by-mood",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"query": "comedy"},
+            )
+
         assert resp.status_code == 200
         titles = [i["title"] for i in resp.json()["items"]]
         assert "Funny" in titles
