@@ -168,3 +168,76 @@ def deepseek_enrich_metadata(
         film_label, len(result.genres), len(result.actors), result.country,
     )
     return result
+
+
+# ---------------------------------------------------------------------------
+# Media file alias generation
+# ---------------------------------------------------------------------------
+
+
+def deepseek_generate_alias(file_stem: str, api_key: str) -> str | None:
+    """Generate a human-readable alias for a media file from its *file_stem*.
+
+    The *file_stem* is the filename without extension or path
+    (e.g. ``"Брат.1997.WEB-DLRip-AVC_[New-team]_by_AVP_Studio"``).
+
+    Returns a clean alias like ``"Брат (1997)"``, or ``None`` if the LLM
+    is unreachable or returns an invalid response (graceful degradation).
+    """
+    system_prompt = (
+        "You are a film filename parser. Given a movie filename (without extension), "
+        "extract the movie title and year. Return ONLY the title and year in the format:\n"
+        '"Title (Year)"\n\n'
+        "Examples:\n"
+        '- "Брат.1997.WEB-DLRip-AVC_[New-team]_by_AVP_Studio" → "Брат (1997)"\n'
+        '- "The.Matrix.1999.1080p.BluRay.x264" → "The Matrix (1999)"\n'
+        '- "Inception.2010.1080p" → "Inception (2010)"\n'
+        '- "My.Family.Vacation.2021" → "My Family Vacation (2021)"\n\n'
+        "Respond with ONLY the formatted title, no explanation, no extra text."
+    )
+
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": file_stem},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 100,
+    }
+
+    try:
+        req = Request(
+            f"{DEEPSEEK_API_BASE}/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+        resp = urlopen(req, timeout=30)
+
+        if resp.status != 200:
+            logger.warning("DeepSeek alias generation returned %s", resp.status)
+            return None
+
+        raw: dict[str, Any] = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        logger.exception("DeepSeek alias generation failed for %r", file_stem)
+        return None
+
+    try:
+        content: str = raw["choices"][0]["message"]["content"]
+        # Strip whitespace, quotes, markdown code fences
+        alias = content.strip().strip('"').strip("'").strip("`")
+        # Remove markdown ``` if present
+        if alias.startswith("```"):
+            alias = alias.split("\n")[-1] if "\n" in alias else alias.replace("```", "")
+        alias = alias.strip().strip('"').strip("'")
+        if alias:
+            logger.info("DeepSeek alias for %r → %r", file_stem, alias)
+            return alias
+    except (KeyError, IndexError, TypeError):
+        logger.exception("DeepSeek alias parse failed for %r", file_stem)
+
+    return None

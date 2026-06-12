@@ -183,6 +183,7 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
     media = MediaFile(
         edition_id=edition.id,
         file_path=candidate.file_path,
+        media_alias=Path(candidate.file_path).stem,
         file_size=candidate.size,
         duration_secs=candidate.duration_secs,
         width=candidate.width,

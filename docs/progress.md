@@ -2263,3 +2263,35 @@
 - Next task:
   - V3-003 — Алиасы имён файлов через LLM
   - Или BUGFIX-007 — Установить postgresql-client в Docker-образ
+
+## Task Report: V3-003 — 2026-06-12
+
+- Status: `done`
+- Summary: Добавил алиасы имён файлов через DeepSeek.
+  - **Model + migration**: `MediaFile.media_alias` (VARCHAR), backfill filename из file_path.
+  - **DeepSeek provider**: `deepseek_generate_alias()` парсит filename stem в читаемый алиас
+    (напр. `"Брат.1997.WEB-DLRip-AVC..."` → `"Брат (1997)"`).
+  - **Admin endpoints**: `POST /admin/aliases/generate` (только NULL) и `/generate-all` (все),
+    background jobs с отчётом.
+  - **Schemas**: `MediaFileOut.media_alias` и `ConflictMediaItem.media_alias` в API.
+  - **Player**: Content-Disposition для MKV и MP4 использует `media_alias` вместо raw filename.
+  - **Pipeline**: при создании MediaFile `media_alias` устанавливается в `Path(file_path).stem`.
+  - **Frontend**: на admin-странице 2 кнопки + confirm-диалог + спиннер + отчёт.
+- Changed files:
+  - `src/filmoteka/domain/catalog/models.py` (+ media_alias)
+  - `migrations/versions/b8c9d0e1f2a3_add_media_alias_to_media_files.py` (новый)
+  - `src/filmoteka/infrastructure/deepseek_provider.py` (+ deepseek_generate_alias)
+  - `src/filmoteka/api/admin.py` (+ 2 admin endpoints + _run_alias_generate)
+  - `src/filmoteka/api/schemas/catalog.py` (+ media_alias в MediaFileOut, ConflictMediaItem)
+  - `src/filmoteka/api/media.py` (+ display_name param, Content-Disposition использует alias)
+  - `src/filmoteka/domain/importing/pipeline.py` (+ media_alias при создании MediaFile)
+  - `src/filmoteka/static/index.html` (+ HTML секция + JS функции alias кнопок)
+  - `agent-tasklist.md` — V3-003 marked [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - mypy: ✅ (new/changed files clean)
+  - pytest tests/integration/test_importing.py + test_media.py: ✅ 56/58 (2 pre-existing OMDB failures)
+- Next task:
+  - BUGFIX-007 — Установить postgresql-client в Docker-образ
+  - Или другие задачи из backlog

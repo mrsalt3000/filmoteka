@@ -69,7 +69,12 @@ def _ffmpeg_available() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _ffmpeg_remux_stream(path: Path, *, delay_moov: bool = False) -> StreamingResponse:
+def _ffmpeg_remux_stream(
+    path: Path,
+    *,
+    delay_moov: bool = False,
+    display_name: str | None = None,
+) -> StreamingResponse:
     """Remux *path* (typically .mkv) to fragmented MP4 via ffmpeg.
 
     Uses stream copy (no re-encoding) so it is fast and lossless.
@@ -79,10 +84,14 @@ def _ffmpeg_remux_stream(path: Path, *, delay_moov: bool = False) -> StreamingRe
     to work around an ffmpeg incompatibility with ``empty_moov`` + AC3.
     Without this flag the browser receives full duration metadata in the
     init segment, enabling a proper seekable progress bar.
-    """
 
+    *display_name* is used for the ``Content-Disposition`` header.
+    Defaults to ``path.stem``.
+    """
     _base_movflags = "frag_keyframe+empty_moov+default_base_moof"
     movflags = _base_movflags + "+delay_moov" if delay_moov else _base_movflags
+
+    stem = display_name or path.stem
 
     def generate() -> Generator[bytes, None, None]:
         cmd = [
@@ -142,7 +151,7 @@ def _ffmpeg_remux_stream(path: Path, *, delay_moov: bool = False) -> StreamingRe
         generate(),
         media_type="video/mp4",
         headers={
-            "Content-Disposition": f"inline; filename*=UTF-8''{quote(path.stem + '.mp4', safe='')}",
+            "Content-Disposition": f"inline; filename*=UTF-8''{quote(stem + '.mp4', safe='')}",
             "Accept-Ranges": "none",
         },
     )
@@ -285,12 +294,15 @@ def stream_media(
         except MediaProbeError:
             _logger.warning("ffprobe failed for %s, falling back to delay_moov", path.name)
 
-        return _ffmpeg_remux_stream(path, delay_moov=use_delay_moov)
+        return _ffmpeg_remux_stream(
+            path, delay_moov=use_delay_moov, display_name=media.media_alias,
+        )
 
     # All other formats — standard FileResponse with Range support
+    display_name = media.media_alias or path.name
     return FileResponse(
         path=path,
-        filename=path.name,
+        filename=display_name,
         media_type=mime,
     )
 

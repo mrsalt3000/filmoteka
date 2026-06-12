@@ -861,6 +861,119 @@ def _run_deepseek_enrich(force: bool, db: Session | None = None) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Media file aliases
+# ---------------------------------------------------------------------------
+
+
+@router.post("/aliases/generate", status_code=202)
+def alias_generate(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Generate aliases for media files that still use their default alias.
+
+    Starts a background job. Poll ``GET /admin/jobs/{job_id}``
+    for completion.
+    """
+    if not settings.deepseek_api_key:
+        return {
+            "status": "error",
+            "error": (
+                "DEEPSEEK_API_KEY is not configured."
+                " Set it in .env to use alias generation."
+            ),
+        }
+
+    job = run_background_job(
+        "alias_generate", _run_alias_generate, False,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "alias_generate"}
+
+
+@router.post("/aliases/generate-all", status_code=202)
+def alias_generate_all(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Re-generate aliases for ALL media files, overwriting existing ones.
+
+    Starts a background job. Poll ``GET /admin/jobs/{job_id}``
+    for completion.
+    """
+    if not settings.deepseek_api_key:
+        return {
+            "status": "error",
+            "error": (
+                "DEEPSEEK_API_KEY is not configured."
+                " Set it in .env to use alias generation."
+            ),
+        }
+
+    job = run_background_job(
+        "alias_generate_all", _run_alias_generate, True,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "alias_generate_all"}
+
+
+def _run_alias_generate(force: bool, db: Session | None = None) -> dict | None:
+    """Generate media aliases via DeepSeek.
+
+    When *force* is ``False``, only files where ``media_alias IS NULL``
+    are processed.  When *force* is ``True``, all media files are
+    processed regardless.
+    """
+    from pathlib import Path
+
+    from filmoteka.infrastructure.deepseek_provider import deepseek_generate_alias
+
+    close = db is None
+    if db is None:
+        db = SessionLocal()
+    try:
+        assert settings.deepseek_api_key is not None
+        api_key: str = settings.deepseek_api_key
+
+        query = db.query(MediaFile)
+        if not force:
+            query = query.filter(MediaFile.media_alias.is_(None))
+
+        media_files = query.all()
+        updated = 0
+        errors: list[str] = []
+
+        for mf in media_files:
+            try:
+                file_stem = Path(mf.file_path).stem
+                alias = deepseek_generate_alias(file_stem, api_key)
+                if alias is not None:
+                    mf.media_alias = alias
+                    updated += 1
+                else:
+                    # LLM returned nothing — set to stem as safe fallback
+                    if mf.media_alias is None:
+                        mf.media_alias = file_stem
+            except Exception as exc:
+                errors.append(f"MediaFile #{mf.id} ({mf.file_path}): {exc}")
+                # Ensure a default alias exists
+                if mf.media_alias is None:
+                    mf.media_alias = Path(mf.file_path).stem
+
+        db.commit()
+        return {
+            "total": len(media_files),
+            "updated": updated,
+            "skipped": len(media_files) - updated,
+            "errors": errors,
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        if close:
+            db.close()
+
+
+# ---------------------------------------------------------------------------
 # Film card editing
 # ---------------------------------------------------------------------------
 

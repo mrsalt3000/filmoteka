@@ -768,6 +768,16 @@ async function renderAdmin(el) {
       </div>
 
       <div class="poster-section">
+        <h3>Media Aliases</h3>
+        <p>Generate human-readable aliases for media files using DeepSeek LLM. Aliases replace raw filenames in the player and downloads.</p>
+        <div class="poster-btns">
+          <button class="poster-btn" id="alias-btn" onclick="runAliasGenerate()">🏷 Generate aliases (defaults only)</button>
+          <button class="poster-btn" id="alias-all-btn" onclick="runAliasGenerateAll()">🔄 Re-generate all aliases</button>
+        </div>
+        <div id="alias-report"></div>
+      </div>
+
+      <div class="poster-section">
         <h3>Background Jobs</h3>
         <p>Recent background tasks and their status.</p>
         <div id="jobs-list"><div class="spinner">Loading…</div></div>
@@ -1118,6 +1128,67 @@ function buildPosterReportHTML(report, label) {
         <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
       </div>` : ''}
   </div>`;
+}
+
+// ── Media Aliases ──────────────────────────────────────────────────
+async function runAliasGenerate() {
+  await runAliasOp('generate', '🏷 Generate aliases (defaults only)');
+}
+
+async function runAliasGenerateAll() {
+  await runAliasOp('generate-all', '🔄 Re-generate all aliases');
+}
+
+async function runAliasOp(mode, btnLabel) {
+  const btn = document.getElementById(mode === 'generate-all' ? 'alias-all-btn' : 'alias-btn');
+  const reportEl = document.getElementById('alias-report');
+  if (!btn || !reportEl) return;
+
+  const label = mode === 'generate-all' ? 'Generate all aliases' : 'Generate aliases (defaults only)';
+  const endpoint = mode === 'generate-all' ? '/admin/aliases/generate-all' : '/admin/aliases/generate';
+  if (!confirm(`Start "${label}"? This will query DeepSeek for each media file.`)) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Working…';
+  reportEl.innerHTML = '<div class="spinner">Starting…</div>';
+
+  try {
+    const startResp = await apiAuth(endpoint, 'POST');
+    if (startResp.status === 'error') {
+      reportEl.innerHTML = `<div class="error">${esc(startResp.error || 'Unknown error')}</div>`;
+      return;
+    }
+
+    const jobId = startResp.job_id;
+    if (!jobId) throw new Error('No job_id returned');
+
+    reportEl.innerHTML = '<div class="spinner">Generating aliases… this may take a moment.</div>';
+    const job = await pollJob(jobId);
+    if (job.status === 'completed') {
+      const r = job.result;
+      const errors = (r && r.errors) || [];
+      reportEl.innerHTML = `<div class="admin-report">
+        <h3>${esc(label)} — Complete</h3>
+        <table>
+          <tr><td>Total media files</td><td>${r ? r.total : '?'}</td></tr>
+          <tr><td>Updated</td><td>${r ? r.updated : '?'}</td></tr>
+          <tr><td>Skipped</td><td>${r ? r.skipped : '?'}</td></tr>
+        </table>
+        ${errors.length > 0 ? `
+          <div class="report-errors">
+            <strong>Errors (${errors.length})</strong>
+            <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+          </div>` : ''}
+      </div>`;
+    } else {
+      throw new Error(job.error || 'Unknown error');
+    }
+  } catch (e) {
+    reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = btnLabel;
+  }
 }
 
 // ── Search ──────────────────────────────────────────────────────────

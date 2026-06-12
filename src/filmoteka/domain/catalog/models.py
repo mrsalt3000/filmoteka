@@ -163,6 +163,7 @@ class MediaFile(Base):
     file_path: Mapped[str] = mapped_column(
         String(1024), nullable=False, unique=True
     )
+    media_alias: Mapped[str | None] = mapped_column(String(512), nullable=True)
     file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     duration_secs: Mapped[float | None] = mapped_column(Float, nullable=True)
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)

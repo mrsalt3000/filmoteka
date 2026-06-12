@@ -52,6 +52,7 @@ class PersonOut(BaseModel):
 class MediaFileOut(BaseModel):
     id: int
     file_path: str
+    media_alias: str | None = None
     file_size: int | None = None
     duration_secs: float | None = None
     width: int | None = None
@@ -105,6 +106,7 @@ class FilmDetailOut(BaseModel):
 class ConflictMediaItem(BaseModel):
     media_id: int
     file_path: str
+    media_alias: str | None = None
     file_size: int | None = None
     codec: str | None = None
     audio_codec: str | None = None
