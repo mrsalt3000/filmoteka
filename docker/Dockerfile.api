@@ -7,7 +7,7 @@ COPY src/ src/
 COPY migrations/ migrations/
 COPY docker/entrypoint-api.sh /entrypoint.sh
 
-RUN apt-get update && apt-get install -y ffmpeg --no-install-recommends \
+RUN apt-get update && apt-get install -y ffmpeg postgresql-client --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir . && chmod +x /entrypoint.sh
 

@@ -777,7 +777,7 @@
   2. MKV с обычным (AAC) аудио продолжает работать как раньше.
   3. При недоступности ffmpeg возвращается 415 как и раньше.
 
-- [ ] **BUGFIX-007** Установить `postgresql-client` в Docker-образ для работы backup/restore.
+- [x] **BUGFIX-007** Установить `postgresql-client` в Docker-образ для работы backup/restore.
 
   Проблема: `pg_dump` и `psql` отсутствуют в Docker-образе. Admin endpoint `/admin/backup/create` возвращает ошибку, backup полностью нерабочий. Найдено при V2-029 (manual acceptance).
 

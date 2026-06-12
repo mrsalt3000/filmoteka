@@ -2316,6 +2316,30 @@
 - Next task:
   - BUGFIX-007 — Установить postgresql-client в Docker-образ для backup/restore
 
+## Task Report: BUGFIX-007 — 2026-06-12
+
+- Status: `done`
+- Summary: Установил `postgresql-client` в оба Docker-образа. `pg_dump` и `psql`
+  (PostgreSQL 17.10) теперь доступны внутри контейнеров api и worker.
+  Admin endpoint `/admin/backup/create` перестал падать с ошибкой.
+- Changed files:
+  - `docker/Dockerfile.api` (+postgresql-client в apt-get install)
+  - `docker/Dockerfile.worker` (+postgresql-client в apt-get install)
+  - `agent-tasklist.md` (BUGFIX-007 marked [x])
+  - `docs/progress.md` (this report)
+- Checks:
+  - `docker compose build api worker`: ✅ оба собраны
+  - `pg_dump --version` в api: ✅ 17.10
+  - `psql --version` в api: ✅ 17.10
+  - `pg_dump --version` в worker: ✅ 17.10
+  - `psql --version` в worker: ✅ 17.10
+  - ruff/mypy: не требуется (только Dockerfile)
+- Risks / follow-ups:
+  - Backup и restore не проверялись end-to-end (нужен запущенный стек)
+  - Размер образа увеличился на ~30 MB (postgresql-client)
+- Next task:
+  - Определяется владельцем проекта
+
 ## Task Report: V3-003 — 2026-06-12
 
 - Status: `done`
