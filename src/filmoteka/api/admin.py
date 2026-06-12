@@ -1229,7 +1229,8 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                 continue
 
             # Transcode: video copy, audio AC3→AAC
-            temp_path = path.with_name(f".{path.name}.ac3fix")
+            # NOTE: keep .mkv extension so ffmpeg can detect the muxer format.
+            temp_path = path.parent / f".{path.stem}.ac3fix{path.suffix}"
             try:
                 cmd = [
                     "ffmpeg",
@@ -1241,10 +1242,16 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                     str(temp_path),
                 ]
                 result = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=7200,
+                    cmd, capture_output=True, text=True,
+                    errors="replace", timeout=7200,
                 )
                 if result.returncode != 0:
-                    msg = result.stderr.strip()[:200]
+                    msg = result.stderr.strip()[:500] or "(no stderr)"
+                    _logger.warning(
+                        "ffmpeg failed for media %d (%s) exit %d: %s",
+                        mf.id, path.name, result.returncode,
+                        result.stderr.strip()[-500:],
+                    )
                     errors.append(f"Media {mf.id} ({path.name}): ffmpeg error — {msg}")
                     temp_path.unlink(missing_ok=True)
                     continue
