@@ -85,6 +85,7 @@ class Film(Base):
         Boolean, default=False, server_default=text('false'), nullable=False
     )
     age_rating: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         default=datetime.now, onupdate=datetime.now

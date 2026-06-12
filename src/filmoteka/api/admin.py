@@ -757,6 +757,110 @@ def _run_refresh_all(db: Session | None = None) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# DeepSeek enrichment
+# ---------------------------------------------------------------------------
+
+
+@router.post("/enrich/deepseek", status_code=202)
+def deepseek_enrich(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Enrich films that haven't been enriched by DeepSeek yet.
+
+    Only processes films where ``metadata_source != "deepseek"``.
+    Starts a background job. Poll ``GET /admin/jobs/{job_id}``
+    for completion.
+    """
+    if not settings.deepseek_api_key:
+        return {
+            "status": "error",
+            "error": (
+                "DEEPSEEK_API_KEY is not configured."
+                " Set it in .env to use DeepSeek enrichment."
+            ),
+        }
+
+    job = run_background_job(
+        "deepseek_enrich", _run_deepseek_enrich, False,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "deepseek_enrich"}
+
+
+@router.post("/enrich/deepseek/all", status_code=202)
+def deepseek_enrich_all(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Re-enrich ALL films via DeepSeek, overwriting existing data.
+
+    Starts a background job. Poll ``GET /admin/jobs/{job_id}``
+    for completion.
+    """
+    if not settings.deepseek_api_key:
+        return {
+            "status": "error",
+            "error": (
+                "DEEPSEEK_API_KEY is not configured."
+                " Set it in .env to use DeepSeek enrichment."
+            ),
+        }
+
+    job = run_background_job(
+        "deepseek_enrich_all", _run_deepseek_enrich, True,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "deepseek_enrich_all"}
+
+
+def _run_deepseek_enrich(force: bool, db: Session | None = None) -> dict | None:
+    """Enrich films via DeepSeek.
+
+    When *force* is ``False``, only films where ``metadata_source != "deepseek"``
+    are processed.  When *force* is ``True``, all films are processed.
+    """
+    from filmoteka.domain.importing.pipeline import _apply_deepseek_enrichment
+    from filmoteka.infrastructure.deepseek_provider import deepseek_enrich_metadata
+
+    close = db is None
+    if db is None:
+        db = SessionLocal()
+    try:
+        assert settings.deepseek_api_key is not None
+        api_key: str = settings.deepseek_api_key
+
+        query = db.query(Film)
+        if not force:
+            query = query.filter(Film.metadata_source != "deepseek")
+
+        films = query.all()
+        updated = 0
+        errors: list[str] = []
+
+        for film in films:
+            try:
+                result = deepseek_enrich_metadata(film.title, film.year, api_key)
+                if result is not None:
+                    _apply_deepseek_enrichment(film, result, db)
+                    updated += 1
+            except Exception as exc:
+                errors.append(f"Film #{film.id} ({film.title}): {exc}")
+
+        db.commit()
+        return {
+            "total": len(films),
+            "updated": updated,
+            "skipped": len(films) - updated,
+            "errors": errors,
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        if close:
+            db.close()
+
+
+# ---------------------------------------------------------------------------
 # Film card editing
 # ---------------------------------------------------------------------------
 

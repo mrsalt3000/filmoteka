@@ -2197,3 +2197,43 @@
 - Next task:
   - BUGFIX-007 — Установить `postgresql-client` в Docker-образ (backup не работает)
   - Или V3-001 — DeepSeek enrichment при импорте
+
+## Task Report: V3-001 — 2026-06-12
+
+- Status: `done`
+- Summary: Интегрировал DeepSeek API для enrichment метаданных при импорте.
+  - **DeepSeek provider** (`src/filmoteka/infrastructure/deepseek_provider.py`): POST на
+    `https://api.deepseek.com/v1/chat/completions`, system prompt с JSON schema,
+    возвращает genres, description, actors, country. Graceful degradation —
+    любая ошибка возвращает None, импорт не ломается.
+  - **Import pipeline**: в `_bridge_to_catalog()` после OMDB poster вызывается
+    DeepSeek, если `DEEPSEEK_API_KEY` задан. Genres/actors upsert-ятся в БД
+    через Genre/Person модели. `metadata_source="deepseek"`, confidence=0.9.
+  - **Admin endpoints**: `POST /admin/enrich/deepseek` (только где source != deepseek)
+    и `POST /admin/enrich/deepseek/all` (перезаписать всё) — background jobs.
+  - **Новое поле** `Film.country` + миграция `a97c8e6f5d4a`.
+  - `DEEPSEEK_API_KEY` в settings, .env.example, docker-compose.yml.
+- Changed files:
+  - `src/filmoteka/infrastructure/deepseek_provider.py` (новый)
+  - `src/filmoteka/domain/catalog/models.py` (+ country)
+  - `migrations/versions/a97c8e6f5d4a_add_country_to_films.py` (новый)
+  - `src/filmoteka/domain/importing/pipeline.py` (+ DeepSeek enrichment, _apply_deepseek_enrichment, _slugify)
+  - `src/filmoteka/api/admin.py` (+ 2 admin endpoints, _run_deepseek_enrich)
+  - `src/filmoteka/infrastructure/settings.py` (+ deepseek_api_key)
+  - `.env.example`, `docker-compose.yml` (+ DEEPSEEK_API_KEY)
+  - `tests/integration/test_importing.py` (+ DeepSeek mock fixture)
+  - `agent-tasklist.md` — V3-001 marked [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff check: ✅ (all 5 changed files clean)
+  - mypy: ✅ (new and changed files clean; admin.py pre-existing errors unchanged)
+  - pytest tests/integration/test_importing.py: 23/25 passed (2 pre-existing OMDB failures)
+  - pytest tests/integration/test_admin.py: all passed
+  - pytest tests/integration/test_media.py: 33/33 passed
+- Risks / follow-ups:
+  - DeepSeek enrichment добавляет ~1-3с latency на фильм при импорте / admin batch.
+  - Токены DeepSeek — расход; за 3622 фильма ~$1-2 (deepseek-chat ~$0.27/M input tokens).
+  - Нет frontend admin-кнопок — добавятся в V1-027 area или отдельной задачей.
+- Next task:
+  - V3-002 — Подключить DeepSeek к рекомендациям по настроению
+  - Или BUGFIX-007 — Установить postgresql-client в Docker-образ

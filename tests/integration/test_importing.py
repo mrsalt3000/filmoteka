@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import patch
 
@@ -432,6 +433,15 @@ class TestFullPipeline:
 
 class TestPipelineBridge:
     """End-to-end import pipeline (index-only): scan → probe → bridge."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_deepseek(self) -> Generator[None, None, None]:
+        """Prevent DeepSeek API calls during import pipeline tests."""
+        with patch(
+            "filmoteka.domain.importing.pipeline.deepseek_enrich_metadata",
+            return_value=None,
+        ):
+            yield
 
     def test_full_pipeline_creates_film(
         self, db_session: Session, tmp_path: Path

@@ -13,7 +13,14 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
+from filmoteka.domain.catalog.models import (
+    Film,
+    Genre,
+    MediaFile,
+    MovieEdition,
+    Person,
+    film_person,
+)
 from filmoteka.domain.importing.models import (
     CANDIDATE_IMPORTED,
     CANDIDATE_PENDING,
@@ -21,6 +28,10 @@ from filmoteka.domain.importing.models import (
     ImportCandidate,
 )
 from filmoteka.domain.importing.scan import probe_candidates, scan_downloads
+from filmoteka.infrastructure.deepseek_provider import (
+    DeepSeekEnrichmentResult,
+    deepseek_enrich_metadata,
+)
 from filmoteka.infrastructure.filename_parser import parse_filename
 from filmoteka.infrastructure.library_config import LibraryConfig
 from filmoteka.infrastructure.metadata_providers import omdb_search_poster
@@ -134,6 +145,14 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
         else:
             film.needs_review = True
 
+    # --- DeepSeek enrichment (best-effort) ---
+    if settings.deepseek_api_key:
+        deepseek_result = deepseek_enrich_metadata(
+            parsed.title, parsed.year, settings.deepseek_api_key,
+        )
+        if deepseek_result is not None:
+            _apply_deepseek_enrichment(film, deepseek_result, db)
+
     # --- MovieEdition ---
     edition = _find_or_create_edition(
         db,
@@ -224,6 +243,71 @@ def _find_or_create_edition(
     db.add(edition)
     db.flush()
     return edition
+
+
+# ---------------------------------------------------------------------------
+# DeepSeek enrichment helpers
+# ---------------------------------------------------------------------------
+
+
+def _slugify(text: str) -> str:
+    """Convert a genre name to a URL-friendly slug."""
+    return text.lower().replace(" ", "-").replace("/", "-").replace("&", "and")
+
+
+def _apply_deepseek_enrichment(
+    film: Film,
+    result: DeepSeekEnrichmentResult,
+    db: Session,
+) -> None:
+    """Apply DeepSeek enrichment result to a Film entity.
+
+    Updates description, country, genres, and actors.
+    Sets metadata source to ``"deepseek"`` with confidence 0.9.
+    """
+    # Text fields
+    if result.description:
+        film.description = result.description
+    if result.country:
+        film.country = result.country
+
+    # Genres — find or create by slug
+    for name in result.genres:
+        slug = _slugify(name)
+        genre = db.query(Genre).filter(Genre.slug == slug).first()
+        if genre is None:
+            genre = Genre(name=name, slug=slug)
+            db.add(genre)
+            db.flush()
+        if genre not in film.genres:
+            film.genres.append(genre)
+
+    # Actors — find or create by name with role "actor"
+    for name in result.actors:
+        person = db.query(Person).filter(Person.name == name).first()
+        if person is None:
+            person = Person(name=name)
+            db.add(person)
+            db.flush()
+        # Check if already linked to avoid PK violation
+        existing_link = db.execute(
+            film_person.select().where(
+                film_person.c.film_id == film.id,
+                film_person.c.person_id == person.id,
+            )
+        ).first()
+        if existing_link is None:
+            db.execute(
+                film_person.insert().values(
+                    film_id=film.id, person_id=person.id, role="actor",
+                )
+            )
+
+    # Metadata quality — DeepSeek enriches more than filename/OMDB
+    film.metadata_source = "deepseek"
+    film.metadata_confidence = 0.9
+    film.metadata_enriched_at = datetime.now()
+    film.needs_review = False
 
 
 # ---------------------------------------------------------------------------
