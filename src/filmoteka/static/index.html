@@ -783,6 +783,15 @@ async function renderAdmin(el) {
       </div>
 
       <div class="poster-section">
+        <h3>🎵 Audio Transcoding</h3>
+        <p>Transcode AC3/E-AC3 audio tracks to AAC for all media files. This fixes the progress bar in browser playback — after transcoding, you can seek through videos with AC3 audio.</p>
+        <div class="poster-btns">
+          <button class="poster-btn" id="transcode-btn" onclick="runTranscodeAudio()">🎵 Transcode AC3 audio</button>
+        </div>
+        <div id="transcode-report"></div>
+      </div>
+
+      <div class="poster-section">
         <h3>Background Jobs</h3>
         <p>Recent background tasks and their status.</p>
         <div id="jobs-list"><div class="spinner">Loading…</div></div>
@@ -1231,6 +1240,53 @@ async function runAliasOp(mode, btnLabel) {
   } finally {
     btn.disabled = false;
     btn.textContent = btnLabel;
+  }
+}
+
+// ── Audio transcoding ────────────────────────────────────────────────
+async function runTranscodeAudio() {
+  const btn = document.getElementById('transcode-btn');
+  const reportEl = document.getElementById('transcode-report');
+  if (!btn || !reportEl) return;
+
+  if (!confirm('Transcode AC3/E-AC3 audio to AAC for all media files? This may take a while and will modify files in-place.')) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Probing…';
+  reportEl.innerHTML = '<div class="spinner">Starting…</div>';
+
+  try {
+    const startResp = await apiAuth('/admin/media/transcode-audio', 'POST');
+    const jobId = startResp.job_id;
+    if (!jobId) throw new Error('No job_id returned');
+
+    reportEl.innerHTML = '<div class="spinner">Scanning and transcoding… this may take a while for large libraries.</div>';
+    const job = await pollJob(jobId);
+    if (job.status === 'completed') {
+      const r = job.result;
+      const errors = (r && r.errors) || [];
+      reportEl.innerHTML = `<div class="admin-report">
+        <h3>Audio Transcoding — Complete</h3>
+        <table>
+          <tr><td>Total media files scanned</td><td>${r ? r.total : '?'}</td></tr>
+          <tr><td>Transcoded (AC3→AAC)</td><td>${r ? r.transcoded : '?'}</td></tr>
+          <tr><td>Skipped (no AC3)</td><td>${r ? r.skipped : '?'}</td></tr>
+          <tr><td>Errors</td><td>${r ? r.error_count : '?'}</td></tr>
+        </table>
+        ${errors.length > 0 ? `
+          <div class="report-errors">
+            <strong>Errors (${errors.length})</strong>
+            <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+          </div>` : '<p style="color:var(--text2);margin-top:.5rem">✅ All done — no errors.</p>'}
+      </div>`;
+    } else {
+      throw new Error(job.error || 'Transcoding failed');
+    }
+  } catch (e) {
+    reportEl.innerHTML = `<div class="error">Transcoding failed: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🎵 Transcode AC3 audio';
   }
 }
 

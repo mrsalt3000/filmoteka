@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -64,6 +65,7 @@ from filmoteka.domain.tasks.worker import run_background_job
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import SessionLocal, get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
+from filmoteka.infrastructure.media_probe import MediaProbeError, probe_media
 from filmoteka.infrastructure.metadata_providers import omdb_search_poster
 from filmoteka.infrastructure.settings import settings
 
@@ -1169,3 +1171,109 @@ def _reindex_resolve_path(stored_path: str, library_root: Path) -> Path | None:
                 continue
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Audio transcoding (AC3/E-AC3 → AAC)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/media/transcode-audio", status_code=202)
+def transcode_media_audio(
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Transcode AC3/E-AC3 audio tracks to AAC for all media files.
+
+    Files with AC3/E-AC3 audio are probed via ffprobe then transcoded
+    in-place using ffmpeg (video copy, audio only).  After transcoding
+    the browser can render a proper seekable progress bar.
+
+    Starts a background task.  Poll ``GET /admin/jobs/{job_id}``
+    for completion.
+    """
+    job = run_background_job(
+        "transcode_audio", _run_transcode_audio,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "transcode_audio"}
+
+
+def _run_transcode_audio(db: Session | None = None) -> dict | None:
+    """Scan all media files, probe for AC3/E-AC3, transcode to AAC."""
+    close = db is None
+    if db is None:
+        db = SessionLocal()
+    try:
+        media_files = db.query(MediaFile).all()
+        total = len(media_files)
+        transcoded = 0
+        skipped = 0
+        errors: list[str] = []
+
+        for mf in media_files:
+            path = Path(mf.file_path)
+            if not path.is_file():
+                skipped += 1
+                continue
+
+            # Probe to check actual audio codec
+            try:
+                probe = probe_media(path)
+            except MediaProbeError:
+                skipped += 1
+                continue
+
+            codec_raw = (probe.audio_codec or "").lower()
+            if codec_raw not in ("ac3", "eac3"):
+                skipped += 1
+                continue
+
+            # Transcode: video copy, audio AC3→AAC
+            temp_path = path.with_name(f".{path.name}.ac3fix")
+            try:
+                cmd = [
+                    "ffmpeg",
+                    "-i", str(path),
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-b:a", "256k",
+                    "-y",
+                    str(temp_path),
+                ]
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=7200,
+                )
+                if result.returncode != 0:
+                    msg = result.stderr.strip()[:200]
+                    errors.append(f"Media {mf.id} ({path.name}): ffmpeg error — {msg}")
+                    temp_path.unlink(missing_ok=True)
+                    continue
+
+                # Replace original with transcoded file
+                temp_path.replace(path)
+                mf.audio_codec = "aac"
+                _logger.info(
+                    "Transcoded AC3→AAC for media %d: %s", mf.id, path.name,
+                )
+                transcoded += 1
+            except subprocess.TimeoutExpired:
+                errors.append(f"Media {mf.id} ({path.name}): ffmpeg timed out")
+                temp_path.unlink(missing_ok=True)
+            except Exception as exc:
+                errors.append(f"Media {mf.id} ({path.name}): {exc}")
+                temp_path.unlink(missing_ok=True)
+
+        db.commit()
+        return {
+            "total": total,
+            "transcoded": transcoded,
+            "skipped": skipped,
+            "error_count": len(errors),
+            "errors": errors,
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        if close:
+            db.close()

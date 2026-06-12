@@ -2289,6 +2289,33 @@
 - Next task:
   - BUGFIX-007 — Установить postgresql-client в Docker-образ для backup/restore
 
+## Task Report: BUGFIX-009 — 2026-06-12
+
+- Status: `done`
+- Summary: Добавил фоновую задачу транскодирования AC3/E-AC3→AAC.
+  Новый endpoint `POST /admin/media/transcode-audio` → background job.
+  Worker: ffprobe всех MediaFile → при AC3/E-AC3: ffmpeg `-c:v copy -c:a aac -b:a 256k`,
+  замена файла in-place, обновление `audio_codec='aac'` в БД.
+  После транскодирования ffmpeg remux не требует `delay_moov` →
+  прогресс-бар показывает полную длительность.
+  Кнопка "🎵 Transcode AC3 audio" в админке с confirm/spinner/poll/report.
+  `delay_moov` в media.py остаётся как fallback для непротранскодированных файлов.
+- Changed files:
+  - `src/filmoteka/api/admin.py` (+ endpoint + worker; +imports subprocess, probe_media)
+  - `src/filmoteka/static/index.html` (+ секция в админке + runTranscodeAudio())
+  - `agent-tasklist.md` (+ BUGFIX-009)
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff check src/filmoteka/api/admin.py: ✅
+  - mypy src/filmoteka/api/admin.py: ✅
+  - Manual: кнопка видна в админке, confirm работает, spinner показывается
+- Risks / follow-ups:
+  - Транскодирование in-place — если файл проигрывается во время транскода, возможна гонка
+  - ffmpeg timeout 2 часа — достаточно для любого фильма
+  - После транскодирования нужно hard-refresh страницы плеера (файл изменился)
+- Next task:
+  - BUGFIX-007 — Установить postgresql-client в Docker-образ для backup/restore
+
 ## Task Report: V3-003 — 2026-06-12
 
 - Status: `done`
