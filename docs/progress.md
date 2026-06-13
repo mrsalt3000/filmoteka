@@ -4,6 +4,20 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-011 — 2026-06-13
+
+- Status: `done`
+- Summary: Audio Transcoding progress table — скрыл skipped-строки, убрал обрезку списка.
+  - `index.html`: в `runTranscodeAudio()` добавлен `.filter(e => e.status !== 'skipped')` перед рендером строк таблицы. Убраны `MAX_DISPLAY = 50`, обрезка `.slice()`, `footerEl`. Сводка counts над таблицей продолжает показывать skipped для общей картины. Все не-skipped строки показываются без лимита, скролл через существующий CSS (`max-height: 30rem; overflow-y: auto`).
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-011
+  - `src/filmoteka/static/index.html` — filter skipped, remove MAX_DISPLAY/footer
+  - `docs/progress.md` (this report)
+- Checks:
+  - Визуальный review кода: done
+- Next task:
+  - V2-008 — Написать unit/integration тесты рекомендательной логики
+
 ## Task Report: BUGFIX-010 — 2026-06-13
 
 - Status: `done`

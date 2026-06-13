@@ -1470,7 +1470,6 @@ async function runTranscodeAudio() {
     const jobId = startResp.job_id;
     if (!jobId) throw new Error('No job_id returned');
 
-    const MAX_DISPLAY = 50;
     let jobCompleted = false;
 
     // Build the progress table shell
@@ -1484,12 +1483,10 @@ async function runTranscodeAudio() {
             <tbody id="tx-tbody"></tbody>
           </table>
         </div>
-        <div id="tx-footer"></div>
       </div>`;
 
     const tbody = document.getElementById('tx-tbody');
     const summaryEl = document.getElementById('tx-summary');
-    const footerEl = document.getElementById('tx-footer');
 
     // Poll loop: fetch progress + job status every 2s
     for (let i = 0; i < 600; i++) {
@@ -1502,7 +1499,7 @@ async function runTranscodeAudio() {
         entries = pr.entries || [];
       } catch { /* keep old entries */ }
 
-      // Update table
+      // Update table — hide skipped entries, show all others
       if (entries.length > 0) {
         const counts = { queued: 0, probing: 0, transcoding: 0, completed: 0, skipped: 0, error: 0 };
         entries.forEach(e => { if (counts[e.status] !== undefined) counts[e.status]++; });
@@ -1510,8 +1507,8 @@ async function runTranscodeAudio() {
         summaryEl.textContent = `${entries.length} files — ` +
           `${counts.completed} completed, ${counts.transcoding} transcoding, ${counts.probing} probing, ${counts.queued} queued, ${counts.skipped} skipped, ${counts.error} errors`;
 
-        const display = entries.slice(0, MAX_DISPLAY);
-        tbody.innerHTML = display.map((e, i) => {
+        const visible = entries.filter(e => e.status !== 'skipped');
+        tbody.innerHTML = visible.map((e, i) => {
           const statusClass = 'tx-' + e.status;
           const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
           const errorHint = e.error ? ` title="${esc(e.error)}"` : '';
@@ -1521,11 +1518,6 @@ async function runTranscodeAudio() {
             <td><span class="tx-badge ${statusClass}">${label}</span></td>
           </tr>`;
         }).join('');
-        if (entries.length > MAX_DISPLAY) {
-          footerEl.textContent = `… and ${entries.length - MAX_DISPLAY} more file(s)`;
-        } else {
-          footerEl.textContent = '';
-        }
       }
 
       // Check job status (also used as the loop breaker)
