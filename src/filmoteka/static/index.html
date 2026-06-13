@@ -1186,6 +1186,7 @@ async function runScan() {
     const startResp = await apiAuth('/admin/import/scan', 'POST');
     const jobId = startResp.job_id;
     if (!jobId) throw new Error('No job_id returned');
+    loadJobs();
 
     reportEl.innerHTML = '<div class="spinner">Scanning library… this may take a few minutes for large files.</div>';
 
@@ -1238,6 +1239,7 @@ async function runReindex() {
     const resp = await apiAuth('/admin/media/reindex', 'POST');
     const jobId = resp.job_id;
     if (!jobId) throw new Error('No job_id returned');
+    loadJobs();
 
     reportEl.innerHTML = '<div class="spinner">Re-indexing… may take a moment.</div>';
     const job = await pollJob(jobId);
@@ -1271,6 +1273,7 @@ async function runReconcile() {
     const resp = await apiAuth('/admin/media/reconcile', 'POST');
     const jobId = resp.job_id;
     if (!jobId) throw new Error('No job_id returned');
+    loadJobs();
 
     reportEl.innerHTML = '<div class="spinner">Reconciling… may take a moment.</div>';
     const job = await pollJob(jobId);
@@ -1359,6 +1362,7 @@ async function runPosterOp(mode, btnLabel) {
 
     const jobId = startResp.job_id;
     if (!jobId) throw new Error('No job_id returned');
+    loadJobs();
 
     reportEl.innerHTML = '<div class="spinner">Processing posters… this may take a moment.</div>';
     const job = await pollJob(jobId);
@@ -1459,6 +1463,7 @@ async function runDeepseekOp(mode, btnLabel) {
 
     const jobId = startResp.job_id;
     if (!jobId) throw new Error('No job_id returned');
+    loadJobs();
 
     reportEl.innerHTML = '<div class="spinner">Enriching films via DeepSeek… this may take a while.</div>';
     const job = await pollJob(jobId);
@@ -1520,6 +1525,7 @@ async function runAliasOp(mode, btnLabel) {
 
     const jobId = startResp.job_id;
     if (!jobId) throw new Error('No job_id returned');
+    loadJobs();
 
     let jobCompleted = false;
 
@@ -1651,6 +1657,7 @@ async function runTranscodeAudio() {
     const startResp = await apiAuth('/admin/media/transcode-audio', 'POST');
     const jobId = startResp.job_id;
     if (!jobId) throw new Error('No job_id returned');
+    loadJobs();
 
     let jobCompleted = false;
 

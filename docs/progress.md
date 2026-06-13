@@ -4,6 +4,21 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-016 — 2026-06-13
+
+- Status: `done`
+- Summary: Кнопка Cancel теперь появляется после запуска любой фоновой задачи.
+  - **Корневая причина:** `loadJobs()` вызывался только один раз при загрузке страницы админки. После старта любой фоновой операции список задач не обновлялся — кнопка Cancel для running-задачи не отображалась.
+  - **Фикс:** добавил `loadJobs()` сразу после успешного POST (после получения `job_id`) во всех 7 функциях запуска операций: `runScan()`, `runReindex()`, `runReconcile()`, `runPosterOp()`, `runDeepseekOp()`, `runAliasOp()`, `runTranscodeAudio()`.
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-016
+  - `src/filmoteka/static/index.html` — +loadJobs() в 7 местах
+  - `docs/progress.md` (this report)
+- Checks:
+  - grep `loadJobs()`: 10 вызовов (def + renderAdmin + cancelJob + 7 новых) — ✅
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: V2-033 — 2026-06-13
 
 - Status: `done`
