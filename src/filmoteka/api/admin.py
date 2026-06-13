@@ -1548,8 +1548,10 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                         progress[idx].error = msg
                     continue
 
-                # Save transcoded file alongside original with .tr suffix
-                result_path = path.parent / f"{path.stem}.tr{path.suffix}"
+                # Save transcoded file in the transcoded/ subdirectory
+                tr_dir = path.parent / "transcoded"
+                tr_dir.mkdir(exist_ok=True)
+                result_path = tr_dir / f"{path.stem}.tr{path.suffix}"
                 temp_path.rename(result_path)
                 mf.file_path = str(result_path)
                 mf.audio_codec = "aac"

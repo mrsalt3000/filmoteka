@@ -132,8 +132,15 @@ def probe_candidates(
 
 
 def _collect_files(root: Path, extensions: list[str]) -> list[Path]:
-    """Recursively collect files under *root* whose suffix is in *extensions*."""
+    """Recursively collect files under *root* whose suffix is in *extensions*.
+
+    Directories named ``transcoded`` are skipped — they contain
+    previously transcoded media and must not be re-imported.
+    """
     ext_set = {e.lower() for e in extensions}
     return sorted(
-        p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in ext_set
+        p for p in root.rglob("*")
+        if p.is_file()
+        and p.suffix.lower() in ext_set
+        and "transcoded" not in p.relative_to(root).parts
     )

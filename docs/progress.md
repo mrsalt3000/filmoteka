@@ -4,6 +4,24 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-014 — 2026-06-13
+
+- Status: `done`
+- Summary: После транскодинга перемещаю `.tr.mkv` в подпапку `transcoded/`; исключил эту папку из сканирования импорта.
+  - **admin.py**: в `_run_transcode_audio()` — `tr_dir.mkdir(exist_ok=True)`, результат сохраняется как `transcoded/file.tr.mkv`, `MediaFile.file_path` обновлён
+  - **scan.py**: в `_collect_files()` — фильтр `"transcoded" not in p.relative_to(root).parts` пропускает любые файлы внутри директории `transcoded/` (на любом уровне вложенности)
+- Changed files:
+  - `src/filmoteka/api/admin.py` — +mkdir transcoded, rename into it
+  - `src/filmoteka/domain/importing/scan.py` — +transcoded filter in _collect_files
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - mypy: ✅ (27 pre-existing errors)
+  - unit tests: ✅ 142 passed
+  - python imports: ✅
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-013 — 2026-06-13
 
 - Status: `done`
