@@ -4,6 +4,28 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-011 — 2026-06-13
+
+- Status: `done`
+- Summary: Реализовал reconcile библиотеки — операция, которая приводит БД в соответствие с диском за один проход.
+  - **admin.py**: новый endpoint `POST /admin/media/reconcile` (+ background worker `_run_reconcile`). Три шага:
+    1. Reindex — чинит `MediaFile.file_path` для файлов, существующих на диске под другим путём
+    2. Cleanup — удаляет `MediaFile`, чей файл не нашёлся на диске
+    3. Cascade — удаляет пустые `MovieEdition` (без MediaFile), помечает `Film` без Edition как `needs_review`
+  - **index.html**: кнопка "🧹 Reconcile library" в секции "Media paths", JS `runReconcile()`, `buildReconcileReportHTML()` с отчётом (total, reindexed, deleted_media, deleted_editions, flagged_films, errors)
+- Changed files:
+  - `agent-tasklist.md` — +V2-011 (planned), marked [x]
+  - `src/filmoteka/api/admin.py` — +POST /admin/media/reconcile, +_run_reconcile worker
+  - `src/filmoteka/static/index.html` — +"🧹 Reconcile library" button, +runReconcile(), +buildReconcileReportHTML()
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - mypy: ✅ (27 pre-existing errors, 2 from new code — same pattern as rest of file)
+  - pytest unit: ✅ 142 passed
+  - pytest integration admin: ✅ 78 passed
+- Next task:
+  - V2-008 — Написать unit/integration тесты рекомендательной логики
+
 ## Task Report: BUGFIX-011 — 2026-06-13
 
 - Status: `done`

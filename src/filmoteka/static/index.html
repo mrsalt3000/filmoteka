@@ -828,6 +828,9 @@ async function renderAdmin(el) {
         <p>Re-index fixes stored file paths when media files exist on disk but the stored paths are stale (e.g. after switching between Docker and native mode).</p>
         <button class="poster-btn" id="reindex-btn" onclick="runReindex()">🔄 Re-index media paths</button>
         <div id="reindex-report"></div>
+        <p style="margin-top:.5rem">Reconcile removes orphaned database records for files that no longer exist on disk and cascades the cleanup through editions and films.</p>
+        <button class="poster-btn" id="reconcile-btn" onclick="runReconcile()">🧹 Reconcile library</button>
+        <div id="reconcile-report"></div>
       </div>
 
       <div class="poster-section">
@@ -1168,6 +1171,63 @@ async function runReindex() {
     btn.disabled = false;
     btn.textContent = '🔄 Re-index media paths';
   }
+}
+
+// ── Reconcile library ────────────────────────────────────────────
+async function runReconcile() {
+  const btn = document.getElementById('reconcile-btn');
+  const reportEl = document.getElementById('reconcile-report');
+  if (!btn || !reportEl) return;
+
+  if (!confirm('Reconcile library? This will remove database records for media files that no longer exist on disk, and cascade cleanup through editions and films.')) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Reconciling…';
+  reportEl.innerHTML = '<div class="spinner">Reconciling…</div>';
+
+  try {
+    const resp = await apiAuth('/admin/media/reconcile', 'POST');
+    const jobId = resp.job_id;
+    if (!jobId) throw new Error('No job_id returned');
+
+    reportEl.innerHTML = '<div class="spinner">Reconciling… may take a moment.</div>';
+    const job = await pollJob(jobId);
+    btn.disabled = false;
+    btn.textContent = '🧹 Reconcile library';
+    if (job.status === 'completed') {
+      reportEl.innerHTML = buildReconcileReportHTML(job.result);
+    } else {
+      reportEl.innerHTML = `<div class="error">${esc(job.error || 'Reconcile failed')}</div>`;
+    }
+  } catch (e) {
+    reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    btn.disabled = false;
+    btn.textContent = '🧹 Reconcile library';
+  }
+}
+
+function buildReconcileReportHTML(r) {
+  const total = r.total || 0;
+  const reindexed = r.reindexed || 0;
+  const deletedMedia = r.deleted_media || 0;
+  const deletedEditions = r.deleted_editions || 0;
+  const flaggedFilms = r.flagged_films || 0;
+  const errors = r.errors || [];
+  return `<div class="admin-report">
+    <h3>Reconcile complete</h3>
+    <table>
+      <tr><td>Total media files checked</td><td>${total}</td></tr>
+      <tr><td>Re-indexed (path fixed)</td><td>${reindexed}</td></tr>
+      <tr><td>Orphaned media files removed</td><td>${deletedMedia}</td></tr>
+      <tr><td>Empty editions removed</td><td>${deletedEditions}</td></tr>
+      <tr><td>Films flagged for review</td><td>${flaggedFilms}</td></tr>
+    </table>
+    ${errors.length > 0 ? `
+      <div class="report-errors">
+        <strong>Errors (${errors.length})</strong>
+        <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+      </div>` : '<p style="color:var(--text2);margin-top:.5rem">✅ Library is consistent with disk.</p>'}
+  </div>`;
 }
 
 function buildReindexReportHTML(r) {

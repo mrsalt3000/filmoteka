@@ -1263,6 +1263,120 @@ def _reindex_resolve_path(stored_path: str, library_root: Path) -> Path | None:
 
 
 # ---------------------------------------------------------------------------
+# Media reconcile — reindex + cleanup orphaned records
+# ---------------------------------------------------------------------------
+
+
+@router.post("/media/reconcile", status_code=202)
+def media_reconcile(
+    current_user: User = Depends(require_role("admin")),
+    config: LibraryConfig = Depends(get_library_config),
+) -> dict[str, object]:
+    """Reconcile the media library with the filesystem.
+
+    Performs three steps in a single background job:
+
+    1. **Reindex** — fix ``MediaFile.file_path`` for files that exist on
+       disk under a different path.
+    2. **Cleanup** — delete ``MediaFile`` records whose underlying file
+       could not be found anywhere under the library root.
+    3. **Cascade** — delete ``MovieEdition`` records that no longer have
+       any ``MediaFile`` children, and mark ``Film`` records that have
+       lost all their editions as ``needs_review``.
+
+    Poll ``GET /admin/jobs/{job_id}`` for completion.
+    """
+    job = run_background_job(
+        "media_reconcile", _run_reconcile, config,
+        session_factory=_background_session_factory,
+    )
+    return {"job_id": job.id, "status": "pending", "type": "media_reconcile"}
+
+
+def _run_reconcile(config: LibraryConfig, db: Session | None = None) -> dict | None:
+    """Reindex + cleanup orphaned catalog records."""
+    close = db is None
+    if db is None:
+        db = SessionLocal()
+    try:
+        lib_root = config.paths.target_root
+        media_files = db.query(MediaFile).all()
+
+        reindexed = 0
+        deleted_media = 0
+        errors: list[str] = []
+
+        # ── Step 1 & 2: reindex or delete each MediaFile ──
+        for mf in media_files:
+            stored = Path(mf.file_path)
+            if stored.is_file():
+                continue
+
+            resolved = _reindex_resolve_path(mf.file_path, lib_root)
+            if resolved is not None:
+                _logger.info(
+                    "Re-indexed media %d: %s → %s", mf.id, mf.file_path, resolved,
+                )
+                mf.file_path = str(resolved)
+                reindexed += 1
+            else:
+                _logger.info(
+                    "Removing orphaned MediaFile %d (%s)", mf.id, mf.file_path,
+                )
+                db.delete(mf)
+                deleted_media += 1
+
+        db.flush()
+
+        # ── Step 3: cascade cleanup ──
+        from sqlalchemy import func as sa_func
+
+        # Find MovieEdition records with zero MediaFiles
+        empty_editions = (
+            db.query(MovieEdition)
+            .outerjoin(MediaFile, MediaFile.edition_id == MovieEdition.id)
+            .group_by(MovieEdition.id)
+            .having(sa_func.count(MediaFile.id) == 0)
+            .all()
+        )
+        deleted_editions = len(empty_editions)
+        for ed in empty_editions:
+            _logger.info("Removing empty MovieEdition %d", ed.id)
+            db.delete(ed)
+
+        db.flush()
+
+        # Find Film records with zero editions
+        empty_films = (
+            db.query(Film)
+            .outerjoin(MovieEdition, MovieEdition.film_id == Film.id)
+            .group_by(Film.id)
+            .having(sa_func.count(MovieEdition.id) == 0)
+            .all()
+        )
+        flagged_films = len(empty_films)
+        for film in empty_films:
+            _logger.info("Flagging empty Film %d (%s) as needs_review", film.id, film.title)
+            film.needs_review = True
+
+        db.commit()
+        return {
+            "total": len(media_files),
+            "reindexed": reindexed,
+            "deleted_media": deleted_media,
+            "deleted_editions": deleted_editions,
+            "flagged_films": flagged_films,
+            "errors": errors,
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        if close:
+            db.close()
+
+
+# ---------------------------------------------------------------------------
 # In-memory per-file progress for audio transcoding (session-only)
 # ---------------------------------------------------------------------------
 
