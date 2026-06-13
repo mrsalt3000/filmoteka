@@ -7,9 +7,9 @@
 ## Task Report: BUGFIX-014 — 2026-06-13
 
 - Status: `done`
-- Summary: После транскодинга перемещаю `.tr.mkv` в подпапку `transcoded/`; исключил эту папку из сканирования импорта.
-  - **admin.py**: в `_run_transcode_audio()` — `tr_dir.mkdir(exist_ok=True)`, результат сохраняется как `transcoded/file.tr.mkv`, `MediaFile.file_path` обновлён
-  - **scan.py**: в `_collect_files()` — фильтр `"transcoded" not in p.relative_to(root).parts` пропускает любые файлы внутри директории `transcoded/` (на любом уровне вложенности)
+- Summary: После транскодинга: оригинал → `transcoded/` (бекап), транскодированный — на место оригинала. `MediaFile.file_path` не меняется. `transcoded/` исключена из сканирования импорта.
+  - **admin.py**: `path.rename(transcoded/name)` + `temp_path.rename(path)` — оригинал в backup, результат на его место
+  - **scan.py**: в `_collect_files()` — фильтр `"transcoded" not in p.relative_to(root).parts`
 - Changed files:
   - `src/filmoteka/api/admin.py` — +mkdir transcoded, rename into it
   - `src/filmoteka/domain/importing/scan.py` — +transcoded filter in _collect_files
