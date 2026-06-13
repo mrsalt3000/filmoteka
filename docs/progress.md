@@ -4,7 +4,7 @@
 
 > Этот файл ведёт агент.
 
-## Task Report: Alias progress table + alias_processed flag — 2026-06-13
+## Task Report: BUGFIX-010 — 2026-06-13
 
 - Status: `done`
 - Summary: Добавил per-file progress table для Media Aliases (аналогично транскодингу) + новый DB-флаг `alias_processed`.

@@ -836,6 +836,34 @@
   4. AC3 MKV → после транскодирования прогресс-бар полный
   5. Не-AC3 файлы не трогаются (skipped)
 
+- [x] **BUGFIX-010** Добавить per-file progress table и флаг alias_processed для Media Aliases.
+
+  Проблема: `_run_alias_generate()` молча обрабатывает файлы, пользователь
+  видит спиннер без понимания прогресса. Фильтр "defaults only" использует
+  `media_alias IS NULL`, что ненадёжно — невозможно отличить "не обработан"
+  от "обработан, но результат = stem".
+
+  Решение:
+  - Новая колонка `alias_processed` (bool, default FALSE) в `media_files`
+  - In-memory `AliasFileStatus` с per-file прогрессом (queued → processing → completed/error)
+  - `GET /admin/alias-progress/{job_id}` — polling endpoint
+  - "Defaults only" фильтрует по `alias_processed == False`
+  - Во фронтенде — живая таблица (колонки #, File, Status) с обновлением каждые 2с
+  - Цветовая индикация, первые 50 строк, итоговый report после завершения
+
+  **Что меняется:**
+  - `models.py` — +alias_processed
+  - `migrations/` — новая миграция
+  - `admin.py` — +AliasFileStatus, +endpoint, rewritten worker
+  - `index.html` — live progress table вместо spinne
+
+  Проверка результата:
+  1. `ruff check` и `mypy` проходят
+  2. Кнопка "Generate aliases" показывает живую таблицу с прогрессом
+  3. "Defaults only" обрабатывает только файлы с `alias_processed == False`
+  4. После первой обработки `alias_processed` = True
+  5. При ошибке `alias_processed` остаётся False — повторная кнопка доделает
+
 ---
 
 ## 3.12. Provider migration
