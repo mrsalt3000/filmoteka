@@ -150,6 +150,31 @@ nav input::placeholder { color: var(--text2); }
 .admin-report .report-errors { margin-top: .75rem; }
 .admin-report .report-errors li { color: var(--accent); font-size: .85rem; }
 
+/* ── Transcode progress table ── */
+.transcode-progress-wrap { margin-top: 1.5rem; }
+.transcode-summary { font-size: .9rem; color: var(--text2); margin-bottom: .75rem; }
+.transcode-table-wrap { max-height: 30rem; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.transcode-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.transcode-table th { position: sticky; top: 0; background: var(--surface); color: var(--text2); padding: .4rem .5rem; text-align: left; font-weight: 600; border-bottom: 1px solid var(--border); }
+.transcode-table td { padding: .25rem .5rem; border-bottom: 1px solid var(--border); }
+.transcode-table tr:last-child td { border-bottom: none; }
+.transcode-table .tx-file { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-badge { display: inline-block; padding: .1rem .45rem; border-radius: 3px; font-size: .78rem; font-weight: 600; }
+.tx-badge.tx-queued { background: #e0e0e0; color: #616161; }
+.tx-badge.tx-probing { background: #fff8e1; color: #f57f17; }
+.tx-badge.tx-transcoding { background: #e3f2fd; color: #1565c0; }
+.tx-badge.tx-completed { background: #e8f5e9; color: #2e7d32; }
+.tx-badge.tx-skipped { background: #f5f5f5; color: #9e9e9e; }
+.tx-badge.tx-error { background: #ffebee; color: #c62828; }
+#tx-footer { margin-top: .35rem; font-size: .85rem; color: var(--text2); font-style: italic; }
+
+body.dark .tx-badge.tx-queued { background: #424242; color: #bdbdbd; }
+body.dark .tx-badge.tx-probing { background: #3e2723; color: #ffcc80; }
+body.dark .tx-badge.tx-transcoding { background: #1a237e; color: #90caf9; }
+body.dark .tx-badge.tx-completed { background: #1b5e20; color: #a5d6a7; }
+body.dark .tx-badge.tx-skipped { background: #303030; color: #757575; }
+body.dark .tx-badge.tx-error { background: #b71c1c; color: #ffcdd2; }
+
 /* ── Player error ────────────────────────────── */
 .play-error { text-align: center; padding: 3rem 1rem; }
 .play-error .icon { font-size: 3rem; margin-bottom: .5rem; }
@@ -1366,7 +1391,7 @@ async function runTranscodeAudio() {
   if (!confirm('Transcode AC3/E-AC3 audio to AAC for all media files? This may take a while and will modify files in-place.')) return;
 
   btn.disabled = true;
-  btn.textContent = '⏳ Probing…';
+  btn.textContent = '⏳ Starting…';
   reportEl.innerHTML = '<div class="spinner">Starting…</div>';
 
   try {
@@ -1374,30 +1399,101 @@ async function runTranscodeAudio() {
     const jobId = startResp.job_id;
     if (!jobId) throw new Error('No job_id returned');
 
-    reportEl.innerHTML = '<div class="spinner">Scanning and transcoding… this may take a while for large libraries.</div>';
-    const job = await pollJob(jobId);
-    if (job.status === 'completed') {
-      const r = job.result;
-      const errors = (r && r.errors) || [];
-      reportEl.innerHTML = `<div class="admin-report">
-        <h3>Audio Transcoding — Complete</h3>
-        <table>
-          <tr><td>Total media files scanned</td><td>${r ? r.total : '?'}</td></tr>
-          <tr><td>Transcoded (AC3→AAC)</td><td>${r ? r.transcoded : '?'}</td></tr>
-          <tr><td>Skipped (no AC3)</td><td>${r ? r.skipped : '?'}</td></tr>
-          <tr><td>Errors</td><td>${r ? r.error_count : '?'}</td></tr>
-        </table>
-        ${errors.length > 0 ? `
-          <div class="report-errors">
-            <strong>Errors (${errors.length})</strong>
-            <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
-          </div>` : '<p style="color:var(--text2);margin-top:.5rem">✅ All done — no errors.</p>'}
+    const MAX_DISPLAY = 50;
+    let jobCompleted = false;
+
+    // Build the progress table shell
+    reportEl.innerHTML = `
+      <div class="transcode-progress-wrap">
+        <h3>Audio Transcoding — Progress</h3>
+        <div class="transcode-summary" id="tx-summary">Initialising…</div>
+        <div class="transcode-table-wrap" id="tx-table-wrap">
+          <table class="transcode-table">
+            <thead><tr><th>#</th><th>File</th><th>Status</th></tr></thead>
+            <tbody id="tx-tbody"></tbody>
+          </table>
+        </div>
+        <div id="tx-footer"></div>
       </div>`;
-    } else {
-      throw new Error(job.error || 'Transcoding failed');
+
+    const tbody = document.getElementById('tx-tbody');
+    const summaryEl = document.getElementById('tx-summary');
+    const footerEl = document.getElementById('tx-footer');
+
+    // Poll loop: fetch progress + job status every 2s
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Fetch per-file progress
+      let entries = [];
+      try {
+        const pr = await apiAuth(`/admin/transcode-progress/${jobId}`);
+        entries = pr.entries || [];
+      } catch { /* keep old entries */ }
+
+      // Update table
+      if (entries.length > 0) {
+        const counts = { queued: 0, probing: 0, transcoding: 0, completed: 0, skipped: 0, error: 0 };
+        entries.forEach(e => { if (counts[e.status] !== undefined) counts[e.status]++; });
+
+        summaryEl.textContent = `${entries.length} files — ` +
+          `${counts.completed} completed, ${counts.transcoding} transcoding, ${counts.probing} probing, ${counts.queued} queued, ${counts.skipped} skipped, ${counts.error} errors`;
+
+        const display = entries.slice(0, MAX_DISPLAY);
+        tbody.innerHTML = display.map((e, i) => {
+          const statusClass = 'tx-' + e.status;
+          const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
+          const errorHint = e.error ? ` title="${esc(e.error)}"` : '';
+          return `<tr${errorHint}>
+            <td>${i + 1}</td>
+            <td class="tx-file">${esc(e.file_name)}</td>
+            <td><span class="tx-badge ${statusClass}">${label}</span></td>
+          </tr>`;
+        }).join('');
+        if (entries.length > MAX_DISPLAY) {
+          footerEl.textContent = `… and ${entries.length - MAX_DISPLAY} more file(s)`;
+        } else {
+          footerEl.textContent = '';
+        }
+      }
+
+      // Check job status (also used as the loop breaker)
+      if (jobCompleted) break;
+      try {
+        const job = await apiAuth(`/admin/jobs/${jobId}`);
+        if (job.status === 'completed' || job.status === 'failed') {
+          jobCompleted = true;
+          // Show the final report
+          const r = job.result;
+          if (job.status === 'completed') {
+            const errors = (r && r.errors) || [];
+            reportEl.innerHTML += `<div class="admin-report" style="margin-top:1rem">
+              <h3>Audio Transcoding — Complete</h3>
+              <table>
+                <tr><td>Total media files scanned</td><td>${r ? r.total : '?'}</td></tr>
+                <tr><td>Transcoded (AC3→AAC)</td><td>${r ? r.transcoded : '?'}</td></tr>
+                <tr><td>Skipped (no AC3)</td><td>${r ? r.skipped : '?'}</td></tr>
+                <tr><td>Errors</td><td>${r ? r.error_count : '?'}</td></tr>
+              </table>
+              ${errors.length > 0 ? `
+                <div class="report-errors">
+                  <strong>Errors (${errors.length})</strong>
+                  <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+                </div>` : '<p style="color:var(--text2);margin-top:.5rem">✅ All done — no errors.</p>'}
+            </div>`;
+          } else {
+            reportEl.innerHTML += `<div class="error" style="margin-top:1rem">Transcoding failed: ${esc(job.error || 'Unknown error')}</div>`;
+          }
+          break;
+        }
+      } catch { /* keep polling */ }
     }
+
+    if (!jobCompleted) throw new Error('Job timed out after 20 minutes');
+
   } catch (e) {
-    reportEl.innerHTML = `<div class="error">Transcoding failed: ${esc(e.message)}</div>`;
+    const existing = reportEl.querySelector('.admin-report, .error');
+    if (!existing) reportEl.innerHTML = `<div class="error">Transcoding failed: ${esc(e.message)}</div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = '🎵 Transcode AC3 audio';

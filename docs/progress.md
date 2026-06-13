@@ -4,6 +4,27 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: Transcode progress table — 2026-06-13
+
+- Status: `done`
+- Summary: Добавил per-file progress table для AC3→AAC транскодинга. В `admin.py` — `TranscodeFileStatus` dataclass, in-memory `_transcode_progress[job_id]`, endpoint `GET /admin/transcode-progress/{job_id}`. Worker `_run_transcode_audio()` обновляет статус каждого файла: `queued` → `probing` → `transcoding` → `completed` / `skipped` / `error`. В `index.html` — `runTranscodeAudio()` больше не показывает спиннер, вместо этого отрисовывает таблицу с колонками #, File, Status, обновляемую каждые 2 секунды. Цветовая индикация (queued=серый, probing=жёлтый, transcoding=синий, completed=зелёный, skipped=серый, error=красный). Сводка counts над таблицей. Ограничение на первые 50 строк с "...and N more". После завершения — итоговый report под таблицей.
+- Changed files:
+  - `src/filmoteka/api/admin.py` — imports (+threading, dataclass), progress dataclass + state, GET /admin/transcode-progress/{job_id} endpoint, modified POST endpoint + worker
+  - `src/filmoteka/static/index.html` — replaced runTranscodeAudio() spinner with live progress table; added CSS (transcode-table, tx-badge with light/dark themes)
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - mypy: ✅ (25 pre-existing errors, all unrelated)
+  - pytest unit: ✅ 142 passed
+  - pytest integration admin: ✅ 78 passed
+  - pytest integration media + catalog: ✅ 96 passed
+- Risks / follow-ups:
+  - In-memory only — теряется при рестарте API (сознательно, "только текущая сессия")
+  - Транскодинг больших библиотек (>3600 файлов) держит в памяти 3600+ `TranscodeFileStatus` объектов (~несколько KB)
+  - Защита `_transcode_lock` может создать микрозадержки при частых poll-запросах во время транскодинга
+- Next task:
+  - V2-008 — Написать unit/integration тесты рекомендательной логики
+
 ## Task Report: V3-003 — 2026-06-13
 
 - Status: `done`

@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import threading
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -1174,8 +1176,58 @@ def _reindex_resolve_path(stored_path: str, library_root: Path) -> Path | None:
 
 
 # ---------------------------------------------------------------------------
+# In-memory per-file progress for audio transcoding (session-only)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TranscodeFileStatus:
+    media_id: int
+    file_name: str
+    status: str  # "queued" | "probing" | "transcoding" | "completed" | "skipped" | "error"
+    error: str | None = None
+
+
+# Global state for the current transcode job, keyed by job_id.
+# Only one transcode job runs at a time.  Cleared when a new job starts.
+_transcode_progress: dict[int, list[TranscodeFileStatus]] = {}
+_active_transcode_job_id: int | None = None
+_transcode_lock = threading.Lock()
+
+
+# ---------------------------------------------------------------------------
 # Audio transcoding (AC3/E-AC3 → AAC)
 # ---------------------------------------------------------------------------
+
+
+@router.get("/transcode-progress/{job_id}")
+def get_transcode_progress(
+    job_id: int,
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Return per-file progress for a transcode audio job.
+
+    Returns the list of ``TranscodeFileStatus`` entries — each entry
+    has ``media_id``, ``file_name``, ``status``, and optionally
+    ``error``.  The data lives in memory only and is cleared when a
+    new transcode job starts.
+    """
+    with _transcode_lock:
+        entries = _transcode_progress.get(job_id)
+        if entries is None:
+            return {"entries": [], "total": 0}
+        return {
+            "entries": [
+                {
+                    "media_id": e.media_id,
+                    "file_name": e.file_name,
+                    "status": e.status,
+                    "error": e.error,
+                }
+                for e in entries
+            ],
+            "total": len(entries),
+        }
 
 
 @router.post("/media/transcode-audio", status_code=202)
@@ -1188,13 +1240,22 @@ def transcode_media_audio(
     in-place using ffmpeg (video copy, audio only).  After transcoding
     the browser can render a proper seekable progress bar.
 
+    Per-file progress is available at
+    ``GET /admin/transcode-progress/{job_id}`` for the duration of the
+    job.
+
     Starts a background task.  Poll ``GET /admin/jobs/{job_id}``
     for completion.
     """
+    global _active_transcode_job_id  # noqa: PLW0603
+
     job = run_background_job(
         "transcode_audio", _run_transcode_audio,
         session_factory=_background_session_factory,
     )
+    _active_transcode_job_id = job.id
+    with _transcode_lock:
+        _transcode_progress.clear()
     return {"job_id": job.id, "status": "pending", "type": "transcode_audio"}
 
 
@@ -1210,25 +1271,50 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
         skipped = 0
         errors: list[str] = []
 
-        for mf in media_files:
+        # Initialise in-memory progress table (all queued).
+        progress: list[TranscodeFileStatus] = [
+            TranscodeFileStatus(
+                media_id=mf.id,
+                file_name=Path(mf.file_path).name,
+                status="queued",
+            )
+            for mf in media_files
+        ]
+        job_id = _active_transcode_job_id or 0
+        with _transcode_lock:
+            _transcode_progress[job_id] = progress
+
+        for idx, mf in enumerate(media_files):
             path = Path(mf.file_path)
+
+            # ── Probe ──
+            with _transcode_lock:
+                progress[idx].status = "probing"
             if not path.is_file():
+                with _transcode_lock:
+                    progress[idx].status = "skipped"
                 skipped += 1
                 continue
 
-            # Probe to check actual audio codec
             try:
                 probe = probe_media(path)
             except MediaProbeError:
+                with _transcode_lock:
+                    progress[idx].status = "skipped"
                 skipped += 1
                 continue
 
             codec_raw = (probe.audio_codec or "").lower()
             if codec_raw not in ("ac3", "eac3"):
+                with _transcode_lock:
+                    progress[idx].status = "skipped"
                 skipped += 1
                 continue
 
-            # Transcode: video copy, audio AC3→AAC
+            # ── Transcode ──
+            with _transcode_lock:
+                progress[idx].status = "transcoding"
+
             # NOTE: keep .mkv extension so ffmpeg can detect the muxer format.
             temp_path = path.parent / f".{path.stem}.ac3fix{path.suffix}"
             try:
@@ -1252,8 +1338,13 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                         mf.id, path.name, result.returncode,
                         result.stderr.strip()[-500:],
                     )
-                    errors.append(f"Media {mf.id} ({path.name}): ffmpeg error — {msg}")
+                    errors.append(
+                        f"Media {mf.id} ({path.name}): ffmpeg error — {msg}",
+                    )
                     temp_path.unlink(missing_ok=True)
+                    with _transcode_lock:
+                        progress[idx].status = "error"
+                        progress[idx].error = msg
                     continue
 
                 # Replace original with transcoded file
@@ -1263,12 +1354,20 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                     "Transcoded AC3→AAC for media %d: %s", mf.id, path.name,
                 )
                 transcoded += 1
+                with _transcode_lock:
+                    progress[idx].status = "completed"
             except subprocess.TimeoutExpired:
                 errors.append(f"Media {mf.id} ({path.name}): ffmpeg timed out")
                 temp_path.unlink(missing_ok=True)
+                with _transcode_lock:
+                    progress[idx].status = "error"
+                    progress[idx].error = "ffmpeg timed out"
             except Exception as exc:
                 errors.append(f"Media {mf.id} ({path.name}): {exc}")
                 temp_path.unlink(missing_ok=True)
+                with _transcode_lock:
+                    progress[idx].status = "error"
+                    progress[idx].error = str(exc)
 
         db.commit()
         return {
