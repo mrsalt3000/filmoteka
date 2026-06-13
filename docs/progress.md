@@ -7,9 +7,9 @@
 ## Task Report: BUGFIX-014 — 2026-06-13
 
 - Status: `done`
-- Summary: После транскодинга: оригинал → `transcoded/` (бекап), транскодированный — на место оригинала. `MediaFile.file_path` не меняется. `transcoded/` исключена из сканирования импорта.
-  - **admin.py**: `path.rename(transcoded/name)` + `temp_path.rename(path)` — оригинал в backup, результат на его место
-  - **scan.py**: в `_collect_files()` — фильтр `"transcoded" not in p.relative_to(root).parts`
+- Summary: Переписал логику — не трогаю оригинал. Результат `.tr.mkv` рядом с файлом, `MediaFile.file_path` обновлён. `_collect_files()` пропускает и `transcoded/`, и файлы с `.tr` перед расширением (`.tr.mkv`).
+  - **admin.py**: `temp_path.rename(result_path)` → `file.tr.mkv` рядом с оригиналом; убрал `shutil`, `transcoded/` логику
+  - **scan.py**: +`.tr` not in `suffixes[:-1]` — пропускает `file.tr.mkv` при сканировании
 - Changed files:
   - `src/filmoteka/api/admin.py` — +mkdir transcoded, rename into it
   - `src/filmoteka/domain/importing/scan.py` — +transcoded filter in _collect_files

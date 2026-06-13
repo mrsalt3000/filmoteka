@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import logging
-import shutil
 import subprocess
 import threading
 from dataclasses import dataclass
@@ -1549,17 +1548,13 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                         progress[idx].error = msg
                     continue
 
-                # Move original to transcoded/, put transcoded result at the original path
-                tr_dir = path.parent / "transcoded"
-                tr_dir.mkdir(exist_ok=True)
-                orig_backup = tr_dir / path.name
-                shutil.copy2(path, orig_backup)
-                path.unlink()
-                temp_path.rename(path)
+                # Place transcoded file alongside original with .tr suffix
+                result_path = path.parent / f"{path.stem}.tr{path.suffix}"
+                temp_path.rename(result_path)
+                mf.file_path = str(result_path)
                 mf.audio_codec = "aac"
                 _logger.info(
-                    "Transcoded AC3→AAC for media %d: %s (original backed up to %s)",
-                    mf.id, path.name, orig_backup,
+                    "Transcoded AC3→AAC for media %d: %s", mf.id, result_path.name,
                 )
                 transcoded += 1
                 with _transcode_lock:
