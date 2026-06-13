@@ -1536,7 +1536,7 @@ async function runAliasOp(mode, btnLabel) {
         <div class="transcode-summary" id="al-summary">Initialising…</div>
         <div class="transcode-table-wrap">
           <table class="transcode-table">
-            <thead><tr><th>#</th><th>File</th><th>Status</th></tr></thead>
+            <thead><tr><th>#</th><th>File</th><th>Alias</th><th>Status</th></tr></thead>
             <tbody id="al-tbody"></tbody>
           </table>
         </div>
@@ -1556,7 +1556,7 @@ async function runAliasOp(mode, btnLabel) {
         entries = pr.entries || [];
       } catch { /* keep old entries */ }
 
-      // Update table (live progress columns: #, File, Status)
+      // Update table (live progress columns: #, File, Alias, Status)
       if (entries.length > 0) {
         const counts = { queued: 0, processing: 0, completed: 0, error: 0 };
         entries.forEach(e => { if (counts[e.status] !== undefined) counts[e.status]++; });
@@ -1569,9 +1569,13 @@ async function runAliasOp(mode, btnLabel) {
           const statusClass = 'tx-' + e.status;
           const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
           const errorMsg = e.error ? `<span class="tx-error-msg">: ${esc(e.error)}</span>` : '';
+          const aliasHtml = e.status === 'completed'
+            ? esc(e.media_alias || '')
+            : (e.status === 'error' ? '—' : '<em>…</em>');
           return `<tr>
             <td>${i + 1}</td>
             <td class="tx-file">${esc(e.file_name)}</td>
+            <td>${aliasHtml}</td>
             <td><span class="tx-badge ${statusClass}">${label}</span>${errorMsg}</td>
           </tr>`;
         }).join('');

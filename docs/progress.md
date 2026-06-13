@@ -4,6 +4,21 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-017 — 2026-06-13
+
+- Status: `done`
+- Summary: Добавил колонку Alias в прогресс-таблицу генерации алиасов.
+  - **Проблема:** live progress table показывала только `#`, `File`, `Status`. API возвращает `media_alias` для completed-записей, но колонка не отрисовывалась.
+  - **Фикс:** шапка теперь `#`, `File`, `Alias`, `Status`. Для `completed` — `e.media_alias`, для `processing`/`queued` — `…`, для `error` — `—`.
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-017
+  - `src/filmoteka/static/index.html` — +Alias колонка в прогресс-таблицу
+  - `docs/progress.md` (this report)
+- Checks:
+  - Визуальный review кода: ✅ 2 изменения (шапка + строки)
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-016 — 2026-06-13
 
 - Status: `done`
