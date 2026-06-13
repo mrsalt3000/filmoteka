@@ -15,6 +15,8 @@ from filmoteka.domain.catalog.models import (
     Genre,
     MediaFile,
     MovieEdition,
+    Person,
+    film_person,
 )
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
@@ -940,6 +942,179 @@ class TestRecommendations:
         # No recommendations because incognito watch doesn't count
         resp = client.get("/me/recommendations", headers=self._auth(token))
         assert resp.json()["total"] == 0
+
+    def test_recommends_by_person(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """After watching a film with actor X, another film with the same
+        actor is recommended even without a shared genre."""
+        token = _register(client, "rec_person")
+
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        drama = Genre(name="Drama", slug="drama")
+        db_session.add_all([sci_fi, drama])
+
+        actor = Person(name="Keanu Reeves")
+        db_session.add(actor)
+        db_session.flush()
+
+        watched = Film(title="Watched Sci-Fi", year=2020, genres=[sci_fi])
+        candidate = Film(title="Drama with Actor", year=2021, genres=[drama])
+        no_match = Film(title="Drama No Match", year=2022, genres=[drama])
+        db_session.add_all([watched, candidate, no_match])
+        db_session.flush()
+
+        # Associate actor with watched and candidate via film_person
+        db_session.execute(
+            film_person.insert().values(film_id=watched.id, person_id=actor.id, role="actor"),
+        )
+        db_session.execute(
+            film_person.insert().values(film_id=candidate.id, person_id=actor.id, role="actor"),
+        )
+        db_session.commit()
+
+        ed = MovieEdition(film_id=watched.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/rec_person.mkv")
+        db_session.add(m)
+        db_session.commit()
+
+        client.post(f"/media/{m.id}/watch/start", headers=self._auth(token))
+        event = db_session.query(WatchEvent).first()
+        assert event is not None
+        event.finished = True
+        db_session.commit()
+
+        resp = client.get("/me/recommendations", headers=self._auth(token))
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Drama with Actor" in titles
+        assert "Drama No Match" not in titles
+
+    def test_score_priority(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Genre match (2.0) < genre+person combined (3.5); scores are
+        sorted descending."""
+        token = _register(client, "rec_score")
+
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        drama = Genre(name="Drama", slug="drama")
+        db_session.add_all([sci_fi, drama])
+
+        actor = Person(name="Morgan Freeman")
+        db_session.add(actor)
+        db_session.flush()
+
+        watched = Film(title="Watched", year=2020, genres=[sci_fi])
+
+        only_genre = Film(title="Genre Only", year=2021, genres=[sci_fi])
+        only_person = Film(title="Person Only", year=2022, genres=[drama])
+        both = Film(title="Both Match", year=2023, genres=[sci_fi])
+        db_session.add_all([watched, only_genre, only_person, both])
+        db_session.flush()
+
+        # Associate actor with watched, only_person, and both
+        db_session.execute(
+            film_person.insert().values(film_id=watched.id, person_id=actor.id, role="actor"),
+        )
+        db_session.execute(
+            film_person.insert().values(film_id=only_person.id, person_id=actor.id, role="actor"),
+        )
+        db_session.execute(
+            film_person.insert().values(film_id=both.id, person_id=actor.id, role="actor"),
+        )
+        db_session.commit()
+
+        ed = MovieEdition(film_id=watched.id)
+        db_session.add(ed)
+        db_session.flush()
+        m = MediaFile(edition_id=ed.id, file_path="/tmp/rec_score.mkv")
+        db_session.add(m)
+        db_session.commit()
+
+        client.post(f"/media/{m.id}/watch/start", headers=self._auth(token))
+        event = db_session.query(WatchEvent).first()
+        assert event is not None
+        event.finished = True
+        db_session.commit()
+
+        resp = client.get("/me/recommendations?limit=10", headers=self._auth(token))
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        titles = [i["title"] for i in items]
+        scores = [i["score"] for i in items]
+
+        assert "Both Match" in titles
+        assert "Genre Only" in titles
+        assert "Person Only" in titles
+
+        # Both Match should have the highest score (genre 2.0 + person 1.5 = 3.5)
+        both_idx = titles.index("Both Match")
+        genre_idx = titles.index("Genre Only")
+        person_idx = titles.index("Person Only")
+        assert scores[both_idx] > scores[genre_idx], (
+            f"Both ({scores[both_idx]}) should score higher than Genre Only ({scores[genre_idx]})"
+        )
+        assert scores[genre_idx] > 0
+        assert scores[person_idx] > 0
+
+    def test_language_filter(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """When filter_by_language is enabled, only films with the most
+        common watched audio language are recommended."""
+        token = _register(client, "rec_lang")
+
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        db_session.add(sci_fi)
+        db_session.flush()
+
+        # Watched: one film with rus audio
+        watched = Film(title="Watched Rus", year=2020, genres=[sci_fi])
+        rus_candidate = Film(title="Russian Film", year=2021, genres=[sci_fi])
+        eng_candidate = Film(title="English Film", year=2022, genres=[sci_fi])
+        db_session.add_all([watched, rus_candidate, eng_candidate])
+        db_session.flush()
+
+        ed_w = MovieEdition(film_id=watched.id)
+        ed_rus = MovieEdition(film_id=rus_candidate.id)
+        ed_eng = MovieEdition(film_id=eng_candidate.id)
+        db_session.add_all([ed_w, ed_rus, ed_eng])
+        db_session.flush()
+
+        m_w = MediaFile(
+            edition_id=ed_w.id, file_path="/tmp/rec_lang_w.mkv", audio_codec="rus",
+        )
+        m_rus = MediaFile(
+            edition_id=ed_rus.id, file_path="/tmp/rec_lang_rus.mkv", audio_codec="rus",
+        )
+        m_eng = MediaFile(
+            edition_id=ed_eng.id, file_path="/tmp/rec_lang_eng.mkv", audio_codec="eng",
+        )
+        db_session.add_all([m_w, m_rus, m_eng])
+        db_session.commit()
+
+        # Enable language filter
+        client.put(
+            "/me/filter-by-language",
+            headers=self._auth(token),
+            json={"filter": True},
+        )
+
+        # Watch and finish the rus film so rus becomes top language
+        client.post(f"/media/{m_w.id}/watch/start", headers=self._auth(token))
+        event = db_session.query(WatchEvent).first()
+        assert event is not None
+        event.finished = True
+        db_session.commit()
+
+        resp = client.get("/me/recommendations", headers=self._auth(token))
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert "Russian Film" in titles
+        assert "English Film" not in titles
 
 
 class TestRecommendByMood:

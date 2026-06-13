@@ -4,6 +4,24 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-008 — 2026-06-13
+
+- Status: `done`
+- Summary: Написал 3 integration теста для рекомендательной логики.
+  - **test_recommends_by_person**: общий актёр между просмотренным и кандидатом → recommendation (даже без общего жанра)
+  - **test_score_priority**: genre (2.0) < genre+person combined (3.5); проверка сортировки по убыванию score
+  - **test_language_filter**: включён `filter_by_language` → рекомендации ограничены audio_codec, совпадающим с самым частым среди просмотренных
+- Changed files:
+  - `tests/integration/test_users.py` — +3 теста, +импорт Person и film_person
+  - `agent-tasklist.md` — V2-008 marked [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ (3 pre-existing errors, none in new code)
+  - mypy: ✅
+  - pytest integration test_users: ✅ 55 passed (+3 new)
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: V2-023 — 2026-06-13
 
 - Status: `done`
