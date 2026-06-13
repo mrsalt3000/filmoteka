@@ -4,6 +4,22 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-013 — 2026-06-13
+
+- Status: `done`
+- Summary: Починил Permission denied при транскодинге — сохраняю результат с постфиксом `.tr` вместо перезаписи оригинала.
+  - **Корневая причина:** `temp_path.replace(path)` требует write permission на целевой файл. Внутри Docker-контейнера файлы библиотеки принадлежат пользователю хоста, а контейнер работает под другим uid → `rename(2)` возвращает EACCES.
+  - **Фикс:** `temp_path.rename(result_path)`, где `result_path = path.parent / f"{path.stem}.tr{path.suffix}"`. После успеха обновляется `MediaFile.file_path` и `audio_codec`. Оригинальный файл сохраняется. Временный `.ac3fix.mkv` файл продолжает использоваться как промежуточный.
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-013
+  - `src/filmoteka/api/admin.py` — `temp_path.replace(path)` → `temp_path.rename(result_path)` + `mf.file_path` update
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - pytest integration admin: ✅ 78 passed
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-012 — 2026-06-13
 
 - Status: `done`

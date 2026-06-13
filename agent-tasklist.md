@@ -906,6 +906,45 @@
   2. У строк без ошибки ничего лишнего не появляется
   3. Ошибка кликабельна/читаема без наведения мыши
 
+- [x] **BUGFIX-013** Транскодинг — Permission denied при overwrite оригинала; сохранять результат с постфиксом .tr.
+
+  Проблема: ``temp_path.replace(path)`` в ``_run_transcode_audio()``
+  падает с ``[Errno 13] Permission denied``, когда у Docker-контейнера
+  нет прав на перезапись оригинального медиафайла (файл создан другим
+  пользователем на хосте). Дополнительно — операция разрушительная:
+  оригинал теряется.
+
+  Диагностика:
+  - ``temp_path`` (``.file.ac3fix.mkv``) создаётся успешно — контейнер
+    имеет write permission на **директорию** через bind mount
+  - ``temp_path.replace(path)`` требует write permission на **целевой
+    файл** — если владелец файла на хосте не совпадает с uid контейнера,
+    ``rename(2)`` возвращает EACCES
+  - Ошибка воспроизводится для всех файлов, импортированных на хосте
+    Windows/Linux, где uid контейнера (обычно root/python) не совпадает
+    с владельцем файла
+
+  Решение: не перезаписывать оригинал. Сохранять транскодированный файл
+  рядом с постфиксом ``.tr``:
+  ``Mortal.Kombat.1995.1080p.BDRip.mkv`` → ``Mortal.Kombat.1995.1080p.BDRip.tr.mkv``
+  и обновлять ``MediaFile.file_path`` на новый путь.
+
+  **Что меняется:**
+  - ``admin.py`` — ``_run_transcode_audio()``:
+    - Вместо ``temp_path.replace(path)`` → ``temp_path.rename(result_path)``
+    - ``result_path = path.parent / f"{path.stem}.tr{path.suffix}"``
+    - После успеха: ``mf.file_path = str(result_path)`` + ``mf.audio_codec = "aac"``
+    - При ошибке: ``temp_path.unlink(missing_ok=True)``
+  - **НЕ меняется:** модели, миграции, схемы, фронтенд
+
+  Проверка результата:
+  1. Транскодинг не падает с Permission denied для read-only файлов
+  2. После транскодинга рядом с оригиналом появляется ``file.tr.mkv``
+  3. ``MediaFile.file_path`` обновлён на ``file.tr.mkv``
+  4. ``MediaFile.audio_codec`` = ``"aac"``
+  5. Плеер воспроизводит ``.tr.mkv`` файл
+  6. Оригинальный ``file.mkv`` сохранён (не удалён)
+
 ---
 
 ## 3.12. Provider migration

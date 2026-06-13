@@ -1548,11 +1548,14 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                         progress[idx].error = msg
                     continue
 
-                # Replace original with transcoded file
-                temp_path.replace(path)
+                # Save transcoded file alongside original with .tr suffix
+                result_path = path.parent / f"{path.stem}.tr{path.suffix}"
+                temp_path.rename(result_path)
+                mf.file_path = str(result_path)
                 mf.audio_codec = "aac"
                 _logger.info(
-                    "Transcoded AC3→AAC for media %d: %s", mf.id, path.name,
+                    "Transcoded AC3→AAC for media %d: %s → %s",
+                    mf.id, path.name, result_path.name,
                 )
                 transcoded += 1
                 with _transcode_lock:
