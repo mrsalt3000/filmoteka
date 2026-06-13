@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import threading
 from dataclasses import dataclass
@@ -1552,7 +1553,8 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                 tr_dir = path.parent / "transcoded"
                 tr_dir.mkdir(exist_ok=True)
                 orig_backup = tr_dir / path.name
-                path.rename(orig_backup)
+                shutil.copy2(path, orig_backup)
+                path.unlink()
                 temp_path.rename(path)
                 mf.audio_codec = "aac"
                 _logger.info(
