@@ -4,6 +4,24 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-033 — 2026-06-13
+
+- Status: `done`
+- Summary: Alias generation — таблица результатов с кнопкой удалить для каждого алиаса.
+  - **admin.py**: +`POST /admin/alias/{media_id}/reset` — сбрасывает `media_alias = NULL`, `alias_processed = False`. `GET /admin/alias-progress/{job_id}` — обогащён полем `media_alias` из БД для completed-записей.
+  - **index.html**: после завершения `runAliasOp()` — таблица с колонками #, File, Alias, Status, Action. Кнопка Delete → `POST /admin/alias/{media_id}/reset`. Summary counts под таблицей. Skipped не показываются. Убраны MAX_DISPLAY и footerEl (показываются все строки).
+- Changed files:
+  - `agent-tasklist.md` — BUGFIX-017 → V2-032
+  - `src/filmoteka/api/admin.py` — +POST /admin/alias/{media_id}/reset, enriched progress endpoint
+  - `src/filmoteka/static/index.html` — result table + delete buttons, removed MAX_DISPLAY
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - mypy: ✅ (pre-existing)
+  - pytest unit: ✅ 142 passed
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: V2-031 — 2026-06-13
 
 - Status: `done`

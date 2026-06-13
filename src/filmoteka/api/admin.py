@@ -990,34 +990,61 @@ _active_alias_job_id: int | None = None
 _alias_lock = threading.Lock()
 
 
+@router.post("/alias/{media_id}/reset")
+def reset_alias(
+    media_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Reset a single media file's alias to its default (unprocessed) state.
+
+    Sets ``media_alias = NULL`` and ``alias_processed = False`` so the
+    file will be picked up by the next "Generate aliases (defaults only)"
+    run.
+    """
+    mf = db.get(MediaFile, media_id)
+    if mf is None:
+        raise HTTPException(status_code=404, detail="MediaFile not found")
+    mf.media_alias = None
+    mf.alias_processed = False
+    db.commit()
+    return {"status": "ok", "media_id": media_id}
+
+
 @router.get("/alias-progress/{job_id}")
 def get_alias_progress(
     job_id: int,
     current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
 ) -> dict[str, object]:
     """Return per-file progress for an alias-generation job.
 
     Returns the list of ``AliasFileStatus`` entries — each entry
-    has ``media_id``, ``file_name``, ``status``, and optionally
-    ``error``.  The data lives in memory only and is cleared when a
-    new alias job starts.
+    has ``media_id``, ``file_name``, ``media_alias``, ``status``,
+    and optionally ``error``.  The data lives in memory only and
+    is cleared when a new alias job starts.
     """
     with _alias_lock:
         entries = _alias_progress.get(job_id)
         if entries is None:
             return {"entries": [], "total": 0}
-        return {
-            "entries": [
-                {
-                    "media_id": e.media_id,
-                    "file_name": e.file_name,
-                    "status": e.status,
-                    "error": e.error,
-                }
-                for e in entries
-            ],
-            "total": len(entries),
-        }
+
+        result_entries: list[dict[str, object]] = []
+        for e in entries:
+            media_alias: str | None = None
+            if e.status == "completed":
+                mf = db.get(MediaFile, e.media_id)
+                if mf is not None:
+                    media_alias = mf.media_alias
+            result_entries.append({
+                "media_id": e.media_id,
+                "file_name": e.file_name,
+                "media_alias": media_alias,
+                "status": e.status,
+                "error": e.error,
+            })
+
+        return {"entries": result_entries, "total": len(entries)}
 
 
 @router.post("/aliases/generate", status_code=202)

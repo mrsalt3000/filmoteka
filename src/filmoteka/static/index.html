@@ -1395,6 +1395,21 @@ async function cancelJob(jobId) {
   }
 }
 
+async function resetAlias(mediaId, btn) {
+  if (!confirm(`Reset alias for media #${mediaId}? The alias will be cleared and the file will be processed again on the next run.`)) return;
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    await apiAuth(`/admin/alias/${mediaId}/reset`, 'POST');
+    btn.textContent = '✅ Reset';
+    btn.style.opacity = '0.5';
+  } catch (e) {
+    alert(`Failed to reset alias: ${esc(e.message)}`);
+    btn.disabled = false;
+    btn.textContent = 'Delete';
+  }
+}
+
 function buildPosterReportHTML(report, label) {
   const errors = report.errors || [];
   return `<div class="admin-report">
@@ -1506,7 +1521,6 @@ async function runAliasOp(mode, btnLabel) {
     const jobId = startResp.job_id;
     if (!jobId) throw new Error('No job_id returned');
 
-    const MAX_DISPLAY = 50;
     let jobCompleted = false;
 
     // Build the progress table shell
@@ -1520,12 +1534,10 @@ async function runAliasOp(mode, btnLabel) {
             <tbody id="al-tbody"></tbody>
           </table>
         </div>
-        <div id="al-footer"></div>
       </div>`;
 
     const tbody = document.getElementById('al-tbody');
     const summaryEl = document.getElementById('al-summary');
-    const footerEl = document.getElementById('al-footer');
 
     // Poll loop: fetch progress + job status every 2s
     for (let i = 0; i < 600; i++) {
@@ -1538,7 +1550,7 @@ async function runAliasOp(mode, btnLabel) {
         entries = pr.entries || [];
       } catch { /* keep old entries */ }
 
-      // Update table
+      // Update table (live progress columns: #, File, Status)
       if (entries.length > 0) {
         const counts = { queued: 0, processing: 0, completed: 0, error: 0 };
         entries.forEach(e => { if (counts[e.status] !== undefined) counts[e.status]++; });
@@ -1546,22 +1558,17 @@ async function runAliasOp(mode, btnLabel) {
         summaryEl.textContent = `${entries.length} files — ` +
           `${counts.completed} completed, ${counts.processing} processing, ${counts.queued} queued, ${counts.error} errors`;
 
-        const display = entries.slice(0, MAX_DISPLAY);
-        tbody.innerHTML = display.map((e, i) => {
+        const visible = entries.filter(e => e.status !== 'queued' || counts.completed + counts.processing + counts.error === 0);
+        tbody.innerHTML = visible.map((e, i) => {
           const statusClass = 'tx-' + e.status;
           const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
-          const errorHint = e.error ? ` title="${esc(e.error)}"` : '';
-          return `<tr${errorHint}>
+          const errorMsg = e.error ? `<span class="tx-error-msg">: ${esc(e.error)}</span>` : '';
+          return `<tr>
             <td>${i + 1}</td>
             <td class="tx-file">${esc(e.file_name)}</td>
-            <td><span class="tx-badge ${statusClass}">${label}</span></td>
+            <td><span class="tx-badge ${statusClass}">${label}</span>${errorMsg}</td>
           </tr>`;
         }).join('');
-        if (entries.length > MAX_DISPLAY) {
-          footerEl.textContent = `… and ${entries.length - MAX_DISPLAY} more file(s)`;
-        } else {
-          footerEl.textContent = '';
-        }
       }
 
       // Check job status
@@ -1570,21 +1577,44 @@ async function runAliasOp(mode, btnLabel) {
         const job = await apiAuth(`/admin/jobs/${jobId}`);
         if (job.status === 'completed' || job.status === 'failed') {
           jobCompleted = true;
-          const r = job.result;
           if (job.status === 'completed') {
-            const errors = (r && r.errors) || [];
-            reportEl.innerHTML += `<div class="admin-report" style="margin-top:1rem">
+            const r = job.result || {};
+            const errors = r.errors || [];
+
+            // Fetch final enriched progress for the result table
+            let finalEntries = [];
+            try {
+              const pr = await apiAuth(`/admin/alias-progress/${jobId}`);
+              finalEntries = pr.entries || [];
+            } catch { /* fallback to empty */ }
+
+            const resultRows = finalEntries
+              .filter(e => e.status !== 'queued')
+              .map((e, i) => {
+                const statusClass = 'tx-' + e.status;
+                const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
+                const aliasTxt = e.media_alias ? esc(e.media_alias) : '<em>default</em>';
+                const delBtn = e.status === 'completed'
+                  ? `<button class="poster-btn" style="font-size:.75rem;padding:.15rem .5rem" onclick="resetAlias(${e.media_id}, this)">Delete</button>`
+                  : (e.error ? `<span class="tx-error-msg">: ${esc(e.error)}</span>` : '');
+                return `<tr>
+                  <td>${i + 1}</td>
+                  <td class="tx-file">${esc(e.file_name)}</td>
+                  <td>${aliasTxt}</td>
+                  <td><span class="tx-badge ${statusClass}">${label}</span></td>
+                  <td>${delBtn}</td>
+                </tr>`;
+              }).join('');
+
+            reportEl.innerHTML = `<div class="admin-report">
               <h3>${esc(label)} — Complete</h3>
-              <table>
-                <tr><td>Total media files</td><td>${r ? r.total : '?'}</td></tr>
-                <tr><td>Updated</td><td>${r ? r.updated : '?'}</td></tr>
-                <tr><td>Skipped</td><td>${r ? r.skipped : '?'}</td></tr>
-              </table>
-              ${errors.length > 0 ? `
-                <div class="report-errors">
-                  <strong>Errors (${errors.length})</strong>
-                  <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
-                </div>` : ''}
+              <div class="transcode-summary">Total: ${r.total || '?'} | Updated: ${r.updated || '?'} | Skipped: ${r.skipped || '?'} | Errors: ${(errors).length}</div>
+              <div class="transcode-table-wrap" style="max-height:30rem">
+                <table class="transcode-table">
+                  <thead><tr><th>#</th><th>File</th><th>Alias</th><th>Status</th><th>Action</th></tr></thead>
+                  <tbody>${resultRows || '<tr><td colspan="5" style="text-align:center;color:var(--text2)">No files processed.</td></tr>'}</tbody>
+                </table>
+              </div>
             </div>`;
           } else {
             reportEl.innerHTML += `<div class="error" style="margin-top:1rem">${esc(label)} failed: ${esc(job.error || 'Unknown error')}</div>`;

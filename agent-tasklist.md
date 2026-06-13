@@ -985,38 +985,6 @@
   3. Админ-таблица показывает все ``.tr`` файлы с оригиналом
   4. Кнопка "Delete original" удаляет файл с диска и обновляет таблицу
 
-- [ ] **BUGFIX-017** Alias report — таблица результатов с кнопкой удалить для каждого алиаса.
-
-  Проблема: после "Generate aliases" показывается только сводка
-  (total, updated, skipped, errors). Нет возможности увидеть, какой
-  именно алиас был сгенерирован для каждого файла, и нельзя удалить
-  отдельный алиас (сбросить на default).
-
-  Решение:
-  - В ``_run_alias_generate()``: сохранять per-file результат в
-    in-memory ``_alias_progress`` (уже есть, но только для live-
-    прогресса). Дополнить: после завершения джоба прогресс остаётся
-    доступен, содержащий для каждого файла: file_name, media_alias,
-    status, error.
-  - В ``index.html``: после завершения ``runAliasOp()`` вместо
-    сводки показывать таблицу с колонками: #, File, Alias, Status,
-    Action. Кнопка "Delete" → ``POST /admin/alias/{media_id}/delete``
-    → сбрасывает ``media_alias = NULL``, ``alias_processed = False``.
-  - Новый endpoint ``POST /admin/alias/{media_id}/reset``:
-    устанавливает ``media_alias = NULL``, ``alias_processed = False``.
-  - Разделить финальный отчёт: таблица результатов (все строки,
-    кроме skipped) + summary counts под ней.
-
-  **Затрагивает:** admin.py (+endpoint), index.html (report table +
-  JS delete handler)
-
-  Проверка результата:
-  1. После "Generate aliases" показывается таблица с каждым файлом
-     и его алиасом
-  2. Кнопка Delete сбрасывает алиас на default для конкретного файла
-  3. После удаления таблица обновляется (file снова "queued")
-  4. Skipped файлы не показываются в таблице
-
 ---
 
 ## 3.12. Provider migration
@@ -1298,6 +1266,28 @@
   2. После нажатия Cancel задача переходит в статус cancelled
   3. Worker-функции с циклом прерываются (проверяют ``_should_stop()``)
   4. ``pollJob()`` не кидает ошибку на ``cancelled``, а возвращает статус
+
+- [x] **V2-033** Alias report — таблица результатов с кнопкой удалить для каждого алиаса.
+
+  Проблема: после "Generate aliases" показывается только сводка
+  (total, updated, skipped, errors). Нет возможности увидеть, какой
+  алиас сгенерирован для каждого файла, и нельзя удалить отдельный
+  алиас.
+
+  Решение:
+  - ``POST /admin/alias/{media_id}/reset`` — сбрасывает
+    ``media_alias = NULL``, ``alias_processed = False``
+  - ``GET /admin/alias-progress/{job_id}`` — обогащён полем
+    ``media_alias`` из БД для completed-записей
+  - В ``index.html``: после завершения ``runAliasOp()`` — таблица
+    #, File, Alias, Status, Action с кнопкой Delete. Summary
+    counts под таблицей. Skipped не показываются.
+
+  Проверка результата:
+  1. После "Generate aliases" — таблица с каждым файлом и алиасом
+  2. Кнопка Delete сбрасывает алиас на default
+  3. После удаления таблица обновляется (file снова queued)
+  4. Skipped файлы не показываются
 
 ---
 
