@@ -4,6 +4,25 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-015 — 2026-06-13
+
+- Status: `done`
+- Summary: При наличии `.tr.mkv` — оригинал скрыт из каталога. Админ-таблица transcoded files с удалением оригинала.
+  - **catalog.py**: helper `_dedup_tr_media()` фильтрует MediaFile в каждой edition: если есть пара `file.mkv` + `file.tr.mkv`, оставляет только `.tr.mkv`
+  - **admin.py**: `GET /admin/transcoded-files` — список .tr файлов (film_title, transcoded_path, original_path, original_exists). `DELETE /admin/transcoded-files/original?original_path=...` — удаление оригинала с диска
+  - **index.html**: секция "Transcoded Files" с кнопкой "📋 List transcoded files", таблица (Film, Transcoded, Original, Action), кнопка "Delete original" с confirm
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-015
+  - `src/filmoteka/api/catalog.py` — +_dedup_tr_media, filter in get_film
+  - `src/filmoteka/api/admin.py` — +GET /admin/transcoded-files, +DELETE /admin/transcoded-files/original
+  - `src/filmoteka/static/index.html` — +admin section, +listTranscodedFiles(), +deleteOriginal()
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - mypy: ✅
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-014 — 2026-06-13
 
 - Status: `done`

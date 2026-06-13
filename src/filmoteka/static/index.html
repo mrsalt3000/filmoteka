@@ -874,6 +874,13 @@ async function renderAdmin(el) {
       </div>
 
       <div class="poster-section">
+        <h3>Transcoded Files</h3>
+        <p>Files that have been transcoded (.tr.mkv). The original file is preserved on disk. Use the table below to review and delete originals.</p>
+        <button class="poster-btn" onclick="listTranscodedFiles()">📋 List transcoded files</button>
+        <div id="transcoded-report"></div>
+      </div>
+
+      <div class="poster-section">
         <h3>Background Jobs</h3>
         <p>Recent background tasks and their status.</p>
         <div id="jobs-list"><div class="spinner">Loading…</div></div>
@@ -934,6 +941,73 @@ async function loadExtStatus() {
       <p style="margin-top:.5rem;font-size:.8rem;color:var(--text2)">Version: ${h.version}</p>`;
   } catch {
     el.innerHTML = '<div class="error">Could not reach health endpoint.</div>';
+  }
+}
+
+// ── Transcoded files listing ─────────────────────────────────────
+async function listTranscodedFiles() {
+  const reportEl = document.getElementById('transcoded-report');
+  if (!reportEl) return;
+
+  reportEl.innerHTML = '<div class="spinner">Loading…</div>';
+
+  try {
+    const data = await apiAuth('/admin/transcoded-files');
+    const items = data.items || [];
+
+    if (items.length === 0) {
+      reportEl.innerHTML = '<div class="admin-report"><p>No transcoded files found.</p></div>';
+      return;
+    }
+
+    const rows = items.map((item, i) => {
+      const status = item.original_exists ? '✅' : '❌';
+      const delBtn = item.original_exists
+        ? `<button class="poster-btn" style="font-size:.8rem;padding:.2rem .6rem" onclick="deleteOriginal('${esc(item.original_path)}', this)">🗑️ Delete original</button>`
+        : '';
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${esc(item.film_title)}</td>
+        <td class="tx-file" title="${esc(item.transcoded_path)}">${esc(item.transcoded_path.split(/[\\\\/]/).pop())}</td>
+        <td class="tx-file" title="${esc(item.original_path)}">${esc(item.original_path.split(/[\\\\/]/).pop())} ${status}</td>
+        <td>${delBtn}</td>
+      </tr>`;
+    }).join('');
+
+    reportEl.innerHTML = `<div class="admin-report">
+      <h3>Transcoded Files — ${items.length} total</h3>
+      <div class="transcode-table-wrap" style="max-height:none">
+        <table class="transcode-table">
+          <thead><tr><th>#</th><th>Film</th><th>Transcoded</th><th>Original</th><th>Action</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  } catch (e) {
+    reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+
+async function deleteOriginal(path, btn) {
+  if (!confirm(`Delete original file?\n\n${esc(path)}\n\nThis cannot be undone.`)) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ Deleting…';
+  try {
+    const resp = await apiAuth(`/admin/transcoded-files/original?original_path=${encodeURIComponent(path)}`, 'DELETE');
+    if (resp.status === 'ok') {
+      btn.textContent = '✅ Deleted';
+      btn.style.opacity = '0.5';
+      // Re-fetch the list after a short delay to refresh the table
+      setTimeout(listTranscodedFiles, 1500);
+    } else {
+      alert(`Error: ${esc(resp.error || 'Unknown error')}`);
+      btn.disabled = false;
+      btn.textContent = '🗑️ Delete original';
+    }
+  } catch (e) {
+    alert(`Error: ${esc(e.message)}`);
+    btn.disabled = false;
+    btn.textContent = '🗑️ Delete original';
   }
 }
 

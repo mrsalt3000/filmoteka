@@ -643,6 +643,81 @@ def admin_delete_media(
 
 
 # ---------------------------------------------------------------------------
+# Transcoded files — list and manage .tr.mkv originals
+# ---------------------------------------------------------------------------
+
+
+@router.get("/transcoded-files")
+def list_transcoded_files(
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """List all transcoded (.tr) media files with their originals.
+
+    Returns a list of entries, each containing the media file info,
+    the original file path, whether the original still exists on disk,
+    and the parent film title.
+    """
+    from pathlib import Path
+
+    items: list[dict[str, object]] = []
+    media_files = db.query(MediaFile).all()
+
+    for mf in media_files:
+        p = Path(mf.file_path)
+        if ".tr" not in p.suffixes[:-1]:
+            continue
+
+        # Reconstruct original path: remove the .tr suffix component
+        # e.g. "file.tr.mkv" → stem="file.tr" → original_stem="file"
+        original_stem = p.stem[:-3] if p.stem.endswith(".tr") else p.stem
+        original_path = p.parent / f"{original_stem}{p.suffix}"
+
+        film = (
+            db.query(Film.title)
+            .join(MovieEdition, MovieEdition.film_id == Film.id)
+            .filter(MovieEdition.id == mf.edition_id)
+            .first()
+        )
+
+        items.append({
+            "media_id": mf.id,
+            "film_title": film[0] if film else "Unknown",
+            "transcoded_path": mf.file_path,
+            "original_path": str(original_path),
+            "original_exists": original_path.is_file(),
+        })
+
+    return {"items": items, "total": len(items)}
+
+
+@router.delete("/transcoded-files/original")
+def delete_transcoded_original(
+    original_path: str = Query(..., description="Absolute path to the original file"),
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, str]:
+    """Delete the original (non-.tr) file from disk.
+
+    This is an admin-only operation. The path must exist and must not
+    contain ``.tr`` before the extension.
+    """
+    from pathlib import Path
+
+    p = Path(original_path)
+    if ".tr" in p.suffixes[:-1]:
+        return {"status": "error", "error": "Refusing to delete a .tr file via this endpoint"}
+
+    if not p.is_file():
+        return {"status": "error", "error": f"File not found: {original_path}"}
+
+    try:
+        p.unlink()
+        return {"status": "ok", "deleted": original_path}
+    except OSError as exc:
+        return {"status": "error", "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
 # Poster management
 # ---------------------------------------------------------------------------
 

@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import false as sa_false
 from sqlalchemy import or_, select
@@ -244,6 +247,33 @@ def list_films(
     )
 
 
+def _dedup_tr_media(media_files: Sequence[MediaFile]) -> list[MediaFile]:
+    """If both ``file.mkv`` and ``file.tr.mkv`` exist in the same edition,
+    keep only the ``.tr.mkv`` version (hide the original).
+
+    Files without a ``.tr`` counterpart are returned as-is.
+    """
+    tr_stems: set[str] = set()
+    tr_by_stem: dict[str, MediaFile] = {}
+    others: list[MediaFile] = []
+
+    for m in media_files:
+        p = Path(m.file_path)
+        if ".tr" in p.suffixes[:-1]:
+            base = p.stem[:-3]  # strip trailing ".tr" from stem
+            tr_stems.add(base)
+            tr_by_stem[base] = m
+        else:
+            others.append(m)
+
+    result = list(tr_by_stem.values())
+    for m in others:
+        p = Path(m.file_path)
+        if p.stem not in tr_stems:
+            result.append(m)
+    return result
+
+
 @router.get("/{film_id}", response_model=FilmDetailOut)
 def get_film(
     film_id: int,
@@ -296,7 +326,10 @@ def get_film(
                 edition_name=e.edition_name,
                 quality=e.quality,
                 language=e.language,
-                media_files=[MediaFileOut.model_validate(m) for m in e.media_files],
+                media_files=[
+                    MediaFileOut.model_validate(m)
+                    for m in _dedup_tr_media(e.media_files)
+                ],
             )
             for e in film.editions
         ],
