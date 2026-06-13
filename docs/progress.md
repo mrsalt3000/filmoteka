@@ -4,6 +4,32 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: Alias progress table + alias_processed flag — 2026-06-13
+
+- Status: `done`
+- Summary: Добавил per-file progress table для Media Aliases (аналогично транскодингу) + новый DB-флаг `alias_processed`.
+  - **models.py**: добавил `alias_processed: bool` колонку (default=False, server_default=FALSE)
+  - **migration** `29b98031c35f`: add alias_processed to media_files
+  - **admin.py**: `AliasFileStatus` dataclass, `_alias_progress[job_id]` + `_alias_lock`, endpoint `GET /admin/alias-progress/{job_id}`, rewritten `_run_alias_generate()` с per-file progress (`queued` → `processing` → `completed`/`error`) и фильтром `alias_processed == False` для "defaults only". При ошибке `alias_processed` остаётся `False` — кнопка повторит. При успехе — `True`.
+  - **index.html**: `runAliasOp()` показывает живую таблицу с колонками #, File, Status, обновляемую каждые 2 сек через `/admin/alias-progress/{job_id}`. Цветовая индикация (queued=серый, processing=синий, completed=зелёный, error=красный). Первые 50 строк + "...and N more". После завершения — итоговый report под таблицей.
+- Changed files:
+  - `src/filmoteka/domain/catalog/models.py` — +alias_processed column
+  - `migrations/versions/29b98031c35f_add_alias_processed_to_media_files.py` (new)
+  - `src/filmoteka/api/admin.py` — +AliasFileStatus, +GET /admin/alias-progress/{job_id}, rewritten alias endpoints + worker
+  - `src/filmoteka/static/index.html` — replaced runAliasOp() spinner with live progress table; +tx-processing CSS
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - mypy: ✅ (25 pre-existing errors, no new)
+  - pytest unit: ✅ 142 passed
+  - pytest integration admin: ✅ 78 passed
+  - pytest integration media + catalog: ✅ 96 passed
+- Risks / follow-ups:
+  - In-memory only — теряется при рестарте API (сознательно, "только текущая сессия")
+  - Миграция протестирована upgrade, downgrade не проверен из-за таймаута docker exec
+- Next task:
+  - V2-008 — Написать unit/integration тесты рекомендательной логики
+
 ## Task Report: Transcode progress table — 2026-06-13
 
 - Status: `done`

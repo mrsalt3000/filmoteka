@@ -162,6 +162,7 @@ nav input::placeholder { color: var(--text2); }
 .tx-badge { display: inline-block; padding: .1rem .45rem; border-radius: 3px; font-size: .78rem; font-weight: 600; }
 .tx-badge.tx-queued { background: #e0e0e0; color: #616161; }
 .tx-badge.tx-probing { background: #fff8e1; color: #f57f17; }
+.tx-badge.tx-processing { background: #e3f2fd; color: #1565c0; }
 .tx-badge.tx-transcoding { background: #e3f2fd; color: #1565c0; }
 .tx-badge.tx-completed { background: #e8f5e9; color: #2e7d32; }
 .tx-badge.tx-skipped { background: #f5f5f5; color: #9e9e9e; }
@@ -1340,7 +1341,7 @@ async function runAliasOp(mode, btnLabel) {
   if (!confirm(`Start "${label}"? This will query DeepSeek for each media file.`)) return;
 
   btn.disabled = true;
-  btn.textContent = '⏳ Working…';
+  btn.textContent = '⏳ Starting…';
   reportEl.innerHTML = '<div class="spinner">Starting…</div>';
 
   try {
@@ -1353,29 +1354,99 @@ async function runAliasOp(mode, btnLabel) {
     const jobId = startResp.job_id;
     if (!jobId) throw new Error('No job_id returned');
 
-    reportEl.innerHTML = '<div class="spinner">Generating aliases… this may take a moment.</div>';
-    const job = await pollJob(jobId);
-    if (job.status === 'completed') {
-      const r = job.result;
-      const errors = (r && r.errors) || [];
-      reportEl.innerHTML = `<div class="admin-report">
-        <h3>${esc(label)} — Complete</h3>
-        <table>
-          <tr><td>Total media files</td><td>${r ? r.total : '?'}</td></tr>
-          <tr><td>Updated</td><td>${r ? r.updated : '?'}</td></tr>
-          <tr><td>Skipped</td><td>${r ? r.skipped : '?'}</td></tr>
-        </table>
-        ${errors.length > 0 ? `
-          <div class="report-errors">
-            <strong>Errors (${errors.length})</strong>
-            <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
-          </div>` : ''}
+    const MAX_DISPLAY = 50;
+    let jobCompleted = false;
+
+    // Build the progress table shell
+    reportEl.innerHTML = `
+      <div class="transcode-progress-wrap">
+        <h3>${esc(label)} — Progress</h3>
+        <div class="transcode-summary" id="al-summary">Initialising…</div>
+        <div class="transcode-table-wrap">
+          <table class="transcode-table">
+            <thead><tr><th>#</th><th>File</th><th>Status</th></tr></thead>
+            <tbody id="al-tbody"></tbody>
+          </table>
+        </div>
+        <div id="al-footer"></div>
       </div>`;
-    } else {
-      throw new Error(job.error || 'Unknown error');
+
+    const tbody = document.getElementById('al-tbody');
+    const summaryEl = document.getElementById('al-summary');
+    const footerEl = document.getElementById('al-footer');
+
+    // Poll loop: fetch progress + job status every 2s
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Fetch per-file progress
+      let entries = [];
+      try {
+        const pr = await apiAuth(`/admin/alias-progress/${jobId}`);
+        entries = pr.entries || [];
+      } catch { /* keep old entries */ }
+
+      // Update table
+      if (entries.length > 0) {
+        const counts = { queued: 0, processing: 0, completed: 0, error: 0 };
+        entries.forEach(e => { if (counts[e.status] !== undefined) counts[e.status]++; });
+
+        summaryEl.textContent = `${entries.length} files — ` +
+          `${counts.completed} completed, ${counts.processing} processing, ${counts.queued} queued, ${counts.error} errors`;
+
+        const display = entries.slice(0, MAX_DISPLAY);
+        tbody.innerHTML = display.map((e, i) => {
+          const statusClass = 'tx-' + e.status;
+          const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
+          const errorHint = e.error ? ` title="${esc(e.error)}"` : '';
+          return `<tr${errorHint}>
+            <td>${i + 1}</td>
+            <td class="tx-file">${esc(e.file_name)}</td>
+            <td><span class="tx-badge ${statusClass}">${label}</span></td>
+          </tr>`;
+        }).join('');
+        if (entries.length > MAX_DISPLAY) {
+          footerEl.textContent = `… and ${entries.length - MAX_DISPLAY} more file(s)`;
+        } else {
+          footerEl.textContent = '';
+        }
+      }
+
+      // Check job status
+      if (jobCompleted) break;
+      try {
+        const job = await apiAuth(`/admin/jobs/${jobId}`);
+        if (job.status === 'completed' || job.status === 'failed') {
+          jobCompleted = true;
+          const r = job.result;
+          if (job.status === 'completed') {
+            const errors = (r && r.errors) || [];
+            reportEl.innerHTML += `<div class="admin-report" style="margin-top:1rem">
+              <h3>${esc(label)} — Complete</h3>
+              <table>
+                <tr><td>Total media files</td><td>${r ? r.total : '?'}</td></tr>
+                <tr><td>Updated</td><td>${r ? r.updated : '?'}</td></tr>
+                <tr><td>Skipped</td><td>${r ? r.skipped : '?'}</td></tr>
+              </table>
+              ${errors.length > 0 ? `
+                <div class="report-errors">
+                  <strong>Errors (${errors.length})</strong>
+                  <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+                </div>` : ''}
+            </div>`;
+          } else {
+            reportEl.innerHTML += `<div class="error" style="margin-top:1rem">${esc(label)} failed: ${esc(job.error || 'Unknown error')}</div>`;
+          }
+          break;
+        }
+      } catch { /* keep polling */ }
     }
+
+    if (!jobCompleted) throw new Error('Job timed out after 20 minutes');
+
   } catch (e) {
-    reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    const existing = reportEl.querySelector('.admin-report, .error');
+    if (!existing) reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = btnLabel;

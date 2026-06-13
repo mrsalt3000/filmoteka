@@ -869,15 +869,64 @@ def _run_deepseek_enrich(force: bool, db: Session | None = None) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
+@dataclass
+class AliasFileStatus:
+    media_id: int
+    file_name: str
+    status: str  # "queued" | "processing" | "completed" | "error"
+    error: str | None = None
+
+
+_alias_progress: dict[int, list[AliasFileStatus]] = {}
+_active_alias_job_id: int | None = None
+_alias_lock = threading.Lock()
+
+
+@router.get("/alias-progress/{job_id}")
+def get_alias_progress(
+    job_id: int,
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Return per-file progress for an alias-generation job.
+
+    Returns the list of ``AliasFileStatus`` entries — each entry
+    has ``media_id``, ``file_name``, ``status``, and optionally
+    ``error``.  The data lives in memory only and is cleared when a
+    new alias job starts.
+    """
+    with _alias_lock:
+        entries = _alias_progress.get(job_id)
+        if entries is None:
+            return {"entries": [], "total": 0}
+        return {
+            "entries": [
+                {
+                    "media_id": e.media_id,
+                    "file_name": e.file_name,
+                    "status": e.status,
+                    "error": e.error,
+                }
+                for e in entries
+            ],
+            "total": len(entries),
+        }
+
+
 @router.post("/aliases/generate", status_code=202)
 def alias_generate(
     current_user: User = Depends(require_role("admin")),
 ) -> dict[str, object]:
-    """Generate aliases for media files that still use their default alias.
+    """Generate aliases for media files that haven't been processed yet.
+
+    Only files where ``alias_processed`` is ``False`` are processed.
+    Per-file progress is available at
+    ``GET /admin/alias-progress/{job_id}`` for the duration of the job.
 
     Starts a background job. Poll ``GET /admin/jobs/{job_id}``
     for completion.
     """
+    global _active_alias_job_id  # noqa: PLW0603
+
     if not settings.deepseek_api_key:
         return {
             "status": "error",
@@ -891,6 +940,9 @@ def alias_generate(
         "alias_generate", _run_alias_generate, False,
         session_factory=_background_session_factory,
     )
+    _active_alias_job_id = job.id
+    with _alias_lock:
+        _alias_progress.clear()
     return {"job_id": job.id, "status": "pending", "type": "alias_generate"}
 
 
@@ -900,9 +952,14 @@ def alias_generate_all(
 ) -> dict[str, object]:
     """Re-generate aliases for ALL media files, overwriting existing ones.
 
+    Per-file progress is available at
+    ``GET /admin/alias-progress/{job_id}`` for the duration of the job.
+
     Starts a background job. Poll ``GET /admin/jobs/{job_id}``
     for completion.
     """
+    global _active_alias_job_id  # noqa: PLW0603
+
     if not settings.deepseek_api_key:
         return {
             "status": "error",
@@ -916,15 +973,21 @@ def alias_generate_all(
         "alias_generate_all", _run_alias_generate, True,
         session_factory=_background_session_factory,
     )
+    _active_alias_job_id = job.id
+    with _alias_lock:
+        _alias_progress.clear()
     return {"job_id": job.id, "status": "pending", "type": "alias_generate_all"}
 
 
 def _run_alias_generate(force: bool, db: Session | None = None) -> dict | None:
     """Generate media aliases via DeepSeek.
 
-    When *force* is ``False``, only files where ``media_alias IS NULL``
-    are processed.  When *force* is ``True``, all media files are
-    processed regardless.
+    When *force* is ``False``, only files where ``alias_processed`` is
+    ``False`` are processed.  When *force* is ``True``, all media files
+    are processed regardless.
+
+    Progress is written to the in-memory ``_alias_progress`` dict,
+    keyed by the active job id.
     """
     from pathlib import Path
 
@@ -939,28 +1002,52 @@ def _run_alias_generate(force: bool, db: Session | None = None) -> dict | None:
 
         query = db.query(MediaFile)
         if not force:
-            query = query.filter(MediaFile.media_alias.is_(None))
+            query = query.filter(MediaFile.alias_processed == sa_false())
 
         media_files = query.all()
         updated = 0
         errors: list[str] = []
 
-        for mf in media_files:
+        # Initialise in-memory progress table (all queued).
+        progress: list[AliasFileStatus] = [
+            AliasFileStatus(
+                media_id=mf.id,
+                file_name=Path(mf.file_path).name,
+                status="queued",
+            )
+            for mf in media_files
+        ]
+        job_id = _active_alias_job_id or 0
+        with _alias_lock:
+            _alias_progress[job_id] = progress
+
+        for idx, mf in enumerate(media_files):
+            with _alias_lock:
+                progress[idx].status = "processing"
+
             try:
                 file_stem = Path(mf.file_path).stem
                 alias = deepseek_generate_alias(file_stem, api_key)
                 if alias is not None:
                     mf.media_alias = alias
-                    updated += 1
                 else:
                     # LLM returned nothing — set to stem as safe fallback
                     if mf.media_alias is None:
                         mf.media_alias = file_stem
+
+                mf.alias_processed = True
+                updated += 1
+                with _alias_lock:
+                    progress[idx].status = "completed"
             except Exception as exc:
                 errors.append(f"MediaFile #{mf.id} ({mf.file_path}): {exc}")
                 # Ensure a default alias exists
                 if mf.media_alias is None:
                     mf.media_alias = Path(mf.file_path).stem
+                # Keep alias_processed = False so "defaults only" retries
+                with _alias_lock:
+                    progress[idx].status = "error"
+                    progress[idx].error = str(exc)
 
         db.commit()
         return {

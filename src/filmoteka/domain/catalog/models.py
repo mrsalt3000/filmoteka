@@ -164,6 +164,9 @@ class MediaFile(Base):
         String(1024), nullable=False, unique=True
     )
     media_alias: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    alias_processed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("FALSE"), nullable=False
+    )
     file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     duration_secs: Mapped[float | None] = mapped_column(Float, nullable=True)
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
