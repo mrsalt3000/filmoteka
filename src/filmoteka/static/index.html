@@ -102,6 +102,9 @@ nav input::placeholder { color: var(--text2); }
 .detail .progress-label { font-size: .8rem; color: var(--text2); margin-top: .25rem; }
 .detail .watched-label { display: inline-block; margin-top: .5rem; padding: .25rem .6rem; background: #2e7d32; color: #fff; border-radius: var(--radius); font-size: .85rem; font-weight: 600; }
 .player-page video { width: 100%; max-height: 80vh; background: #000; border-radius: var(--radius); }
+.player-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text); }
+.media-list { list-style: none; padding-left: 0; margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text2); }
+.media-list li { padding: 0.1rem 0; }
 .back { display: inline-block; margin-bottom: 1rem; color: var(--text2); cursor: pointer; }
 .back:hover { color: var(--text); }
 .spinner { text-align: center; padding: 3rem; color: var(--text2); }
@@ -525,6 +528,14 @@ async function renderFilm(el, id) {
   const persons = f.persons.map(p => `${esc(p.name)} (${esc(p.role)})`).join(', ') || '—';
   const firstMedia = f.editions[0]?.media_files?.[0];
 
+  // Store media aliases for the player page
+  window._mediaAliases = window._mediaAliases || {};
+  f.editions.forEach(e => {
+    (e.media_files || []).forEach(m => {
+      window._mediaAliases[m.id] = m.media_alias || m.file_path.split(/[\\/]/).pop().replace(/\.[^/.]+$/, '');
+    });
+  });
+
   // Check for resume state if logged in
   let watchState = null;
   if (currentUser && firstMedia) {
@@ -600,7 +611,11 @@ async function renderFilm(el, id) {
         <h3>Editions</h3>
         <ul>${f.editions.map(e => `
           <li>${esc(e.edition_name || e.quality || 'Edition')}
-            ${e.media_files.map(m => esc(m.codec || '')).filter(Boolean).join(', ')}
+            <ul class="media-list">${e.media_files.map(m => {
+              const alias = m.media_alias || m.file_path.split(/[\\\\/]/).pop().replace(/\.[^/.]+$/, '');
+              const codec = m.codec ? ` (${esc(m.codec)})` : '';
+              return `<li>${esc(alias)}${codec}</li>`;
+            }).join('')}</ul>
           </li>
         `).join('')}</ul>
       </div>
@@ -717,6 +732,11 @@ async function renderPlayer(el, mediaId) {
   el.innerHTML = `
     <div class="back" onclick="navigate('list')">← Back to list</div>
     <div class="player-page">
+      <div class="player-title">${
+        window._mediaAliases && window._mediaAliases[mediaId]
+          ? esc(window._mediaAliases[mediaId])
+          : `Media #${mediaId}`
+      }</div>
       <video id="player-video" controls autoplay preload="metadata">
         <source src="${src}">
         Your browser does not support video playback.

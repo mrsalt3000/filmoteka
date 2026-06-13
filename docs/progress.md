@@ -4,6 +4,32 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V3-003 — 2026-06-13
+
+- Status: `done`
+- Summary: Добавил media aliases для имён файлов через LLM.
+  - **pipeline.py**: убрал `media_alias=Path(stem)` из создания MediaFile (оставил NULL) — alias generation теперь admin-операция, а не часть импорта. Это также чинит admin-кнопку "Generate defaults only" (фильтр `IS NULL` теперь корректно находит непроцессированные файлы).
+  - **catalog.py**: добавил `MediaFile.media_alias` в `q`-поиск `GET /films` через subquery (Film → MovieEdition → MediaFile).
+  - **index.html**: в `renderFilm()` секция "Editions" показывает `media_alias` (или stem из file_path если null) + codec для каждого файла. В `renderPlayer()` показывается "Now Playing: {alias}" над плеером через глобальный `window._mediaAliases`.
+  - **Примечание:** admin-кнопки "Generate aliases" и API уже существовали (V3-003 tasklist был не обновлён).
+- Changed files:
+  - `src/filmoteka/domain/importing/pipeline.py` — removed `media_alias=Path(stem)` from MediaFile creation
+  - `src/filmoteka/api/catalog.py` — added `media_alias` to `q` search filter
+  - `src/filmoteka/static/index.html` — renderFilm editions section + renderPlayer title + CSS
+- Checks:
+  - ruff: ✅
+  - mypy: ✅ (2 pre-existing errors, unchanged)
+  - pytest unit: ✅ 142 passed (excluding pre-existing test_health.py fixture error)
+  - pytest integration test_catalog: ✅ 63 passed
+  - pytest integration test_admin: ✅ 78 passed
+  - pytest integration test_media: ✅ 33 passed
+  - pytest integration test_importing: 2 pre-existing failures (OMDB_API_KEY in host env — tests assert no poster, but real API returns one)
+- Risks / follow-ups:
+  - Плеер получает alias через `window._mediaAliases`, который заполняется только при посещении карточки фильма. Прямой вход `#play/{id}` без предварительного посещения карточки покажет "Media #{id}".
+  - Для полной консистентности можно добавить endpoint `GET /media/{id}` для получения метаданных MediaFile.
+- Next task:
+  - V2-008 — Написать unit/integration тесты рекомендательной логики
+
 ## Task Report: BUGFIX-006 — 2026-06-10
 
 - Status: `done`

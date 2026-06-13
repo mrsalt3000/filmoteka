@@ -108,6 +108,11 @@ def list_films(
             | Film.description.ilike(f"%{q}%")
             | Film.genres.any(Genre.name.ilike(f"%{q}%"))
             | Film.persons.any(Person.name.ilike(f"%{q}%"))
+            | Film.id.in_(
+                db.query(MovieEdition.film_id)
+                .join(MediaFile)
+                .filter(MediaFile.media_alias.ilike(f"%{q}%"))
+            )
         )
 
     if genre is not None:
