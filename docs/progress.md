@@ -4,6 +4,21 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-019 — 2026-06-13
+
+- Status: `done`
+- Summary: DeepSeek возвращает None — файл больше не помечается как обработанный.
+  - **Проблема:** `else`-ветка при `alias is None` выставляла `alias_processed = True` и статус `completed`. У старых файлов `media_alias` !== `None` (полное имя файла), поэтому fallback `if mf.media_alias is None:` не срабатывал. Файл навсегда оставался с нечитаемым алиасом.
+  - **Фикс:** при `alias is None` — не выставляем `alias_processed`, не инкрементируем `updated`, ставим статус `error`. Файл доступен для повторного "defaults only".
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-019
+  - `src/filmoteka/api/admin.py` — переписан `else` в `_run_alias_generate()`
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-018 — 2026-06-13
 
 - Status: `done`

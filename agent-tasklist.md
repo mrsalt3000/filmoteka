@@ -1037,7 +1037,7 @@
   3. У processing/queued — `…`
   4. Финальная таблица (после завершения) не изменилась
 
-- [ ] **BUGFIX-018** Автоматическая конвертация Windows-путей в WSL2 для Docker.
+- [x] **BUGFIX-018** Автоматическая конвертация Windows-путей в WSL2 для Docker.
 
   Проблема: в `.env` указаны Windows-пути (например `LIBRARY_ROOT=H:/downloads`).
   Docker в WSL2 не понимает `H:` — volume mount падает с `invalid volume specification`.
@@ -1060,6 +1060,28 @@
   1. `docker compose up` стартует без `invalid volume specification`
   2. Пути в `.env` остаются Windows-стиля
   3. Файлы библиотеки доступны внутри контейнера
+
+- [x] **BUGFIX-019** DeepSeek возвращает None — файл помечается как обработанный, алиас не меняется.
+
+  Проблема: когда `deepseek_generate_alias()` возвращает `None`, код
+  всё равно выставляет `alias_processed = True` и статус `completed`.
+  У старых файлов `media_alias` уже содержит полное имя файла
+  (не `None`), поэтому fallback `if mf.media_alias is None:`
+  не срабатывает. Итог: файл помечен обработанным, но алиас —
+  полное имя файла. Повторный "defaults only" его не трогает.
+
+  Решение: при `alias is None` не выставлять `alias_processed = True`,
+  не инкрементировать `updated`, ставить статус `error` вместо
+  `completed`. Файл остаётся доступным для повторного запуска.
+
+  **Что меняется:**
+  - `admin.py` — `_run_alias_generate()`: `else`-ветка при `alias is None`
+
+  Проверка результата:
+  1. При `alias = None` — `alias_processed` не меняется
+  2. Файл не считается в `updated`
+  3. В прогресс-таблице статус `error`
+  4. Повторный "defaults only" переобрабатывает файл
 
 ---
 

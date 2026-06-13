@@ -1170,15 +1170,20 @@ def _run_alias_generate(force: bool, db: Session | None = None) -> dict | None:
                 alias = deepseek_generate_alias(file_stem, api_key)
                 if alias is not None:
                     mf.media_alias = alias
+                    mf.alias_processed = True
+                    updated += 1
+                    with _alias_lock:
+                        progress[idx].status = "completed"
                 else:
-                    # LLM returned nothing — set to stem as safe fallback
-                    if mf.media_alias is None:
-                        mf.media_alias = file_stem
-
-                mf.alias_processed = True
-                updated += 1
-                with _alias_lock:
-                    progress[idx].status = "completed"
+                    # LLM returned nothing — don't mark as processed
+                    # so "defaults only" retries the file next time.
+                    errors.append(
+                        f"MediaFile #{mf.id} ({mf.file_path}):"
+                        f" LLM returned no alias"
+                    )
+                    with _alias_lock:
+                        progress[idx].status = "error"
+                        progress[idx].error = "LLM returned no alias"
             except Exception as exc:
                 errors.append(f"MediaFile #{mf.id} ({mf.file_path}): {exc}")
                 # Ensure a default alias exists
