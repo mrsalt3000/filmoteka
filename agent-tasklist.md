@@ -1037,6 +1037,30 @@
   3. У processing/queued — `…`
   4. Финальная таблица (после завершения) не изменилась
 
+- [ ] **BUGFIX-018** Автоматическая конвертация Windows-путей в WSL2 для Docker.
+
+  Проблема: в `.env` указаны Windows-пути (например `LIBRARY_ROOT=H:/downloads`).
+  Docker в WSL2 не понимает `H:` — volume mount падает с `invalid volume specification`.
+  Пользователь вынужден вручную переписывать пути на `/mnt/h/downloads`.
+
+  Решение: добавить слой, который при запуске Docker-стека преобразует
+  Windows-пути (`X:/...` или `X:\...`) в WSL2-совместимые (`/mnt/x/...`).
+
+  Варианты реализации:
+  - **Entrypoint script** — скрипт в контейнере, который на старте
+    преобразует LIBRARY_ROOT/другие пути и создаёт bind mount
+  - **start.sh wrapper** — скрипт хоста, который перед `docker compose up`
+    конвертирует пути в `.env.docker` и передаёт Compose
+  - **Makefile target** — `make start` → конвертация → `docker compose up`
+
+  **Что меняется:**
+  - Зависит от выбранного подхода
+
+  Проверка результата:
+  1. `docker compose up` стартует без `invalid volume specification`
+  2. Пути в `.env` остаются Windows-стиля
+  3. Файлы библиотеки доступны внутри контейнера
+
 ---
 
 ## 3.12. Provider migration

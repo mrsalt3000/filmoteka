@@ -4,6 +4,26 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-018 — 2026-06-13
+
+- Status: `done`
+- Summary: Добавил `scripts/start.sh` — обёртку над `docker compose up`, конвертирующую Windows-пути в WSL2.
+  - **Проблема:** `.env` содержит `LIBRARY_ROOT=H:/downloads`. Docker в WSL2 не понимает `H:` — volume mount падает с `invalid volume specification`.
+  - **Решение:** `scripts/start.sh` читает `.env`, обнаруживает Windows-пути (`[A-Z]:/...` или `[A-Z]:\...`), конвертирует в `/mnt/[буква]/...`, экспортирует и передаёт управление `docker compose up "$@"`.
+  - **Тест:** `bash scripts/start.sh -d db redis api` — все 3 сервиса стартовали без ошибки пути.
+- Changed files:
+  - `scripts/start.sh` (new)
+  - `agent-tasklist.md` — BUGFIX-018 marked [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - `bash scripts/start.sh --help` — ✅
+  - `H:/downloads` → `/mnt/h/downloads` — ✅
+  - `D:\Filmoteka` → `/mnt/d/Filmoteka` — ✅
+  - `./media/library` → no change — ✅
+  - `bash scripts/start.sh -d db redis api` — stack started ✅
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-017 — 2026-06-13
 
 - Status: `done`
