@@ -4,6 +4,20 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-012 — 2026-06-13
+
+- Status: `done`
+- Summary: В таблице прогресса транскодинга показываю причину ошибки справа от статуса Error.
+  - `index.html`: вместо `title`-атрибута (tooltip) — `<span class="tx-error-msg">: причина</span>` после бейджа статуса. Добавлен CSS `.tx-error-msg { color: var(--accent); font-size: .8rem; }` с word-break для длинных сообщений.
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-012
+  - `src/filmoteka/static/index.html` — error msg inline, removed title attr, +CSS
+  - `docs/progress.md` (this report)
+- Checks:
+  - Визуальный review кода: done
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: V2-008 — 2026-06-13
 
 - Status: `done`
