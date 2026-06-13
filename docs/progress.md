@@ -4,6 +4,30 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-031 — 2026-06-13
+
+- Status: `done`
+- Summary: Добавил кнопку остановки для всех background-задач.
+  - **models.py**: +`JOB_CANCELLED` константа, +`cancel_requested` bool колонка
+  - **migration** `3a4b5c6d7e8f`: add cancel_requested to background_jobs
+  - **worker.py**: +`should_stop(job_id, session_factory)` helper; `_run()` после `fn()` проверяет `cancel_requested` — не перезаписывает `cancelled` на `completed`
+  - **admin.py**: +`POST /admin/jobs/{id}/cancel` — устанавливает флаг + статус + completed_at; +`should_stop()` проверка в циклах `_run_transcode_audio()` и `_run_alias_generate()`
+  - **index.html**: в jobs-таблице колонка Action с кнопкой Cancel для running-задач; `pollJob()` обрабатывает `cancelled` как нормальный статус; +`cancelJob()` JS
+- Changed files:
+  - `agent-tasklist.md` — BUGFIX-016 → V2-031
+  - `src/filmoteka/domain/tasks/models.py` — +JOB_CANCELLED, +cancel_requested column
+  - `migrations/versions/3a4b5c6d7e8f_add_cancel_requested_to_background_jobs.py` (new)
+  - `src/filmoteka/domain/tasks/worker.py` — +should_stop helper, +cancel check in _run
+  - `src/filmoteka/api/admin.py` — +POST /admin/jobs/{id}/cancel, +should_stop calls
+  - `src/filmoteka/static/index.html` — +Cancel column/button, +cancelJob(), pollJob handles cancelled
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - mypy: ✅ (4 pre-existing errors, no new)
+  - pytest unit: ✅ 142 passed
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-015 — 2026-06-13
 
 - Status: `done`

@@ -62,8 +62,13 @@ from filmoteka.domain.catalog.models import (
     film_person,
 )
 from filmoteka.domain.importing.pipeline import run_import
-from filmoteka.domain.tasks.models import BackgroundJob
-from filmoteka.domain.tasks.worker import run_background_job
+from filmoteka.domain.tasks.models import (
+    JOB_CANCELLED,
+    JOB_COMPLETED,
+    JOB_FAILED,
+    BackgroundJob,
+)
+from filmoteka.domain.tasks.worker import run_background_job, should_stop
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import SessionLocal, get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
@@ -125,6 +130,34 @@ def list_jobs(
         .all()
     )
     return {"items": jobs, "total": total}
+
+
+@router.post("/jobs/{job_id}/cancel")
+def cancel_job(
+    job_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Request cancellation of a running background job.
+
+    Sets ``cancel_requested = True`` and transitions the job status to
+    ``cancelled``.  The worker thread checks this flag periodically and
+    stops when convenient.  Already-cancelled or completed jobs are
+    idempotent — this is a no-op.
+    """
+    job = db.get(BackgroundJob, job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found",
+        )
+    job.cancel_requested = True
+    if job.status not in (JOB_CANCELLED, JOB_COMPLETED, JOB_FAILED):
+        job.status = JOB_CANCELLED  # type: ignore[attr-defined]
+        from datetime import datetime as _dt
+        job.completed_at = _dt.now()
+    db.commit()
+    return {"status": "ok", "id": job.id, "job_status": job.status}
 
 
 # ---------------------------------------------------------------------------
@@ -1097,6 +1130,11 @@ def _run_alias_generate(force: bool, db: Session | None = None) -> dict | None:
             _alias_progress[job_id] = progress
 
         for idx, mf in enumerate(media_files):
+            # ── Check for cancellation ──
+            if should_stop(job_id, _background_session_factory):
+                _logger.info("Alias job %d cancelled — stopping", job_id)
+                break
+
             with _alias_lock:
                 progress[idx].status = "processing"
 
@@ -1562,6 +1600,11 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
 
         for idx, mf in enumerate(media_files):
             path = Path(mf.file_path)
+
+            # ── Check for cancellation ──
+            if should_stop(job_id, _background_session_factory):
+                _logger.info("Transcode job %d cancelled — stopping", job_id)
+                break
 
             # ── Probe ──
             with _transcode_lock:

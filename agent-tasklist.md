@@ -985,6 +985,38 @@
   3. Админ-таблица показывает все ``.tr`` файлы с оригиналом
   4. Кнопка "Delete original" удаляет файл с диска и обновляет таблицу
 
+- [ ] **BUGFIX-017** Alias report — таблица результатов с кнопкой удалить для каждого алиаса.
+
+  Проблема: после "Generate aliases" показывается только сводка
+  (total, updated, skipped, errors). Нет возможности увидеть, какой
+  именно алиас был сгенерирован для каждого файла, и нельзя удалить
+  отдельный алиас (сбросить на default).
+
+  Решение:
+  - В ``_run_alias_generate()``: сохранять per-file результат в
+    in-memory ``_alias_progress`` (уже есть, но только для live-
+    прогресса). Дополнить: после завершения джоба прогресс остаётся
+    доступен, содержащий для каждого файла: file_name, media_alias,
+    status, error.
+  - В ``index.html``: после завершения ``runAliasOp()`` вместо
+    сводки показывать таблицу с колонками: #, File, Alias, Status,
+    Action. Кнопка "Delete" → ``POST /admin/alias/{media_id}/delete``
+    → сбрасывает ``media_alias = NULL``, ``alias_processed = False``.
+  - Новый endpoint ``POST /admin/alias/{media_id}/reset``:
+    устанавливает ``media_alias = NULL``, ``alias_processed = False``.
+  - Разделить финальный отчёт: таблица результатов (все строки,
+    кроме skipped) + summary counts под ней.
+
+  **Затрагивает:** admin.py (+endpoint), index.html (report table +
+  JS delete handler)
+
+  Проверка результата:
+  1. После "Generate aliases" показывается таблица с каждым файлом
+     и его алиасом
+  2. Кнопка Delete сбрасывает алиас на default для конкретного файла
+  3. После удаления таблица обновляется (file снова "queued")
+  4. Skipped файлы не показываются в таблице
+
 ---
 
 ## 3.12. Provider migration
@@ -1240,6 +1272,32 @@
   
   Проверка результата:
   1. Новый человек или новый агент может поднять проект без устных пояснений.
+
+- [x] **V2-031** Добавить кнопку остановки для всех background-задач.
+
+  Проблема: запущенный через админку процесс (транскодинг, алиасы,
+  reindex, reconcile, импорт, постеры) нельзя остановить. Единственный
+  способ прервать длительную операцию — рестартнуть весь API.
+
+  Решение:
+  - Новая колонка ``cancel_requested`` (bool, default False) в
+    ``background_jobs`` + константа ``JOB_CANCELLED`` + миграция
+  - ``POST /admin/jobs/{id}/cancel`` — устанавливает флаг и статус
+  - ``worker.py``: после завершения ``fn()`` проверяет флаг — не
+    перезаписывает ``cancelled`` на ``completed``
+  - ``_should_stop(job_id, session_factory)`` helper для worker-
+    функций с циклами (периодическая проверка)
+  - В ``index.html``: кнопка Cancel в строке running-задачи;
+    ``pollJob()`` обрабатывает ``cancelled`` статус
+
+  **Затрагивает:** модели (миграция), worker.py, admin.py (+endpoint),
+  index.html (кнопка + JS)
+
+  Проверка результата:
+  1. В списке Background Jobs у running задач есть кнопка Cancel
+  2. После нажатия Cancel задача переходит в статус cancelled
+  3. Worker-функции с циклом прерываются (проверяют ``_should_stop()``)
+  4. ``pollJob()`` не кидает ошибку на ``cancelled``, а возвращает статус
 
 ---
 

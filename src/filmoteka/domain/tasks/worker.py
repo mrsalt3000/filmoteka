@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from filmoteka.domain.tasks.models import (
+    JOB_CANCELLED,
     JOB_COMPLETED,
     JOB_FAILED,
     JOB_PENDING,
@@ -14,6 +15,27 @@ from filmoteka.domain.tasks.models import (
     BackgroundJob,
 )
 from filmoteka.infrastructure.database import SessionLocal
+
+
+def should_stop(
+    job_id: int,
+    session_factory: type = SessionLocal,
+) -> bool:
+    """Check whether a background job has been requested to stop.
+
+    Opens a fresh DB session, fetches the job, and returns ``True``
+    if ``cancel_requested`` is set or the status is ``cancelled``.
+    Worker functions with a processing loop should call this after
+    each iteration to support early termination.
+    """
+    db = session_factory()
+    try:
+        job = db.get(BackgroundJob, job_id)
+        return job is not None and (
+            job.cancel_requested or job.status == JOB_CANCELLED
+        )
+    finally:
+        db.close()
 
 
 def run_background_job(
@@ -26,7 +48,12 @@ def run_background_job(
     """Create a ``BackgroundJob`` record and run *fn* in a daemon thread.
 
     The job status is updated as the function progresses:
-    ``pending`` → ``running`` → ``completed`` / ``failed``.
+    ``pending`` → ``running`` → ``completed`` / ``failed`` / ``cancelled``.
+
+    If the job is cancelled (via ``cancel_requested``) while *fn* runs,
+    *fn* is responsible for checking ``should_stop()`` and returning
+    early.  After *fn* returns, ``_run`` checks ``cancel_requested``
+    and honours the ``cancelled`` status instead of overwriting it.
 
     *session_factory* is used to create DB sessions (default ``SessionLocal``).
 
@@ -55,17 +82,22 @@ def run_background_job(
             # Execute the function
             result = fn(*args, **kwargs)
 
-            # Mark as completed
+            # Check if cancelled was requested while fn was running
             j = job_db.get(BackgroundJob, job_id)
             if j is not None:
-                j.status = JOB_COMPLETED
-                j.completed_at = datetime.now()
-                j.result = result
-                job_db.commit()
+                if j.cancel_requested or j.status == JOB_CANCELLED:
+                    # Honour cancelled — keep the status, just attach result
+                    j.result = result
+                    job_db.commit()
+                else:
+                    j.status = JOB_COMPLETED
+                    j.completed_at = datetime.now()
+                    j.result = result
+                    job_db.commit()
         except Exception as exc:
             job_db.rollback()
             j = job_db.get(BackgroundJob, job_id)
-            if j is not None:
+            if j is not None and not j.cancel_requested:
                 j.status = JOB_FAILED
                 j.completed_at = datetime.now()
                 j.error = str(exc)

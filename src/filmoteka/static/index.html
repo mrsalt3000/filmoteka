@@ -1150,15 +1150,20 @@ async function loadJobs() {
       return;
     }
     el.innerHTML = `<table class="jobs-table">
-      <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Created</th><th>Error</th></tr></thead>
-      <tbody>${data.items.map(j => `
-        <tr>
+      <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Created</th><th>Error</th><th>Action</th></tr></thead>
+      <tbody>${data.items.map(j => {
+        const cancelBtn = j.status === 'running'
+          ? `<button class="poster-btn" style="font-size:.75rem;padding:.15rem .5rem" onclick="cancelJob(${j.id})">Cancel</button>`
+          : '—';
+        return `<tr>
           <td>${j.id}</td>
           <td>${esc(j.type)}</td>
           <td><span class="job-status job-${esc(j.status)}">${esc(j.status)}</span></td>
           <td>${new Date(j.created_at).toLocaleString()}</td>
           <td>${j.error ? esc(j.error) : '—'}</td>
-        </tr>`).join('')}</tbody>
+          <td>${cancelBtn}</td>
+        </tr>`;
+      }).join('')}</tbody>
     </table>`;
   } catch (e) {
     el.innerHTML = `<div class="error">Failed to load jobs: ${esc(e.message)}</div>`;
@@ -1374,10 +1379,20 @@ async function pollJob(jobId) {
   for (let i = 0; i < 600; i++) {
     await new Promise(r => setTimeout(r, 2000));
     const resp = await apiAuth(`/admin/jobs/${jobId}`);
-    if (resp.status === 'completed') return resp;
+    if (resp.status === 'completed' || resp.status === 'cancelled') return resp;
     if (resp.status === 'failed') throw new Error(resp.error || 'Job failed');
   }
   throw new Error('Job timed out after 20 minutes');
+}
+
+async function cancelJob(jobId) {
+  if (!confirm(`Cancel job #${jobId}? The current operation will stop as soon as possible.`)) return;
+  try {
+    await apiAuth(`/admin/jobs/${jobId}/cancel`, 'POST');
+    loadJobs();
+  } catch (e) {
+    alert(`Failed to cancel job: ${esc(e.message)}`);
+  }
 }
 
 function buildPosterReportHTML(report, label) {
