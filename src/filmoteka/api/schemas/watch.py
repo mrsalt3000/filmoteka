@@ -84,6 +84,7 @@ class ComponentStatus(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     database: ComponentStatus
+    redis: ComponentStatus
     external: ComponentStatus
     version: str = "2.0.0"
 

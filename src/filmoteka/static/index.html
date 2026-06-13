@@ -922,10 +922,12 @@ async function loadExtStatus() {
   try {
     const h = await api('/health');
     const dbIcon = h.database.status === 'ok' ? '✅' : '❌';
+    const redisIcon = h.redis.status === 'ok' ? '✅' : '❌';
     const extIcon = h.external.status === 'ok' ? '✅' : h.external.status === 'degraded' ? '⚠️' : '❌';
     el.innerHTML = `
       <table class="jobs-table">
         <tr><td>Database</td><td>${dbIcon} ${h.database.status}</td></tr>
+        <tr><td>Redis</td><td>${redisIcon} ${h.redis.status}</td></tr>
         <tr><td>OMDB API</td><td>${extIcon} ${h.external.status}</td></tr>
       </table>
       <p style="margin-top:.5rem;font-size:.8rem;color:var(--text2)">Version: ${h.version}</p>`;

@@ -1,4 +1,8 @@
-"""Public health/info endpoints — no auth required."""
+"""Public health/info endpoints — no auth required.
+
+* ``GET /health/live`` — trivial liveness probe (always 200).
+* ``GET /health`` — readiness probe (checks DB, Redis, and OMDB).
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,8 @@ import logging
 from urllib.request import Request, urlopen
 
 from fastapi import APIRouter
+from redis import Redis as RedisClient
+from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -18,9 +24,16 @@ _logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 
+@router.get("/health/live")
+def health_live() -> dict[str, str]:
+    """Trivial liveness probe — always returns 200 while the process is alive."""
+    return {"status": "ok"}
+
+
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    """Return overall service health."""
+    """Return overall service readiness — checks DB, Redis, and OMDB."""
+    # ── Database ──
     db_status = "ok"
     try:
         db: Session = SessionLocal()
@@ -30,6 +43,17 @@ def health() -> HealthResponse:
         _logger.warning("Health check — database: %s", exc)
         db_status = "degraded"
 
+    # ── Redis ──
+    redis_status = "ok"
+    try:
+        client = RedisClient.from_url(str(settings.redis_url))
+        client.ping()
+        client.close()
+    except (RedisError, Exception) as exc:
+        _logger.warning("Health check — redis: %s", exc)
+        redis_status = "degraded"
+
+    # ── OMDB (external) ──
     ext_status = "ok"
     if settings.omdb_api_key:
         try:
@@ -47,6 +71,7 @@ def health() -> HealthResponse:
     return HealthResponse(
         status=overall,
         database=ComponentStatus(status=db_status),
+        redis=ComponentStatus(status=redis_status),
         external=ComponentStatus(status=ext_status),
         version="2.0.0",
     )

@@ -4,6 +4,29 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-023 — 2026-06-13
+
+- Status: `done`
+- Summary: Добавил readiness/liveness health endpoints.
+  - **health.py**: новый `GET /health/live` — тривиальный 200 OK (liveness probe). В `GET /health` добавил Redis ping через `redis.from_url().ping()`. Статусы: DB (SELECT 1), Redis (PING), OMDB (HTTP), общий `ok`/`degraded`.
+  - **schemas/watch.py**: добавил `redis: ComponentStatus` в `HealthResponse`.
+  - **docker-compose.yml**: api healthcheck переведён на `/health/live`. Worker получил healthcheck (curl `api:8000/health/live`, start_period 30s). Worker `depends_on` api → `condition: service_healthy` (было `service_started`).
+  - **index.html**: в `loadExtStatus()` добавил строку Redis в таблицу статусов.
+- Changed files:
+  - `src/filmoteka/api/health.py` — +/health/live, +Redis ping, +redis import
+  - `src/filmoteka/api/schemas/watch.py` — +redis field
+  - `docker-compose.yml` — api healthcheck → /health/live, +worker healthcheck, depends_on fix
+  - `src/filmoteka/static/index.html` — +Redis row in status table
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - mypy: ✅ (clean — 0 errors)
+  - pytest unit: ✅ 142 passed
+  - pytest integration admin: ✅ 78 passed
+  - docker compose config: ✅ parses correctly
+- Next task:
+  - V2-008 — Написать unit/integration тесты рекомендательной логики
+
 ## Task Report: V2-011 — 2026-06-13
 
 - Status: `done`
