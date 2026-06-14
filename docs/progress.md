@@ -4,6 +4,27 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-023 — 2026-06-14
+
+- Status: `done`
+- Summary: Убрал орфаны `.ac3fix.mkv` от прерванного транскодирования.
+  - **Фикс 1 — scan.py:** `_collect_files()` теперь исключает `.ac3fix`
+    из суффиксов (аналогично `.tr`).
+  - **Фикс 2 — admin.py:** `_clean_orphan_ac3fix()` удаляет orphan-файлы
+    с диска и их MediaFile записи при старте `_run_transcode_audio()`.
+  - **Фикс 3 — admin.py:** guard `_active_transcode_job_id` в
+    `transcode_media_audio()` — 409 Conflict при повторном запуске.
+    + очистка в `cancel_job()`.
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-023
+  - `src/filmoteka/domain/importing/scan.py` — +.ac3fix exclusion
+  - `src/filmoteka/api/admin.py` — +_clean_orphan_ac3fix(), guard, cancel
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-022 — 2026-06-14
 
 - Status: `done`

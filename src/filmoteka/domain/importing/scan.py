@@ -145,4 +145,5 @@ def _collect_files(root: Path, extensions: list[str]) -> list[Path]:
         and p.suffix.lower() in ext_set
         and "transcoded" not in p.relative_to(root).parts
         and ".tr" not in p.suffixes[:-1]
+        and ".ac3fix" not in p.suffixes[:-1]
     )

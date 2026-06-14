@@ -159,9 +159,11 @@ def cancel_job(
     db.commit()
 
     # Release scan guard if cancelling a scan job
-    global _active_scan_job_id  # noqa: PLW0603
+    global _active_scan_job_id, _active_transcode_job_id  # noqa: PLW0603
     if job_id == _active_scan_job_id:
         _active_scan_job_id = None
+    if job_id == _active_transcode_job_id:
+        _active_transcode_job_id = None
 
     return {"status": "ok", "id": job.id, "job_status": job.status}
 
@@ -1602,6 +1604,7 @@ def get_transcode_progress(
 @router.post("/media/transcode-audio", status_code=202)
 def transcode_media_audio(
     current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
 ) -> dict[str, object]:
     """Transcode AC3/E-AC3 audio tracks to AAC for all media files.
 
@@ -1618,6 +1621,15 @@ def transcode_media_audio(
     """
     global _active_transcode_job_id  # noqa: PLW0603
 
+    # Guard against concurrent transcodes
+    if _active_transcode_job_id is not None:
+        existing = db.get(BackgroundJob, _active_transcode_job_id)
+        if existing is not None and existing.status == "running":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A transcode job is already in progress",
+            )
+
     job = run_background_job(
         "transcode_audio", _run_transcode_audio,
         session_factory=_background_session_factory,
@@ -1628,12 +1640,39 @@ def transcode_media_audio(
     return {"job_id": job.id, "status": "pending", "type": "transcode_audio"}
 
 
+def _clean_orphan_ac3fix(db: Session) -> None:
+    """Remove stale ``.ac3fix.mkv`` temporary files and their DB records.
+
+    These are left behind when :func:`_run_transcode_audio` is
+    interrupted (API restart) before the ffmpeg temp file could be
+    renamed to ``.tr.mkv``.
+    """
+    orphans = (
+        db.query(MediaFile)
+        .filter(MediaFile.file_path.like("%.ac3fix%"))
+        .all()
+    )
+    if not orphans:
+        return
+    _logger.info("Cleaning %d orphan .ac3fix file(s)", len(orphans))
+    for mf in orphans:
+        p = Path(mf.file_path)
+        if p.is_file():
+            p.unlink(missing_ok=True)
+            _logger.debug("Deleted orphan file: %s", p.name)
+        db.delete(mf)
+    db.commit()
+
+
 def _run_transcode_audio(db: Session | None = None) -> dict | None:
     """Scan all media files, probe for AC3/E-AC3, transcode to AAC."""
     close = db is None
     if db is None:
         db = SessionLocal()
     try:
+        # Clean up orphan .ac3fix.mkv files from previous failed sessions
+        _clean_orphan_ac3fix(db)
+
         media_files = db.query(MediaFile).all()
         total = len(media_files)
         transcoded = 0
