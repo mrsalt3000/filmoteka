@@ -98,10 +98,11 @@ def run_import(
                          to_bridge.index(c) + 1, len(to_bridge))
             break
         try:
-            _bridge_to_catalog(c, db, report)
-            c.status = CANDIDATE_IMPORTED
-            report.files_indexed += 1
-            report.films_created += 1
+            created = _bridge_to_catalog(c, db, report)
+            if created:
+                c.status = CANDIDATE_IMPORTED
+                report.files_indexed += 1
+                report.films_created += 1
         except Exception as exc:
             report.errors.append(f"bridge failed for {c.file_path}: {exc}")
             continue
@@ -112,15 +113,11 @@ def run_import(
 
 def _bridge_to_catalog(
     candidate: ImportCandidate, db: Session, report: ImportReport
-) -> None:
-    """Create or update catalog entries (Film, MovieEdition, MediaFile).
+) -> bool:
+    """Bridge a probed candidate into the catalog (Film → Edition → MediaFile).
 
-    Deduplication strategy:
-    - Film is matched by title (case-insensitive) + year (nullable).
-      If a matching film exists it is reused.
-    - MovieEdition is matched by film_id + quality (nullable).
-      If a matching edition exists it is reused.
-    - MediaFile is matched by file_path (unique) — always created.
+    Returns ``True`` if a new MediaFile was created, ``False`` if the
+    file was skipped (path or content duplicate).
     """
     parsed = parse_filename(Path(candidate.file_path))
 
@@ -194,7 +191,7 @@ def _bridge_to_catalog(
     existing_media = _find_media_by_path(db, candidate.file_path)
     if existing_media is not None:
         _logger.info("MediaFile already exists for path %s — skipping", candidate.file_path)
-        return
+        return False
 
     # --- Content-based duplicate detection ---
     cpath = Path(candidate.file_path)
@@ -207,7 +204,7 @@ def _bridge_to_catalog(
                 candidate.file_path, dup.id,
             )
             report.duplicates_skipped += 1
-            return
+            return False
         content_hash_val = h
     else:
         content_hash_val = None
@@ -225,6 +222,7 @@ def _bridge_to_catalog(
     )
     db.add(media)
     db.flush()
+    return True
 
 
 def _find_film(db: Session, title: str, year: int | None) -> Film | None:

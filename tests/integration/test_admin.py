@@ -1176,7 +1176,82 @@ class TestAdminConflicts:
         )
         assert resp.status_code == 403
 
+    # ── Keep-edition tests ────────────────────────────────────────
 
+    def test_keep_edition_removes_other_editions(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Keep one edition → other edition's MediaFile and edition are removed."""
+        from filmoteka.domain.catalog.models import MovieEdition
+
+        token = _create_admin_token(client, db_session, "ke_rm")
+
+        f = Film(title="Keep Ed", year=2020, needs_review=True)
+        db_session.add(f)
+        db_session.flush()
+
+        ed_keep = MovieEdition(film_id=f.id, quality="1080p")
+        ed_remove = MovieEdition(film_id=f.id, quality="720p")
+        db_session.add_all([ed_keep, ed_remove])
+        db_session.flush()
+
+        db_session.add(MediaFile(edition_id=ed_keep.id, file_path="/tmp/ke_keep.mkv"))
+        db_session.add(MediaFile(edition_id=ed_remove.id, file_path="/tmp/ke_rem.mkv"))
+        db_session.commit()
+
+        resp = client.post(
+            f"/admin/conflicts/{f.id}/keep-edition/{ed_keep.id}",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["deleted_media"] == 1
+        assert body["deleted_editions"] == 1
+
+        remaining = db_session.query(MovieEdition).all()
+        assert len(remaining) == 1
+        assert remaining[0].id == ed_keep.id
+
+    def test_keep_edition_resolves_conflict(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """After keep-edition, needs_review is set to False."""
+        from filmoteka.domain.catalog.models import MovieEdition
+
+        token = _create_admin_token(client, db_session, "ke_res")
+
+        f = Film(title="Keep Resolve", year=2020, needs_review=True)
+        db_session.add(f)
+        db_session.flush()
+
+        ed1 = MovieEdition(film_id=f.id, quality="1080p")
+        ed2 = MovieEdition(film_id=f.id, quality="720p")
+        db_session.add_all([ed1, ed2])
+        db_session.flush()
+        db_session.add_all([
+            MediaFile(edition_id=ed1.id, file_path="/tmp/ke_res_a.mkv"),
+            MediaFile(edition_id=ed2.id, file_path="/tmp/ke_res_b.mkv"),
+        ])
+        db_session.commit()
+
+        client.post(
+            f"/admin/conflicts/{f.id}/keep-edition/{ed1.id}",
+            headers=self._auth(token),
+        )
+
+        db_session.refresh(f)
+        assert f.needs_review is False
+
+    def test_keep_edition_not_found(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Non-existent film returns 404."""
+        token = _create_admin_token(client, db_session, "ke_404")
+        resp = client.post(
+            "/admin/conflicts/99999/keep-edition/1",
+            headers=self._auth(token),
+        )
+        assert resp.status_code == 404
 
 
 # ── Offline mode ────────────────────────────────────────────────

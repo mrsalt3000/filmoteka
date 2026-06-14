@@ -736,3 +736,108 @@ class TestPipelineBridge:
         films = db_session.query(Film).all()
         assert len(films) == 1
         assert films[0].needs_review is True
+
+
+    # ── Content-hash dedup ────────────────────────────────────────
+
+    @patch.object(settings, "omdb_api_key", None)
+    def test_content_hash_detects_identical_files(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """Two files with identical content but different names → 1 MediaFile, dups=1."""
+        from filmoteka.domain.catalog.models import MediaFile
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        (root / "A").mkdir()
+        (root / "B").mkdir()
+
+        # Same content via copy
+        src = root / "A" / "The.Matrix.1999.1080p.mkv"
+        _make_test_video(src)
+        dup = root / "B" / "The.Matrix.1999.1080p.BDRip.mkv"
+        dup.write_bytes(src.read_bytes())
+
+        config = _make_config(root)
+
+        report = run_import(config, db_session)
+        assert report.duplicates_skipped == 1
+        assert report.files_indexed == 1  # only first file indexed
+
+        media_files = db_session.query(MediaFile).all()
+        assert len(media_files) == 1
+
+    @patch.object(settings, "omdb_api_key", None)
+    def test_content_hash_does_not_skip_different_files(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """Two genuinely different files → both imported, duplicates_skipped=0."""
+        from filmoteka.domain.catalog.models import MediaFile
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        v1 = root / "The.Matrix.1999.1080p.mkv"
+        v2 = root / "The.Matrix.1999.720p.mkv"
+        _make_test_video(v1)
+        _make_test_video(v2)
+        config = _make_config(root)
+
+        report = run_import(config, db_session)
+        assert report.duplicates_skipped == 0
+        assert report.files_indexed == 2
+
+        media_files = db_session.query(MediaFile).all()
+        assert len(media_files) == 2
+
+    @patch.object(settings, "omdb_api_key", None)
+    def test_content_hash_on_reimport_same_path(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """Re-import of the same path is caught by path check before content hash."""
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        video = root / "The.Matrix.1999.1080p.mkv"
+        _make_test_video(video)
+        config = _make_config(root)
+
+        r1 = run_import(config, db_session)
+        assert r1.files_indexed == 1
+
+        r2 = run_import(config, db_session)
+        assert r2.files_indexed == 0
+        assert r2.duplicates_skipped == 0  # caught by path, not content hash
+
+
+    # ── Edition dedup with edition_name and language ──────────────
+
+    @patch.object(settings, "omdb_api_key", None)
+    def test_bridge_same_film_edition_name_and_language(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """Director's Cut 1080p RUS + Theatrical 1080p ENG → same film, 2 editions, no conflict."""
+        from filmoteka.domain.catalog.models import Film, MovieEdition
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+
+        # Director's Cut — 1080p, RUS
+        v1 = root / "The.Matrix.1999.1080p.Directors.Cut.RUS.mkv"
+        # Theatrical — 1080p, ENG
+        v2 = root / "The.Matrix.1999.1080p.Theatrical.ENG.mkv"
+        _make_test_video(v1)
+        _make_test_video(v2)
+        config = _make_config(root)
+
+        report = run_import(config, db_session)
+        assert report.files_indexed == 2
+
+        films = db_session.query(Film).all()
+        assert len(films) == 1
+
+        editions = db_session.query(MovieEdition).all()
+        assert len(editions) == 2
+
+        # Each edition has exactly one media file — no conflict
+        film = films[0]
+        assert film.needs_review is False

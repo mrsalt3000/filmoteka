@@ -4,6 +4,33 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-012 — 2026-06-14
+
+- Status: `done`
+- Summary: 7 новых тестов на dedup и conflict resolution.
+  - **Content-hash dedup** (test_importing.py):
+    - `test_content_hash_detects_identical_files` — одинаковое содержимое, разные имена → dups=1
+    - `test_content_hash_does_not_skip_different_files` — разные файлы → 2 MediaFile
+    - `test_content_hash_on_reimport_same_path` — путь матчится раньше хэша
+  - **Edition_name + language** (test_importing.py):
+    - `test_bridge_same_film_edition_name_and_language` — Director's Cut 1080p RUS + Theatrical 1080p ENG
+  - **Keep-edition endpoint** (test_admin.py):
+    - `test_keep_edition_removes_other_editions` — MediaFile + Edition удалены
+    - `test_keep_edition_resolves_conflict` — `needs_review=False`
+    - `test_keep_edition_not_found` — 404
+  - **Попутно:** `_bridge_to_catalog()` теперь возвращает `bool` (True если MediaFile создан, False если пропущен). `files_indexed` инкрементируется только при создании.
+- Changed files:
+  - `agent-tasklist.md` — V2-012 marked [x]
+  - `src/filmoteka/domain/importing/pipeline.py` — _bridge_to_catalog -> bool
+  - `tests/integration/test_importing.py` — +4 теста
+  - `tests/integration/test_admin.py` — +3 теста
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - 10 тестов (4 новых + 1 + 3 + 2 существующих) прошло
+- Next task:
+  - V2-014 — Fallback при недоступности metadata-провайдеров
+
 ## Task Report: V2-010 — 2026-06-14
 
 - Status: `done`
