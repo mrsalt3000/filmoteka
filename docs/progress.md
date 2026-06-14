@@ -4,6 +4,27 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-026 — 2026-06-14
+
+- Status: `done`
+- Summary: Per-file commit при транскодировании.
+  - **Проблема:** `db.commit()` выполнялся один раз после цикла. При
+    рестарте API между rename → .tr.mkv и commit — файл на диске есть,
+    БД не обновлена (file_path, audio_codec).
+  - **Решение:** `db.commit()` сразу после `mf.file_path` и
+    `mf.audio_codec` в успешном транскодировании. Каждый файл
+    фиксируется независимо.
+  - **Попутно:** исправил orphan `Mortal.Kombat...tr.mkv` — обновил
+    file_path и audio_codec вручную.
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-026
+  - `src/filmoteka/api/admin.py` — +db.commit() после успеха
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+- Next task:
+  - V2-014 — Fallback при недоступности metadata-провайдеров
+
 ## Task Report: V2-012 — 2026-06-14
 
 - Status: `done`

@@ -1806,6 +1806,7 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                 temp_path.rename(result_path)
                 mf.file_path = str(result_path)
                 mf.audio_codec = "aac"
+                db.commit()
                 _logger.info(
                     "Transcoded AC3→AAC for media %d: %s", mf.id, result_path.name,
                 )
