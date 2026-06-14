@@ -1326,6 +1326,9 @@ def update_film(
         film.poster_url = body.poster_url
         film.poster_source = "manual"
         changed = True
+    if body.country is not None and body.country != film.country:
+        film.country = body.country
+        changed = True
 
     if changed:
         film.needs_review = False
@@ -1358,6 +1361,7 @@ def update_film(
         poster_url=film.poster_url,
         age_rating=film.age_rating,
         is_family_video=film.is_family_video,
+        country=film.country,
         needs_review=film.needs_review,
         created_at=film.created_at,
         genres=[GenreOut.model_validate(g) for g in film.genres],

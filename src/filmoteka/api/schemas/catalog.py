@@ -84,6 +84,7 @@ class FilmUpdateSchema(BaseModel):
     age_rating: str | None = None
     is_family_video: bool | None = None
     poster_url: str | None = None
+    country: str | None = None
 
 
 class FilmDetailOut(BaseModel):
@@ -94,6 +95,7 @@ class FilmDetailOut(BaseModel):
     poster_url: str | None = None
     age_rating: str | None = None
     is_family_video: bool = False
+    country: str | None = None
     needs_review: bool = False
     created_at: datetime
     genres: list[GenreOut] = []

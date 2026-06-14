@@ -668,6 +668,66 @@ class TestAdminFilmEdit:
         assert body["needs_review"] is True
         assert body["title"] == "Original Title"
 
+    def test_admin_can_edit_age_rating(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        film = self._create_film(db_session)
+        token = _create_admin_token(client, db_session, "admin_ar")
+        resp = client.put(
+            f"/admin/films/{film.id}",
+            json={"age_rating": "R"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["age_rating"] == "R"
+
+    def test_admin_can_edit_is_family_video(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        film = self._create_film(db_session)
+        token = _create_admin_token(client, db_session, "admin_fam")
+        resp = client.put(
+            f"/admin/films/{film.id}",
+            json={"is_family_video": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["is_family_video"] is True
+
+    def test_admin_can_edit_country(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        film = self._create_film(db_session)
+        token = _create_admin_token(client, db_session, "admin_cntry")
+        resp = client.put(
+            f"/admin/films/{film.id}",
+            json={"country": "USA"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["country"] == "USA"
+
+    def test_admin_can_edit_all_new_fields(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        film = self._create_film(db_session)
+        token = _create_admin_token(client, db_session, "admin_all_new")
+        resp = client.put(
+            f"/admin/films/{film.id}",
+            json={
+                "age_rating": "PG-13",
+                "is_family_video": True,
+                "country": "UK",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["age_rating"] == "PG-13"
+        assert body["is_family_video"] is True
+        assert body["country"] == "UK"
+
 
 class TestAdminMediaReindex:
     """POST /admin/media/reindex — fix broken media file paths."""

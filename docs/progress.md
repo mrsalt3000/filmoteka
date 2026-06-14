@@ -4,6 +4,26 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-006 — 2026-06-14
+
+- Status: `done`
+- Summary: Добавил недостающие поля в форму редактирования карточки фильма.
+  - **Backend:** `FilmUpdateSchema` + `country`, `PUT /admin/films/{id}` + обработка country
+  - **Frontend:** в edit mode добавлены поля: age_rating (input), is_family_video (checkbox), country (input)
+  - **Tests:** 4 новых теста в `TestAdminFilmEdit` (age_rating, is_family_video, country, все вместе)
+- Changed files:
+  - `agent-tasklist.md` — V1-006 marked [x]
+  - `src/filmoteka/api/schemas/catalog.py` — +country в FilmUpdateSchema и FilmDetailOut
+  - `src/filmoteka/api/admin.py` — +country handler в PUT endpoint
+  - `src/filmoteka/static/index.html` — +3 поля в edit форме + CSS
+  - `tests/integration/test_admin.py` — +4 теста
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - 4/4 new tests passed
+- Next task:
+  - V1-007 — Тесты для enrichment pipeline
+
 ## Task Report: V2-014 — 2026-06-14
 
 - Status: `done`
