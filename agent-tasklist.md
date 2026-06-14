@@ -1718,3 +1718,63 @@
 
 ### Следующая рекомендуемая задача
 - ...
+
+---
+
+## 6. TV Series — группировка сериалов
+
+### 6.1. Модели и миграция
+
+- [x] **SERIES-001** Добавить модель Series + поля series_id, season, episode на Film.
+
+  Создать таблицу `series` (id, title, poster_url, year_start, year_end, created_at).
+  Добавить на Film: `series_id: FK → series.id`, `season_number: int | None`,
+  `episode_number: int | None`, `episode_title: str | None`.
+  Миграция, update модели, schema SeriesOut.
+
+  **Сделано (2026-06-14):** Series модель, поля на Film, SeriesOut/FilmOut/FilmDetailOut schema, миграция 48634499438a.
+
+### 6.2. Импорт
+
+- [ ] **SERIES-002** Научить filename_parser распознавать SxxExx / 1x01.
+
+  `ParsedFilename` + `series_title`, `season_number`, `episode_number`,
+  `episode_title`. Извлекать из стема до/после SxxExx маркеров.
+
+- [ ] **SERIES-003** Научить pipeline группировать эпизоды в Series.
+
+  В `_bridge_to_catalog()`: если есть `parsed.series_title` — find-or-create
+  Series, заполнять `film.series_id`, `film.season_number`, `film.episode_number`.
+
+### 6.3. API
+
+- [ ] **SERIES-004** API endpoints: список сериалов + детальная страница.
+
+  `GET /series` — список всех сериалов с episode_count.
+  `GET /series/{id}` — сериал с эпизодами, сгруппированными по сезонам.
+  `GET /series/{id}/episodes?season=N` — эпизоды конкретного сезона.
+
+### 6.4. Фронтенд
+
+- [ ] **SERIES-005** Главная — сериалы как одна карточка.
+
+  В `renderList()`: если есть сериалы — показывать одну карточку на сериал
+  (постер, название, кол-во эпизодов), а не N отдельных эпизодов.
+
+- [ ] **SERIES-006** Страница сериала — выбор сезона/серии.
+
+  Новая страница `#series/{id}`. Показывает постер, описание, список сезонов.
+  При выборе сезона — список эпизодов. У каждого эпизода кнопка Play,
+  статус просмотра (watched/continue).
+
+- [ ] **SERIES-007** Кнопки prev/next в плеере.
+
+  В `renderPlayer()`: если текущий файл принадлежит эпизоду сериала —
+  показывать кнопки "← Previous" / "Next →". Переключение на
+  предыдущий/следующий эпизод по season_number + episode_number.
+
+- [ ] **SERIES-008** Continue на странице сериала.
+
+  Кнопка "▶ Continue" на странице сериала — находит последний
+  запущенный (не завершённый) эпизод и запускает плеер.
+  Если все эпизоды просмотрены — кнопка "▶ Play from beginning".

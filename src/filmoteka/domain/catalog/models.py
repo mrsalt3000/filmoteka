@@ -68,6 +68,25 @@ film_person = Table(
 # Core entities
 # ---------------------------------------------------------------------------
 
+
+class Series(Base):
+    """A TV series / show that groups multiple episode Films."""
+
+    __tablename__ = "series"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    poster_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    year_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    year_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    films: Mapped[list[Film]] = relationship(back_populates="series")
+
+    def __repr__(self) -> str:
+        return f"<Series id={self.id} title={self.title!r}>"
+
+
 class Film(Base):
     __tablename__ = "films"
 
@@ -86,6 +105,12 @@ class Film(Base):
     )
     age_rating: Mapped[str | None] = mapped_column(String(8), nullable=True)
     country: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    series_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("series.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    season_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    episode_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    episode_title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         default=datetime.now, onupdate=datetime.now
@@ -93,6 +118,7 @@ class Film(Base):
 
     editions: Mapped[list[MovieEdition]] = relationship(back_populates="film")
     genres: Mapped[list[Genre]] = relationship(secondary=film_genre, back_populates="films")
+    series: Mapped[Series | None] = relationship(back_populates="films")
     persons: Mapped[list[Person]] = relationship(secondary=film_person, back_populates="films")
 
     def __repr__(self) -> str:

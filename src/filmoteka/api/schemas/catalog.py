@@ -7,6 +7,21 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 # ---------------------------------------------------------------------------
+# Series
+# ---------------------------------------------------------------------------
+
+
+class SeriesOut(BaseModel):
+    id: int
+    title: str
+    poster_url: str | None = None
+    year_start: int | None = None
+    year_end: int | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------------------
 # List
 # ---------------------------------------------------------------------------
 
@@ -18,6 +33,9 @@ class FilmOut(BaseModel):
     poster_url: str | None = None
     age_rating: str | None = None
     is_family_video: bool = False
+    season_number: int | None = None
+    episode_number: int | None = None
+    episode_title: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -97,6 +115,11 @@ class FilmDetailOut(BaseModel):
     is_family_video: bool = False
     country: str | None = None
     needs_review: bool = False
+    series_id: int | None = None
+    season_number: int | None = None
+    episode_number: int | None = None
+    episode_title: str | None = None
+    series: SeriesOut | None = None
     created_at: datetime
     genres: list[GenreOut] = []
     persons: list[PersonOut] = []
