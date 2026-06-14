@@ -4,6 +4,29 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-010 — 2026-06-14
+
+- Status: `done`
+- Summary: Conflict resolution flow в админке.
+  - **Проблема:** список конфликтов показывал только Film/Year/FileCount +
+    Resolve. Админ не видел какие именно файлы в конфликте и не мог их удалить.
+  - **Решение:**
+    1. **Backend:** `POST /admin/conflicts/{film_id}/keep-edition/{edition_id}`
+       — удаляет все другие edition того же фильма (MediaFile + пустые
+       Edition), ставит `needs_review=False`.
+    2. **Frontend:** раскрытая таблица — каждый конфликт показывает edition
+       и media файлы. Первый файл edition — кнопка ⭐ Keep. Каждый файл —
+       кнопка 🗑 Delete. Внизу — ✓ Resolve.
+- Changed files:
+  - `agent-tasklist.md` — V2-010 marked [x]
+  - `src/filmoteka/api/admin.py` — +keep-edition endpoint
+  - `src/filmoteka/static/index.html` — +расширенный рендер конфликтов
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+- Next task:
+  - V2-012 — Тесты для сложных dedup-кейсов
+
 ## Task Report: BUGFIX-025 — 2026-06-14
 
 - Status: `done`

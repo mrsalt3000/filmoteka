@@ -685,6 +685,46 @@ def admin_resolve_conflict(
     db.commit()
 
 
+@router.post("/conflicts/{film_id}/keep-edition/{edition_id}", status_code=200)
+def admin_keep_edition(
+    film_id: int,
+    edition_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Keep only *edition_id* for *film_id*, removing all other editions' media files.
+
+    Empty editions are deleted as a side effect.
+    Sets ``needs_review = False``.
+    Returns the number of deleted media files and editions.
+    """
+    film = db.get(Film, film_id)
+    if film is None:
+        raise HTTPException(status_code=404, detail="Film not found")
+
+    deleted_media = 0
+    deleted_editions = 0
+
+    for ed in list(film.editions):
+        if ed.id == edition_id:
+            continue
+        for mf in list(ed.media_files):
+            db.delete(mf)
+            deleted_media += 1
+        db.delete(ed)
+        deleted_editions += 1
+
+    film.needs_review = False
+    db.commit()
+    return {
+        "status": "ok",
+        "film_id": film_id,
+        "kept_edition_id": edition_id,
+        "deleted_media": deleted_media,
+        "deleted_editions": deleted_editions,
+    }
+
+
 @router.delete("/media/{media_id}", status_code=204)
 def admin_delete_media(
     media_id: int,

@@ -1055,13 +1055,30 @@ async function loadConflicts() {
       el.innerHTML = '<p style="color:var(--text2)">No conflicts.</p>';
       return;
     }
-    let html = '<table class="jobs-table"><thead><tr><th>Film</th><th>Year</th><th>Files</th><th></th></tr></thead><tbody>';
+    let html = '<table class="jobs-table"><thead><tr><th>Film</th><th>Year</th><th>Edition / File</th><th></th></tr></thead><tbody>';
     data.items.forEach(f => {
-      const fileCount = f.editions.reduce((s, e) => s + e.media_files.length, 0);
-      html += `<tr>
-        <td>${esc(f.title)}</td>
-        <td>${f.year ?? '—'}</td>
-        <td>${fileCount}</td>
+      let first = true;
+      f.editions.forEach(ed => {
+        ed.media_files.forEach((m, mi) => {
+          const fname = m.file_path.split(/[/\\]/).pop();
+          const info = [m.codec, m.audio_codec].filter(Boolean).join(' ');
+          const label = mi === 0
+            ? `${esc(ed.quality || '—')}${ed.language ? ` (${esc(ed.language)})` : ''}`
+            : '';
+          html += `<tr>
+            <td>${first ? esc(f.title) : ''}</td>
+            <td>${first ? (f.year ?? '—') : ''}</td>
+            <td>${label ? `<strong>${label}</strong><br>` : ''}<span class="tx-file">${esc(fname)}</span>${info ? ` <span class="tx-badge" style="font-size:.75rem">${esc(info)}</span>` : ''}</td>
+            <td style="white-space:nowrap">
+              ${mi === 0 ? `<button class="poster-btn" style="padding:.2rem .5rem;font-size:.8rem" onclick="keepEdition(${f.film_id},${ed.edition_id})">⭐ Keep</button> ` : ''}
+              <button class="poster-btn" style="padding:.2rem .5rem;font-size:.8rem" onclick="deleteConflictMedia(${m.media_id})">🗑</button>
+            </td>
+          </tr>`;
+          first = false;
+        });
+      });
+      // Resolve row
+      html += `<tr style="border-top:2px solid var(--surface2)"><td colspan="3"></td>
         <td><button class="poster-btn" style="padding:.2rem .5rem;font-size:.8rem" onclick="resolveConflict(${f.film_id})">✓ Resolve</button></td>
       </tr>`;
     });
@@ -1069,6 +1086,34 @@ async function loadConflicts() {
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+
+async function deleteConflictMedia(mediaId) {
+  if (!confirm('Delete this media file? This cannot be undone.')) return;
+  try {
+    const token = getToken();
+    await fetch(`/admin/media/${mediaId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    loadConflicts();
+  } catch (e) {
+    alert(`Failed: ${e.message}`);
+  }
+}
+
+async function keepEdition(filmId, editionId) {
+  if (!confirm('Keep only this edition — remove all others?')) return;
+  try {
+    const token = getToken();
+    await fetch(`/admin/conflicts/${filmId}/keep-edition/${editionId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    loadConflicts();
+  } catch (e) {
+    alert(`Failed: ${e.message}`);
   }
 }
 
