@@ -4,6 +4,24 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-021 — 2026-06-14
+
+- Status: `done`
+- Summary: Добавил кнопку Stop scanning рядом с Scan library в админке.
+  - **Проблема:** остановить сканирование можно было только через таблицу
+    Background Jobs — неочевидно.
+  - **Решение:** кнопка "⏹ Stop scanning" (красная) появляется рядом с
+    Scan library после запуска сканирования, вызывает `cancelJob(jobId)`,
+    исчезает после завершения/отмены.
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-021
+  - `src/filmoteka/static/index.html` — +кнопка, CSS, stopScan(), _scanJobId
+  - `docs/progress.md` (this report)
+- Checks:
+  - Визуальный review кода: ✅
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-020 — 2026-06-14
 
 - Status: `done`

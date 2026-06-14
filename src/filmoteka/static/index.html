@@ -127,6 +127,8 @@ nav input::placeholder { color: var(--text2); }
 .admin-page .scan-btn { padding: .75rem 2rem; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 1rem; cursor: pointer; }
 .admin-page .scan-btn:hover { opacity: .9; }
 .admin-page .scan-btn:disabled { opacity: .5; cursor: not-allowed; }
+.admin-page .scan-stop-btn { background: #c0392b; margin-left: .5rem; }
+.admin-page .scan-stop-btn:hover { background: #a93226; opacity: .9; }
 .admin-page .poster-section { margin-top: 2rem; border-top: 1px solid var(--surface2); padding-top: 1.5rem; }
 .admin-page .poster-section h3 { font-size: 1rem; margin-bottom: .75rem; }
 .admin-page .poster-section p { font-size: .85rem; color: var(--text2); margin-bottom: .75rem; }
@@ -822,6 +824,7 @@ async function renderAdmin(el) {
       <h2>Admin Panel</h2>
       <p style="color:var(--text2);margin-bottom:1rem">Scan the downloads directory to import new media files into the library.</p>
       <button class="scan-btn" id="scan-btn" onclick="runScan()">🔍 Scan library</button>
+      <button class="scan-btn scan-stop-btn" id="scan-stop-btn" onclick="stopScan()" style="display:none">⏹ Stop scanning</button>
       <div id="scan-report"></div>
 
       <div class="poster-section">
@@ -1172,8 +1175,9 @@ async function loadJobs() {
 
 async function runScan() {
   const btn = document.getElementById('scan-btn');
+  const stopBtn = document.getElementById('scan-stop-btn');
   const reportEl = document.getElementById('scan-report');
-  if (!btn || !reportEl) return;
+  if (!btn || !stopBtn || !reportEl) return;
 
   if (!confirm('Start library scan? This will scan the downloads directory and import new files.')) return;
 
@@ -1186,6 +1190,8 @@ async function runScan() {
     const startResp = await apiAuth('/admin/import/scan', 'POST');
     const jobId = startResp.job_id;
     if (!jobId) throw new Error('No job_id returned');
+    _scanJobId = jobId;
+    stopBtn.style.display = '';
     loadJobs();
 
     reportEl.innerHTML = '<div class="spinner">Scanning library… this may take a few minutes for large files.</div>';
@@ -1202,7 +1208,18 @@ async function runScan() {
   } finally {
     btn.disabled = false;
     btn.textContent = '🔍 Scan library';
+    _scanJobId = null;
+    stopBtn.style.display = 'none';
   }
+}
+
+let _scanJobId = null;
+
+async function stopScan() {
+  if (!_scanJobId) return;
+  await cancelJob(_scanJobId);
+  _scanJobId = null;
+  document.getElementById('scan-stop-btn').style.display = 'none';
 }
 
 function buildReportHTML(report) {
