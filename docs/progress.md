@@ -4,6 +4,27 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-027 — 2026-06-14
+
+- Status: `done`
+- Summary: Поиск постера OMDB теперь использует alias вместо filename title.
+  - **Pipeline:** в `_bridge_to_catalog()` перед OMDB-запросом генерируется
+    alias через `deepseek_generate_alias()`. `alias_for_search` (или
+    `parsed.series_title`) передаётся в OMDB. Алиас сохраняется в
+    `media_alias` при создании MediaFile.
+  - **Admin poster jobs:** `_run_fill_missing` и `_run_refresh_all` используют
+    новую `_poster_search_title(film, db)` — ищет `media_alias` у MediaFile,
+    падает на `film.title`.
+- Changed files:
+  - `agent-tasklist.md` — V2-027 [x]
+  - `src/filmoteka/domain/importing/pipeline.py` — +alias generation + OMDB
+  - `src/filmoteka/api/admin.py` — +_poster_search_title, usage
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+- Next task:
+  - SERIES-003 — Группировка эпизодов в Series в pipeline
+
 ## Task Report: SERIES-002 — 2026-06-14
 
 - Status: `done`

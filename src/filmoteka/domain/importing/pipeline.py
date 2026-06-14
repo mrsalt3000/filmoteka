@@ -33,6 +33,7 @@ from filmoteka.domain.importing.scan import probe_candidates, scan_downloads
 from filmoteka.infrastructure.deepseek_provider import (
     DeepSeekEnrichmentResult,
     deepseek_enrich_metadata,
+    deepseek_generate_alias,
 )
 from filmoteka.infrastructure.filename_parser import parse_filename
 from filmoteka.infrastructure.library_config import LibraryConfig
@@ -140,10 +141,22 @@ def _bridge_to_catalog(
     film.metadata_enriched_at = None
     film.needs_review = False
 
+    # --- Generate alias for poster search (best-effort, before OMDB) ---
+    alias_for_search: str | None = None
+    if settings.deepseek_api_key:
+        file_stem = Path(candidate.file_path).stem
+        try:
+            alias_for_search = deepseek_generate_alias(file_stem, settings.deepseek_api_key)
+        except Exception:
+            _logger.exception("Alias generation failed for %s", file_stem)
+
+    # Use alias, or parsed.series_title (for TV episodes), or parsed.title
+    poster_search_title = alias_for_search or parsed.series_title or parsed.title
+
     # --- Poster enrichment via OMDB (best-effort) ---
     poster_found = False
     if film.poster_url is None and settings.omdb_api_key:
-        result = omdb_search_poster(parsed.title, parsed.year, settings.omdb_api_key)
+        result = omdb_search_poster(poster_search_title, parsed.year, settings.omdb_api_key)
         if result is not None:
             film.poster_url, film.poster_source = result
             poster_found = True
@@ -214,6 +227,7 @@ def _bridge_to_catalog(
         file_path=candidate.file_path,
         file_size=candidate.size,
         content_hash=content_hash_val,
+        media_alias=alias_for_search,
         duration_secs=candidate.duration_secs,
         width=candidate.width,
         height=candidate.height,

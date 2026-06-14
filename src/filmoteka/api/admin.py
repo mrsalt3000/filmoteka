@@ -844,6 +844,20 @@ def poster_fill_missing(
     return {"job_id": job.id, "status": "pending", "type": "poster_fill_missing"}
 
 
+def _poster_search_title(film: Film, db: Session) -> str:
+    """Return the best title to use when searching for this film's poster.
+
+    Priority:
+    1. ``media_alias`` from the first MediaFile that has one
+    2. ``film.title`` (fallback to the filename-parsed title)
+    """
+    for ed in film.editions:
+        for mf in ed.media_files:
+            if mf.media_alias:
+                return mf.media_alias
+    return film.title
+
+
 def _run_fill_missing(db: Session | None = None) -> dict | None:
     """Query films without posters and fill via OMDB."""
     close = db is None
@@ -859,7 +873,8 @@ def _run_fill_missing(db: Session | None = None) -> dict | None:
 
         for film in films:
             try:
-                result = omdb_search_poster(film.title, film.year, api_key)
+                search_title = _poster_search_title(film, db)
+                result = omdb_search_poster(search_title, film.year, api_key)
                 if result is not None:
                     film.poster_url, film.poster_source = result
                     updated += 1
@@ -914,7 +929,8 @@ def _run_refresh_all(db: Session | None = None) -> dict | None:
 
         for film in films:
             try:
-                result = omdb_search_poster(film.title, film.year, api_key)
+                search_title = _poster_search_title(film, db)
+                result = omdb_search_poster(search_title, film.year, api_key)
                 if result is not None:
                     film.poster_url, film.poster_source = result
                     updated += 1
