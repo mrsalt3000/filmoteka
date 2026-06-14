@@ -4,6 +4,25 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-024 — 2026-06-14
+
+- Status: `done`
+- Summary: Добавил проверку `/health` перед стартом сканирования.
+  - **Проблема:** при `docker compose up -d` пользователь мог нажать
+    Scan до полной инициализации API → `files_found: 0`.
+  - **Решение:** в `runScan()` сначала `GET /health`. Если не 200 —
+    жёлтое предупреждение "⚠ Service is still starting up",
+    скан не стартует. Если fetch упал (сеть) — "⚠ Cannot reach server".
+    Кнопка Scan остаётся активной, можно повторить.
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-024
+  - `src/filmoteka/static/index.html` — +health check в runScan()
+  - `docs/progress.md` (this report)
+- Checks:
+  - Визуальный review кода: ✅
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-023 — 2026-06-14
 
 - Status: `done`

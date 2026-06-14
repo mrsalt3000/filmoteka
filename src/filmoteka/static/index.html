@@ -129,6 +129,7 @@ nav input::placeholder { color: var(--text2); }
 .admin-page .scan-btn:disabled { opacity: .5; cursor: not-allowed; }
 .admin-page .scan-stop-btn { background: #c0392b; margin-left: .5rem; }
 .admin-page .scan-stop-btn:hover { background: #a93226; opacity: .9; }
+.admin-page .scan-warning { background: #fff3cd; color: #856404; padding: .75rem 1rem; border-radius: var(--radius); margin-top: .5rem; font-size: .9rem; }
 .admin-page .poster-section { margin-top: 2rem; border-top: 1px solid var(--surface2); padding-top: 1.5rem; }
 .admin-page .poster-section h3 { font-size: 1rem; margin-bottom: .75rem; }
 .admin-page .poster-section p { font-size: .85rem; color: var(--text2); margin-bottom: .75rem; }
@@ -1178,6 +1179,18 @@ async function runScan() {
   const stopBtn = document.getElementById('scan-stop-btn');
   const reportEl = document.getElementById('scan-report');
   if (!btn || !stopBtn || !reportEl) return;
+
+  // Readiness check — service may still be starting up (migrations, etc.)
+  try {
+    const healthResp = await fetch('/health');
+    if (!healthResp.ok) {
+      reportEl.innerHTML = '<div class="scan-warning">⚠ Service is still starting up. Wait a moment and try again.</div>';
+      return;
+    }
+  } catch {
+    reportEl.innerHTML = '<div class="scan-warning">⚠ Cannot reach server. Is the service running?</div>';
+    return;
+  }
 
   if (!confirm('Start library scan? This will scan the downloads directory and import new files.')) return;
 
