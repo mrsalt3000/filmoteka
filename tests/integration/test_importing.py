@@ -841,3 +841,34 @@ class TestPipelineBridge:
         # Each edition has exactly one media file — no conflict
         film = films[0]
         assert film.needs_review is False
+
+
+    # ── Graceful degradation when metadata providers are unavailable ──
+
+    @patch.object(settings, "omdb_api_key", "test_key")
+    @patch("filmoteka.domain.importing.pipeline.omdb_search_poster", return_value=None)
+    def test_import_graceful_no_metadata(
+        self,
+        _mock_poster,
+        db_session: Session,
+        tmp_path: Path,
+    ) -> None:
+        """Both OMDB and DeepSeek unavailable → pipeline completes with filename_parse metadata."""
+        from filmoteka.domain.catalog.models import Film
+        from filmoteka.domain.importing.pipeline import run_import
+
+        # DeepSeek is already mocked at the class level (autouse fixture).
+        root = tmp_path
+        video = root / "The.Matrix.1999.1080p.mkv"
+        _make_test_video(video)
+        config = _make_config(root)
+
+        report = run_import(config, db_session)
+
+        # Pipeline completed without crashing
+        assert report.files_indexed == 1
+        assert len(report.errors) == 0
+
+        film = db_session.query(Film).one()
+        assert film.metadata_source == "filename_parse"
+        assert film.metadata_confidence in (0.3, 0.6)

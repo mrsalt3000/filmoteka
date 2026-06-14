@@ -4,6 +4,25 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-014 — 2026-06-14
+
+- Status: `done`
+- Summary: Тест на graceful degradation при недоступности metadata провайдеров.
+  - **Факт:** оба провайдера (OMDB, DeepSeek) уже корректно возвращают
+    `None` при любых ошибках (сеть, ключ, таймаут). Pipeline не ломается.
+  - **Добавлен тест:** `test_import_graceful_no_metadata` — OMDB и DeepSeek
+    настроены, но оба недоступны → импорт завершается, `metadata_source`
+    остаётся `"filename_parse"`, errors=0.
+- Changed files:
+  - `agent-tasklist.md` — V2-014 marked [x]
+  - `tests/integration/test_importing.py` — +1 тест
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - 1/1 passed
+- Next task:
+  - V1-006 — Manual card edit через админку
+
 ## Task Report: BUGFIX-026 — 2026-06-14
 
 - Status: `done`
