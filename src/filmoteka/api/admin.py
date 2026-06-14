@@ -1678,6 +1678,7 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
         transcoded = 0
         skipped = 0
         errors: list[str] = []
+        consecutive_timeouts = 0
 
         # Initialise in-memory progress table (all queued).
         progress: list[TranscodeFileStatus] = [
@@ -1769,6 +1770,7 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                     "Transcoded AC3→AAC for media %d: %s", mf.id, result_path.name,
                 )
                 transcoded += 1
+                consecutive_timeouts = 0
                 with _transcode_lock:
                     progress[idx].status = "completed"
             except subprocess.TimeoutExpired:
@@ -1777,6 +1779,13 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                 with _transcode_lock:
                     progress[idx].status = "error"
                     progress[idx].error = "ffmpeg timed out"
+                consecutive_timeouts += 1
+                if consecutive_timeouts >= 3:
+                    _logger.warning(
+                        "Transcode job %d aborted — %d consecutive timeouts",
+                        job_id, consecutive_timeouts,
+                    )
+                    break
             except Exception as exc:
                 errors.append(f"Media {mf.id} ({path.name}): {exc}")
                 temp_path.unlink(missing_ok=True)
@@ -1785,6 +1794,11 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                     progress[idx].error = str(exc)
 
         db.commit()
+        aborted = consecutive_timeouts >= 3
+        if aborted:
+            raise RuntimeError(
+                f"Stopped after {consecutive_timeouts} consecutive timeouts"
+            )
         return {
             "total": total,
             "transcoded": transcoded,

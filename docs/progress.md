@@ -4,6 +4,26 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-025 — 2026-06-14
+
+- Status: `done`
+- Summary: Consecutive timeout guard для транскодирования.
+  - **Проблема:** job транскодирования работал до конца списка даже если
+    каждый файл не укладывался в таймаут — нет проверки последовательных
+    таймаутов.
+  - **Решение:** счётчик `consecutive_timeouts`, сброс при успехе. При
+    3 последовательных таймаутах → `break` + `raise RuntimeError` → job
+    статус `failed` с сообщением "Stopped after 3 consecutive timeouts".
+    Успешные транскодирования до abort сохраняются (commit сделан).
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-025
+  - `src/filmoteka/api/admin.py` — +счётчик, break при >=3
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+- Next task:
+  - V2-010 — Conflict resolution flow для админа
+
 ## Task Report: V2-009 — 2026-06-14
 
 - Status: `done`
