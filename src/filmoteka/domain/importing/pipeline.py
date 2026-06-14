@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -45,11 +46,19 @@ def _ffprobe_available() -> bool:
     return shutil.which("ffprobe") is not None
 
 
-def run_import(config: LibraryConfig, db: Session) -> ImportReport:
+def run_import(
+    config: LibraryConfig,
+    db: Session,
+    should_stop_fn: Callable[[], bool] | None = None,
+) -> ImportReport:
     """Run the import pipeline: scan → probe → bridge (no file copying).
 
     Files are indexed in-place from ``config.paths.target_root``.
     Catalog entries (Film, MovieEdition, MediaFile) are created directly.
+
+    If *should_stop_fn* is provided, it is called before bridging each
+    candidate.  When it returns ``True`` the loop early-exits, leaving
+    remaining candidates unprocessed.
     """
     # 1. Scan — discover new files in the library directory
     run = scan_downloads(config, db)
@@ -83,6 +92,10 @@ def run_import(config: LibraryConfig, db: Session) -> ImportReport:
 
     # 3. Bridge — create catalog entries directly (no file copy).
     for c in to_bridge:
+        if should_stop_fn is not None and should_stop_fn():
+            _logger.info("Import cancelled — stopping after candidate %d/%d",
+                         to_bridge.index(c) + 1, len(to_bridge))
+            break
         try:
             _bridge_to_catalog(c, db)
             c.status = CANDIDATE_IMPORTED

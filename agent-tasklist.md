@@ -1136,6 +1136,28 @@
   2. Stop вызывает `cancelJob(jobId)` с confirm
   3. После остановки — кнопка Stop исчезает, Scan активна
 
+- [x] **BUGFIX-022** Pipeline не останавливается при отмене сканирования.
+
+  Проблема: кнопка Cancel/Stop меняет статус Job, но background thread
+  продолжает обработку, потому что `run_import()` не проверяет
+  `should_stop()` в цикле.
+
+  Решение:
+  - Добавить в `run_import()` опциональный параметр
+    `should_stop_fn: Callable[[], bool] | None`
+  - Проверять в цикле `for c in to_bridge:` — если True → break
+  - В `_run_import_job()` передать лямбду, вызывающую `should_stop()`
+    с `_active_scan_job_id`
+
+  **Что меняется:**
+  - `pipeline.py` — `run_import()` + `should_stop_fn` параметр
+  - `admin.py` — `_run_import_job()` передаёт лямбду
+
+  Проверка результата:
+  1. Запустить Scan → нажать Stop → pipeline прерывается до
+     завершения обработки всех файлов
+  2. Без `should_stop_fn` (другие вызовы) — поведение не меняется
+
 ---
 
 ## 3.12. Provider migration

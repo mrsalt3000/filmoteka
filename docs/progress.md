@@ -4,6 +4,26 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-022 — 2026-06-14
+
+- Status: `done`
+- Summary: Pipeline теперь проверяет `should_stop()` в цикле и может быть прерван.
+  - **Проблема:** Stop/Cancel менял статус Job, но background thread продолжал
+    обрабатывать файлы — pipeline не проверял `should_stop()`.
+  - **Решение:** опциональный параметр `should_stop_fn: Callable[[], bool] | None`
+    в `run_import()`, проверка перед каждым candidate в `to_bridge` loop.
+    `_run_import_job()` передаёт лямбду с `should_stop(job_id, SessionLocal)`.
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-022
+  - `src/filmoteka/domain/importing/pipeline.py` — +should_stop_fn, check
+  - `src/filmoteka/api/admin.py` — +передача callback в `_run_import_job()`
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - Тесты без `should_stop_fn` — API не меняется (None по умолчанию)
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-021 — 2026-06-14
 
 - Status: `done`

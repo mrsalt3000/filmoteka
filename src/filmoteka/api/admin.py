@@ -614,9 +614,10 @@ def import_scan(
 def _run_import_job(config: LibraryConfig) -> dict | None:
     """Run import pipeline and return the import report dict."""
     global _active_scan_job_id  # noqa: PLW0603
+    job_id = _active_scan_job_id or 0
     db = SessionLocal()
     try:
-        report = run_import(config, db)
+        report = run_import(config, db, should_stop_fn=lambda: should_stop(job_id, SessionLocal))
         return report.to_dict()
     finally:
         _active_scan_job_id = None
