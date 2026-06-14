@@ -4,6 +4,23 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-028 — 2026-06-14
+
+- Status: `done`
+- Summary: Проверен coverage report.
+  - **Инфраструктура уже была готова:** pytest-cov в зависимостях,
+    `[tool.coverage.run]` в pyproject.toml, `scripts/run-coverage.sh`,
+    `htmlcov/` в .gitignore, README упоминает.
+  - **Запущено:** `bash scripts/run-coverage.sh` — отчёт `htmlcov/index.html`
+    сгенерирован, покрытие ~46%.
+- Changed files:
+  - `agent-tasklist.md` — V2-028 [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - `htmlcov/index.html` существует и содержит данные
+- Next task:
+  - V2-029 — Ручная приёмка
+
 ## Task Report: V2-027 — 2026-06-14
 
 - Status: `done`
