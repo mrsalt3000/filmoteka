@@ -4,6 +4,24 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: SERIES-002 — 2026-06-14
+
+- Status: `done`
+- Summary: Filename parser научился распознавать SxxExx и 1x01.
+  - **ParsedFilename:** +4 поля (series_title, season_number, episode_number, episode_title)
+  - **parse_filename():** извлекает S/E маркеры ДО всех остальных; series_title = всё до маркера; episode_title = остаток после очистки
+  - **Обратная совместимость:** фильмы без S/E не меняются
+- Changed files:
+  - `agent-tasklist.md` — SERIES-002 [x]
+  - `src/filmoteka/infrastructure/filename_parser.py` — +series patterns, +поля
+  - `tests/unit/test_filename_parser.py` — обновлён tv_episode_like
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - 36/36 tests passed
+- Next task:
+  - SERIES-003 — Группировка эпизодов в Series в pipeline
+
 ## Task Report: SERIES-001 — 2026-06-14
 
 - Status: `done`
