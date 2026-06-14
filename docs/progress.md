@@ -4,6 +4,26 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: SERIES-001 — 2026-06-14
+
+- Status: `done`
+- Summary: Добавлена модель Series (таблица `series`) + поля на Film для сериалов.
+  - **Новая таблица:** `series(id, title, poster_url, year_start, year_end, created_at)`
+  - **Новые поля Film:** `series_id` (FK→series), `season_number`, `episode_number`, `episode_title`
+  - **Schema:** SeriesOut, обновлён FilmOut/FilmDetailOut (series_id, season, episode, series)
+  - **Миграция:** `48634499438a` — создаёт таблицу + колонки + FK + index
+- Changed files:
+  - `agent-tasklist.md` — SERIES-001 [x], весь раздел 6
+  - `src/filmoteka/domain/catalog/models.py` — +Series, +поля Film
+  - `src/filmoteka/api/schemas/catalog.py` — +SeriesOut, +поля
+  - `migrations/versions/48634499438a_*.py` — migration
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - `alembic upgrade head`: ✅
+- Next task:
+  - SERIES-002 — Парсинг SxxExx в filename_parser
+
 ## Task Report: V1-006 — 2026-06-14
 
 - Status: `done`
