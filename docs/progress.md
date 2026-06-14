@@ -4,6 +4,33 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-009 — 2026-06-14
+
+- Status: `done`
+- Summary: Контентная дедупликация — проверка по partial SHA-256 + file_size.
+  - **Проблема:** файлы с разными именами, но одинаковым содержимым
+    (переименованные/повторно скачанные) не распознавались как дубли —
+    MediaFile создавались независимо.
+  - **Решение:**
+    1. Новая колонка `content_hash` на MediaFile (SHA-256 первых 64KB +
+       total_size). Миграция `edcba9876543`.
+    2. `_content_hash()` + `_find_media_by_content()` — поиск дублей по
+       контенту в `_bridge_to_catalog()`.
+    3. `ImportReport.duplicates_skipped` — счётчик пропущенных дублей,
+       отображается в Scan Report на фронте.
+- Changed files:
+  - `agent-tasklist.md` — V2-009 marked [x]
+  - `src/filmoteka/domain/catalog/models.py` — +content_hash, file_size
+  - `migrations/versions/f3547dfdf462_*.py` — kinopoisk_url drop
+  - `migrations/versions/edcba9876543_*.py` — content_hash add
+  - `src/filmoteka/domain/importing/pipeline.py` — +content dedup logic
+  - `src/filmoteka/static/index.html` — +Duplicates skipped в отчёте
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+- Next task:
+  - V2-010 — Conflict resolution flow для админа
+
 ## Task Report: BUGFIX-024 — 2026-06-14
 
 - Status: `done`

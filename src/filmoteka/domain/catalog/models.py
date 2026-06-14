@@ -176,6 +176,10 @@ class MediaFile(Base):
     subtitle_languages: Mapped[str | None] = mapped_column(
         String(256), nullable=True
     )
+    file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
     edition: Mapped[MovieEdition] = relationship(back_populates="media_files")

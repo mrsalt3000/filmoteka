@@ -10,6 +10,7 @@ import logging
 import shutil
 from collections.abc import Callable
 from datetime import datetime
+from hashlib import sha256
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -97,7 +98,7 @@ def run_import(
                          to_bridge.index(c) + 1, len(to_bridge))
             break
         try:
-            _bridge_to_catalog(c, db)
+            _bridge_to_catalog(c, db, report)
             c.status = CANDIDATE_IMPORTED
             report.files_indexed += 1
             report.films_created += 1
@@ -109,7 +110,9 @@ def run_import(
     return report
 
 
-def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
+def _bridge_to_catalog(
+    candidate: ImportCandidate, db: Session, report: ImportReport
+) -> None:
     """Create or update catalog entries (Film, MovieEdition, MediaFile).
 
     Deduplication strategy:
@@ -193,10 +196,27 @@ def _bridge_to_catalog(candidate: ImportCandidate, db: Session) -> None:
         _logger.info("MediaFile already exists for path %s — skipping", candidate.file_path)
         return
 
+    # --- Content-based duplicate detection ---
+    cpath = Path(candidate.file_path)
+    if cpath.is_file():
+        h = _content_hash(cpath)
+        dup = _find_media_by_content(db, h)
+        if dup is not None:
+            _logger.info(
+                "Content duplicate for %s (matches MediaFile #%d) — skipping",
+                candidate.file_path, dup.id,
+            )
+            report.duplicates_skipped += 1
+            return
+        content_hash_val = h
+    else:
+        content_hash_val = None
+
     media = MediaFile(
         edition_id=edition.id,
         file_path=candidate.file_path,
         file_size=candidate.size,
+        content_hash=content_hash_val,
         duration_secs=candidate.duration_secs,
         width=candidate.width,
         height=candidate.height,
@@ -224,6 +244,33 @@ def _find_film(db: Session, title: str, year: int | None) -> Film | None:
 def _find_media_by_path(db: Session, file_path: str) -> MediaFile | None:
     """Look up a MediaFile by its ``file_path``."""
     return db.query(MediaFile).filter(MediaFile.file_path == file_path).first()
+
+
+def _content_hash(path: Path, sample_size: int = 65536) -> str:
+    """Compute a content hash of a file based on its first *sample_size* bytes + total size.
+
+    Returns a hex string like ``"ab12cd34..."`` (SHA-256 of
+    ``first_64KB + str(file_size)``).
+    """
+    h = sha256()
+    with path.open("rb") as f:
+        buf = f.read(sample_size)
+        h.update(buf)
+    file_size = path.stat().st_size
+    h.update(str(file_size).encode())
+    return h.hexdigest()
+
+
+def _find_media_by_content(
+    db: Session,
+    content_hash: str,
+) -> MediaFile | None:
+    """Return an existing MediaFile with the same *content_hash*."""
+    return (
+        db.query(MediaFile)
+        .filter(MediaFile.content_hash == content_hash)
+        .first()
+    )
 
 
 def _find_or_create_edition(
@@ -337,12 +384,14 @@ class ImportReport:
         files_probed: int = 0,
         files_indexed: int = 0,
         films_created: int = 0,
+        duplicates_skipped: int = 0,
         errors: list[str] | None = None,
     ) -> None:
         self.files_found = files_found
         self.files_probed = files_probed
         self.files_indexed = files_indexed
         self.films_created = films_created
+        self.duplicates_skipped = duplicates_skipped
         self.errors = errors or []
 
     def to_dict(self) -> dict[str, object]:
@@ -351,5 +400,6 @@ class ImportReport:
             "files_probed": self.files_probed,
             "files_indexed": self.files_indexed,
             "films_created": self.films_created,
+            "duplicates_skipped": self.duplicates_skipped,
             "errors": self.errors,
         }

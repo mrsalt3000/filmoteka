@@ -1244,6 +1244,7 @@ function buildReportHTML(report) {
       <tr><td>Files probed</td><td>${report.files_probed}</td></tr>
       <tr><td>Files indexed</td><td>${report.files_indexed}</td></tr>
       <tr><td>Films created</td><td>${report.films_created}</td></tr>
+      <tr><td>Duplicates skipped</td><td>${report.duplicates_skipped || 0}</td></tr>
     </table>
     ${errors.length > 0 ? `
       <div class="report-errors">
