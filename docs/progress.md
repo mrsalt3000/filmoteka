@@ -4,6 +4,26 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-020 — 2026-06-14
+
+- Status: `done`
+- Summary: Добавил backend-гард от конкурентного сканирования.
+  - **Проблема:** два нажатия "Scan library" запускали две параллельные
+    транзакции. В READ COMMITTED вторая не видит незакоммиченный INSERT
+    жанра от первой → UniqueViolation на genres_slug_key.
+  - **Решение:** `_active_scan_job_id` глобал, проверка в `import_scan()`
+    → 409 Conflict, очистка в `_run_import_job()` (finally) и в `cancel_job()`.
+    Фронт уже деактивирует кнопку (`btn.disabled`), дополнительных изменений
+    не потребовалось.
+- Changed files:
+  - `agent-tasklist.md` — +BUGFIX-020
+  - `src/filmoteka/api/admin.py` — +_active_scan_job_id, guard, cleanup
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+- Next task:
+  - V2-009 — Улучшенная детекция дублей
+
 ## Task Report: BUGFIX-019 — 2026-06-13
 
 - Status: `done`

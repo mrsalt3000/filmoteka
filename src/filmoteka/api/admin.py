@@ -157,6 +157,12 @@ def cancel_job(
         from datetime import datetime as _dt
         job.completed_at = _dt.now()
     db.commit()
+
+    # Release scan guard if cancelling a scan job
+    global _active_scan_job_id  # noqa: PLW0603
+    if job_id == _active_scan_job_id:
+        _active_scan_job_id = None
+
     return {"status": "ok", "id": job.id, "job_status": job.status}
 
 
@@ -579,26 +585,41 @@ def admin_update_user(
 def import_scan(
     current_user: User = Depends(require_role("admin")),
     config: LibraryConfig = Depends(get_library_config),
+    db: Session = Depends(get_db),
 ) -> dict[str, object]:
     """Start a background library scan.
 
     Returns immediately with 202 and a ``job_id``. Poll
     ``GET /admin/jobs/{job_id}`` for completion.
     """
+    global _active_scan_job_id  # noqa: PLW0603
+
+    # Guard against concurrent scans
+    if _active_scan_job_id is not None:
+        existing = db.get(BackgroundJob, _active_scan_job_id)
+        if existing is not None and existing.status == "running":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A scan is already in progress",
+            )
+
     job = run_background_job(
         "import_scan", _run_import_job, config,
         session_factory=_background_session_factory,
     )
+    _active_scan_job_id = job.id
     return {"job_id": job.id, "status": "pending", "type": "import_scan"}
 
 
 def _run_import_job(config: LibraryConfig) -> dict | None:
     """Run import pipeline and return the import report dict."""
+    global _active_scan_job_id  # noqa: PLW0603
     db = SessionLocal()
     try:
         report = run_import(config, db)
         return report.to_dict()
     finally:
+        _active_scan_job_id = None
         db.close()
 
 
@@ -988,6 +1009,7 @@ class AliasFileStatus:
 _alias_progress: dict[int, list[AliasFileStatus]] = {}
 _active_alias_job_id: int | None = None
 _alias_lock = threading.Lock()
+_active_scan_job_id: int | None = None
 
 
 @router.post("/alias/{media_id}/reset")
