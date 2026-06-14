@@ -1736,7 +1736,7 @@
 
 ### 6.2. Импорт
 
-- [ ] **SERIES-002** Научить filename_parser распознавать SxxExx / 1x01.
+- [x] **SERIES-002** Научить filename_parser распознавать SxxExx / 1x01.
 
   `ParsedFilename` + `series_title`, `season_number`, `episode_number`,
   `episode_title`. Извлекать из стема до/после SxxExx маркеров.

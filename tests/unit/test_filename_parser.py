@@ -128,6 +128,9 @@ class TestEdgeCases:
         assert r.title == "Show Name S01E02"
         assert r.year == 2022
         assert r.quality == "1080p"
+        assert r.series_title == "Show Name"
+        assert r.season_number == 1
+        assert r.episode_number == 2
 
     def test_bd_rip_variant(self) -> None:
         r = _p("The.Godfather.1972.BDRip.1080p.mkv")

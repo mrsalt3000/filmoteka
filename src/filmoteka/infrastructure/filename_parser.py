@@ -57,6 +57,12 @@ _EDITION_MARKERS: list[re.Pattern[str]] = [
 
 _SEPARATORS_RE = re.compile(r"[\s._\-]+")
 
+# Season/episode patterns — checked before other markers.
+_SERIES_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"[Ss](\d+)[Ee](\d+)"),   # S01E01, S1E1, s01e01
+    re.compile(r"(\d+)[Xx](\d+)"),        # 1x01, 01x01
+]
+
 
 @dataclass(frozen=True)
 class ParsedFilename:
@@ -67,6 +73,10 @@ class ParsedFilename:
     quality: str | None
     language: str | None = None
     edition_type: str | None = None
+    series_title: str | None = None
+    season_number: int | None = None
+    episode_number: int | None = None
+    episode_title: str | None = None
 
 
 def _extract_markers(
@@ -96,6 +106,23 @@ def parse_filename(path: Path) -> ParsedFilename:
     case the whole stem is used as the title and the other fields are ``None``.
     """
     stem = path.stem
+
+    # 0. Extract series/season/episode BEFORE other markers.
+    series_title: str | None = None
+    season_number: int | None = None
+    episode_number: int | None = None
+    episode_title: str | None = None
+    for pattern in _SERIES_PATTERNS:
+        match = pattern.search(stem)
+        if match:
+            # Everything before the SxxExx marker = series title
+            series_title = _clean_title(stem[:match.start()])
+            season_number = int(match.group(1))
+            episode_number = int(match.group(2))
+            # Remove the S/E marker AND the series title from stem;
+            # the rest is episode-specific content (quality, episode name, etc.)
+            stem = stem[match.end():]
+            break
 
     # 1. Extract and remove quality markers.
     quality: str | None = None
@@ -128,12 +155,25 @@ def parse_filename(path: Path) -> ParsedFilename:
 
     title = _clean_title(title_raw)
 
+    # 6. If this is a series episode, the remaining title becomes episode_title.
+    if series_title is not None:
+        episode_title = title or None
+        if episode_title is None:
+            # Fallback: use series_title + SxxExx as the display title
+            title = f"{series_title} S{season_number:02d}E{episode_number:02d}"
+        else:
+            title = episode_title
+
     return ParsedFilename(
         title=title,
         year=year,
         quality=quality,
         language=language,
         edition_type=edition_type,
+        series_title=series_title,
+        season_number=season_number,
+        episode_number=episode_number,
+        episode_title=episode_title,
     )
 
 
