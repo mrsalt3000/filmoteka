@@ -4,6 +4,29 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: SERIES-008 — 2026-06-15
+
+- Status: `done`
+- Summary: Кнопка "▶ Continue" на странице сериала.
+  - **schemas/catalog.py:** +`SeriesContinueOut` — media_id, season_number, episode_number, episode_title, last_position, duration_secs
+  - **series.py:** +`GET /series/{series_id}/continue` — ищет последний незавершённый WatchEvent текущего пользователя среди всех эпизодов сериала, использует Optional Auth (401 без токена не выдаёт). Фильтрует incognito и finished.
+  - **index.html renderSeries():** после загрузки сериала, если currentUser есть, fetches `/series/{seriesId}/continue`. Если есть незавершённый эпизод — показывает `"▶ Continue S01E03 — Title (5:23)"` под мета-инфо.
+  - **CSS:** `.series-continue`, `.series-continue-btn` (accent-цвет, hover brightness)
+- Changed files:
+  - `src/filmoteka/api/schemas/catalog.py` — +SeriesContinueOut
+  - `src/filmoteka/api/series.py` — +import, +endpoint (scalar_subquery, joinedload)
+  - `src/filmoteka/static/index.html` — renderSeries() continue fetch + +CSS
+  - `tests/integration/test_media.py` — +5 тестов (TestSeriesContinue)
+  - `agent-tasklist.md` — SERIES-008 [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - pytest: 5/5 new tests passed, 44/44 media tests passed
+  - Pre-existing failures: 31 (unchanged)
+- Next task:
+  - Все 8 задач сериальной фиги закрыты. Можно переходить к BUGFIX или новой feature.
+  - Предлагаю: **BUGFIX-010** — фикс удалённого `tests/conftest.py` (интеграционные тесты поломаны) или новая фича по доработке сериальной навигации.
+
 ## Task Report: SERIES-007 — 2026-06-15
 
 - Status: `done`
