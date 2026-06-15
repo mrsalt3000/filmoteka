@@ -72,6 +72,22 @@ class SeriesDetailOut(BaseModel):
     episode_count: int
 
 
+class AdjacentEpisodeOut(BaseModel):
+    """Adjacent episode info for prev/next navigation in the player."""
+
+    series_id: int | None = None
+    series_title: str | None = None
+    prev_media_id: int | None = None
+    next_media_id: int | None = None
+    prev_title: str | None = None
+    next_title: str | None = None
+    season_number: int | None = None
+    episode_number: int | None = None
+    episode_title: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class SeriesEpisodesResponse(BaseModel):
     series_id: int
     season_number: int | None

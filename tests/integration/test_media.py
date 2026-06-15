@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from filmoteka.api.dependencies import get_library_config
 from filmoteka.app import create_app
-from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
+from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition, Series
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
@@ -806,6 +806,160 @@ class TestWatchStatesByFilm:
         assert resp.status_code == 200
         state = resp.json()["states"][str(film.id)]
         assert state["has_state"] is False
+
+
+class TestAdjacentEpisode:
+    """GET /media/{id}/adjacent — prev/next episode navigation."""
+
+    def _make_series_episode(
+        self,
+        db_session: Session,
+        series: Series,
+        season: int,
+        episode: int,
+        *,
+        title: str = "Test",
+    ) -> tuple[Film, MediaFile]:
+        """Create a series episode film with one media file."""
+        film = Film(
+            title=title,
+            year=2020,
+            series_id=series.id,
+            season_number=season,
+            episode_number=episode,
+        )
+        db_session.add(film)
+        db_session.flush()
+        edition = MovieEdition(film_id=film.id)
+        db_session.add(edition)
+        db_session.flush()
+        media = MediaFile(
+            edition_id=edition.id,
+            file_path=f"/tmp/series_{series.id}_s{season}e{episode}.mkv",
+        )
+        db_session.add(media)
+        db_session.flush()
+        return film, media
+
+    def test_media_not_found(self, client: TestClient) -> None:
+        """Non-existent media_id returns 404."""
+        resp = client.get("/media/99999/adjacent")
+        assert resp.status_code == 404
+
+    def test_not_an_episode(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Regular film without series returns null fields."""
+        film = Film(title="Standalone Movie", year=2020)
+        db_session.add(film)
+        db_session.flush()
+        edition = MovieEdition(film_id=film.id)
+        db_session.add(edition)
+        db_session.flush()
+        media = MediaFile(
+            edition_id=edition.id,
+            file_path="/tmp/movie.mp4",
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        resp = client.get(f"/media/{media.id}/adjacent")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["series_id"] is None
+        assert body["prev_media_id"] is None
+        assert body["next_media_id"] is None
+        assert body["season_number"] is None
+        assert body["episode_number"] is None
+
+    def test_first_episode(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """First episode has prev=null, next=non-null."""
+        series = Series(title="Test Series")
+        db_session.add(series)
+        db_session.flush()
+
+        ep1, m1 = self._make_series_episode(db_session, series, 1, 1, title="Ep 1")
+        ep2, m2 = self._make_series_episode(db_session, series, 1, 2, title="Ep 2")
+        ep3, m3 = self._make_series_episode(db_session, series, 1, 3, title="Ep 3")
+        db_session.commit()
+
+        resp = client.get(f"/media/{m1.id}/adjacent")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["series_id"] == series.id
+        assert body["series_title"] == "Test Series"
+        assert body["prev_media_id"] is None
+        assert body["next_media_id"] == m2.id
+        assert body["next_title"] is not None
+        assert body["season_number"] == 1
+        assert body["episode_number"] == 1
+
+    def test_middle_episode(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Middle episode has both prev and next."""
+        series = Series(title="Middle Series")
+        db_session.add(series)
+        db_session.flush()
+
+        ep1, m1 = self._make_series_episode(db_session, series, 1, 1, title="Ep 1")
+        ep2, m2 = self._make_series_episode(db_session, series, 1, 2, title="Ep 2")
+        ep3, m3 = self._make_series_episode(db_session, series, 1, 3, title="Ep 3")
+        db_session.commit()
+
+        resp = client.get(f"/media/{m2.id}/adjacent")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["prev_media_id"] == m1.id
+        assert body["next_media_id"] == m3.id
+        assert body["episode_number"] == 2
+
+    def test_last_episode(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Last episode has prev=non-null, next=null."""
+        series = Series(title="Last Series")
+        db_session.add(series)
+        db_session.flush()
+
+        ep1, m1 = self._make_series_episode(db_session, series, 1, 1, title="Ep 1")
+        ep2, m2 = self._make_series_episode(db_session, series, 1, 2, title="Ep 2")
+        db_session.commit()
+
+        resp = client.get(f"/media/{m2.id}/adjacent")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["prev_media_id"] == m1.id
+        assert body["next_media_id"] is None
+
+    def test_multi_season_does_not_cross_boundaries(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Episodes in different seasons are not adjacent to each other."""
+        series = Series(title="Multi Season")
+        db_session.add(series)
+        db_session.flush()
+
+        # Season 1: 2 episodes, Season 2: 2 episodes
+        s1e1, m1 = self._make_series_episode(db_session, series, 1, 1, title="S1E1")
+        s1e2, m2 = self._make_series_episode(db_session, series, 1, 2, title="S1E2")
+        s2e1, m3 = self._make_series_episode(db_session, series, 2, 1, title="S2E1")
+        s2e2, m4 = self._make_series_episode(db_session, series, 2, 2, title="S2E2")
+        db_session.commit()
+
+        # Last in S1 — next should be null (S2E1 is different season)
+        resp = client.get(f"/media/{m2.id}/adjacent")
+        body = resp.json()
+        assert body["next_media_id"] is None
+        assert body["prev_media_id"] == m1.id
+
+        # First in S2 — prev should be null (S1E2 is different season)
+        resp = client.get(f"/media/{m3.id}/adjacent")
+        body = resp.json()
+        assert body["prev_media_id"] is None
+        assert body["next_media_id"] == m4.id
 
 
 def _register_user(client: TestClient, username: str, password: str) -> str:

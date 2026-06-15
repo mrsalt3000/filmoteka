@@ -115,6 +115,11 @@ body.dark .film-card .series-badge { background: rgba(0,0,0,.7); }
 .detail .season-tabs { margin-bottom: 1rem; }
 .player-page video { width: 100%; max-height: 80vh; background: #000; border-radius: var(--radius); }
 .player-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text); }
+.ep-nav-row { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 0.75rem; }
+.ep-nav-btn { padding: 0.4rem 1rem; background: var(--surface2); color: var(--text); border: 1px solid var(--surface3); border-radius: var(--radius); font-size: 0.85rem; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.ep-nav-btn:hover { background: var(--surface3); }
+.ep-nav-disabled { opacity: 0.4; cursor: default; }
+.ep-nav-disabled:hover { background: var(--surface2); }
 .media-list { list-style: none; padding-left: 0; margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text2); }
 .media-list li { padding: 0.1rem 0; }
 .back { display: inline-block; margin-bottom: 1rem; color: var(--text2); cursor: pointer; }
@@ -885,7 +890,7 @@ async function renderPlayer(el, mediaId) {
     return;
   }
 
-  // Status OK — start watch and render the video player
+  // Status OK — start watch, fetch adjacent info, and render the player
   let startPosition = 0;
   let watchEventId = null;
   if (currentUser) {
@@ -896,14 +901,50 @@ async function renderPlayer(el, mediaId) {
     } catch { /* play without watch tracking */ }
   }
 
+  // Fetch adjacent episode info for series navigation
+  let adj = null;
+  try {
+    const r = await fetch(`/media/${mediaId}/adjacent`);
+    if (r.ok) adj = await r.json();
+  } catch { /* ignore — player works without nav */ }
+
+  const isEpisode = adj && adj.series_id != null;
+  const backLink = isEpisode ? `series/${adj.series_id}` : 'list';
+  const backLabel = isEpisode ? '← Back to series' : '← Back to list';
+
+  // Build title
+  let playerTitle = '';
+  if (isEpisode) {
+    playerTitle = esc(adj.series_title);
+    if (adj.season_number != null && adj.episode_number != null) {
+      playerTitle += ` — S${String(adj.season_number).padStart(2,'0')}E${String(adj.episode_number).padStart(2,'0')}`;
+    }
+    if (adj.episode_title) {
+      playerTitle += ` ${esc(adj.episode_title)}`;
+    }
+  } else {
+    playerTitle = window._mediaAliases && window._mediaAliases[mediaId]
+      ? esc(window._mediaAliases[mediaId])
+      : `Media #${mediaId}`;
+  }
+
+  // Build prev/next buttons
+  let navHtml = '';
+  if (isEpisode) {
+    const prevBtn = adj.prev_media_id != null
+      ? `<button class="ep-nav-btn" onclick="navigate('play/${adj.prev_media_id}')">◀ ${esc(adj.prev_title || 'Prev')}</button>`
+      : '<button class="ep-nav-btn ep-nav-disabled" disabled>◀</button>';
+    const nextBtn = adj.next_media_id != null
+      ? `<button class="ep-nav-btn" onclick="navigate('play/${adj.next_media_id}')">${esc(adj.next_title || 'Next')} ▶</button>`
+      : '<button class="ep-nav-btn ep-nav-disabled" disabled>▶</button>';
+    navHtml = `<div class="ep-nav-row">${prevBtn}${nextBtn}</div>`;
+  }
+
   el.innerHTML = `
-    <div class="back" onclick="navigate('list')">← Back to list</div>
+    <div class="back" onclick="navigate('${backLink}')">${backLabel}</div>
     <div class="player-page">
-      <div class="player-title">${
-        window._mediaAliases && window._mediaAliases[mediaId]
-          ? esc(window._mediaAliases[mediaId])
-          : `Media #${mediaId}`
-      }</div>
+      <div class="player-title">${playerTitle}</div>
+      ${navHtml}
       <video id="player-video" controls autoplay preload="metadata">
         <source src="${src}">
         Your browser does not support video playback.

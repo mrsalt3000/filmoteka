@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from filmoteka.api.auth import _get_current_user
 from filmoteka.api.dependencies import get_library_config
+from filmoteka.api.schemas.catalog import AdjacentEpisodeOut
 from filmoteka.api.schemas.watch import (
     ContinueWatchingItem,
     ContinueWatchingResponse,
@@ -306,6 +307,98 @@ def stream_media(
         path=path,
         filename=display_name,
         media_type=mime,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Adjacent episode (prev/next) for series
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{media_id}/adjacent", response_model=AdjacentEpisodeOut)
+def adjacent_episode(
+    media_id: int,
+    db: Session = Depends(get_db),
+) -> AdjacentEpisodeOut:
+    """Return the previous / next episode in the same series for a media file.
+
+    If the media file does not belong to a series, all series-related
+    fields in the response are ``None``.
+
+    Returns 404 if *media_id* does not exist.
+    """
+    media = db.get(MediaFile, media_id)
+    if media is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Media file not found",
+        )
+
+    edition = db.get(MovieEdition, media.edition_id)
+    if edition is None:
+        return AdjacentEpisodeOut()
+
+    film = db.get(Film, edition.film_id)
+    if film is None or film.series_id is None:
+        return AdjacentEpisodeOut()
+
+    # Get series info
+    series = film.series
+
+    # Find all episode films in the same series + season, ordered
+    episode_films = (
+        db.query(Film)
+        .options(
+            joinedload(Film.editions).joinedload(MovieEdition.media_files),
+        )
+        .filter(
+            Film.series_id == film.series_id,
+            Film.season_number == film.season_number,
+            Film.episode_number.isnot(None),
+        )
+        .order_by(Film.episode_number)
+        .all()
+    )
+
+    # Find current position
+    prev_film = None
+    next_film = None
+    for i, ef in enumerate(episode_films):
+        if ef.id == film.id:
+            if i > 0:
+                prev_film = episode_films[i - 1]
+            if i < len(episode_films) - 1:
+                next_film = episode_films[i + 1]
+            break
+
+    def _first_media_id(f: Film) -> int | None:
+        for ed in f.editions:
+            for mf in ed.media_files:
+                return mf.id
+        return None
+
+    def _episode_label(f: Film) -> str:
+        parts = []
+        if f.season_number is not None and f.episode_number is not None:
+            parts.append(f"S{str(f.season_number).zfill(2)}E{str(f.episode_number).zfill(2)}")
+        if f.episode_title:
+            parts.append("—")
+            parts.append(f.episode_title)
+        return " ".join(parts) if parts else f.title
+
+    prev_mid = _first_media_id(prev_film) if prev_film else None
+    next_mid = _first_media_id(next_film) if next_film else None
+
+    return AdjacentEpisodeOut(
+        series_id=film.series_id,
+        series_title=series.title if series else None,
+        prev_media_id=prev_mid,
+        next_media_id=next_mid,
+        prev_title=_episode_label(prev_film) if prev_film else None,
+        next_title=_episode_label(next_film) if next_film else None,
+        season_number=film.season_number,
+        episode_number=film.episode_number,
+        episode_title=film.episode_title,
     )
 
 

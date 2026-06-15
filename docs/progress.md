@@ -4,6 +4,33 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: SERIES-007 — 2026-06-15
+
+- Status: `done`
+- Summary: Prev/next кнопки в плеере для эпизодов сериала.
+  - **schemas/catalog.py:** +`AdjacentEpisodeOut` — prev_media_id, next_media_id, prev_title, next_title, series info
+  - **media.py:** +`GET /media/{media_id}/adjacent` — находит соседние эпизоды по series_id + season_number, ordered by episode_number. Возвращает media_id соседей + метки "S01E01 — Title". Для обычных фильмов — все поля null.
+  - **index.html:** `renderPlayer()`:
+    - После OK-статуса fetches `/media/{mediaId}/adjacent`
+    - Если `series_id != null`: заголовок = "Series Title — S01E01 Episode Title"
+    - Кнопка Back → "← Back to series" ведёт на `#series/{id}`
+    - Ряд кнопок `◀ Prev | Next ▶` над плеером, disabled на границах
+    - Для обычных фильмов — поведение не изменилось
+  - **index.html CSS:** `.ep-nav-row`, `.ep-nav-btn`, `.ep-nav-disabled`
+- Changed files:
+  - `src/filmoteka/api/schemas/catalog.py` — +AdjacentEpisodeOut
+  - `src/filmoteka/api/media.py` — +import, +adjacent_episode endpoint
+  - `src/filmoteka/static/index.html` — renderPlayer переписан, +CSS
+  - `tests/integration/test_media.py` — +6 тестов (TestAdjacentEpisode)
+  - `agent-tasklist.md` — SERIES-007 [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - pytest: 6/6 new tests passed, 39/39 media tests passed
+  - Pre-existing failures: 31 (OMDB + conftest — unchanged from before)
+- Next task:
+  - SERIES-008 — Continue на странице сериала
+
 ## Task Report: SERIES-006 — 2026-06-15
 
 - Status: `done`
