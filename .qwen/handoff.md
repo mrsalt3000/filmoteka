@@ -1,80 +1,72 @@
-# Handoff — 2026-06-13 (seventh session)
+# Handoff — 2026-06-15 (tenth session)
 
 ## Stopped at
 
-- Phase: bugfixes + minor features после V3. Все 5 задач закрыты.
-- Git: `401d12b` — clean upstream, working tree has only local artifacts.
-- Last commit: `401d12b` — `feat: add Continue Watching section with dismiss button`
+- Phase: TV Series in full swing (SERIES-003 through SERIES-006), transcode fix (BUGFIX-009), BUGFIX-027 planned.
+- Git: `89f63e8` — clean upstream, working tree has only local artifacts (`.qwen/skills/`, `.coverage`, deleted `tests/conftest.py`, deleted `docs/agent-tasklist.md`).
+- Last commit: `89f63e8` — `feat: add series detail page with season tabs and episode Play buttons`
 
-## Completed this session (5 tasks)
+## Completed this session (6 commits, 5 tasks)
 
-### OPS-001 — LAN access documentation and admin widget
-- README: new "🌐 LAN Access" section (ipconfig, firewall, Docker network, mDNS advanced)
-- Admin page: "🌐 Network Access" widget — localhost → ipconfig instructions; LAN IP → URL + QR code
-- **No changes** to docker-compose, Caddyfile, Python code
-- Files: `README.md`, `index.html`, `agent-tasklist.md`
+### BUGFIX-009 — Transcode & web-optimize
+- **Проблема:** `empty_moov` в ffmpeg-ремуксе не давал браузеру узнать длительность → прогресс-бар ~10 сек. Транскодирование AC3→AAC в `.tr.mkv` не помогало, т.к. `.tr.mkv` всё равно шёл через тот же ремукс.
+- **Решение:** двухшаговый pipeline: AC3→AAC → `.tr.mkv`, затем `ffmpeg -c copy -movflags +faststart` → `.tr.mp4`. После шага 2 `.tr.mkv` удаляется, `file_path` = `.tr.mp4`. Файл отдаётся через `FileResponse` с `Content-Length` + range support.
+- **Cleanup:** `scripts/cleanup_tr.py` — 7 файлов восстановлены на оригиналы, 44 переименованы `.tr.mkv` → `.mkv`, 5 осиротевших оставлены. `audio_codec` сброшен в NULL.
+- Files: `admin.py`, `index.html`, `scripts/cleanup_tr.py`
 
-### BUGFIX-007 — Install postgresql-client in Docker images
-- `postgresql-client` added to both `docker/Dockerfile.api` and `docker/Dockerfile.worker`
-- `pg_dump`/`psql` (17.10) now available in both containers
-- Backup endpoint no longer crashes
+### SERIES-003 — Pipeline grouping
+- `_bridge_to_catalog()`: при `parsed.series_title` → find-or-create Series, dedup по `series_id+season+episode`, заполняет поля Film. Хелпер `_find_or_create_series()`.
+- 4 integration tests.
+- Files: `pipeline.py`, `test_importing.py`
 
-### BUGFIX-009 — AC3→AAC audio transcoding admin task
-- New `POST /admin/media/transcode-audio` → background job
-- Worker probes all MediaFiles via ffprobe → AC3/E-AC3 detected → `ffmpeg -c:v copy -c:a aac -b:a 256k` → replaces file in-place → updates `audio_codec='aac'`
-- Admin button "🎵 Transcode AC3 audio" with confirm/spinner/poll/report
-- Files: `admin.py`, `index.html`
+### SERIES-004 — Series API
+- `GET /series` (list with episode_count via subquery), `GET /series/{id}` (detail with seasons grouped), `GET /series/{id}/episodes?season=N` (paginated).
+- 9 integration tests.
+- Files: `api/series.py` (new), `schemas/catalog.py`, `app.py`, `test_catalog.py`
 
-### BUGFIX-009b — Fix AC3 transcode errors
-- **Bug 1:** temp file `.file.mkv.ac3fix` — ffmpeg can't detect muxer from `.ac3fix` → fixed to `.file.ac3fix.mkv`
-- **Bug 2:** `subprocess.run(text=True)` with `errors='strict'` crashes on non-UTF8 stderr → fixed to `errors='replace'`
-- Expanded error logging (500 chars + `_logger.warning()`)
+### SERIES-005 — Series cards on main page
+- `renderList()`: fetches `/series`, filters out episodes (`series_id == null`), renders series cards with poster + episode count badge. Click → `#series/{id}`.
+- Files: `index.html`
 
-### Continue Watching section
-- New `GET /media/watch/continue` endpoint — unfinished films with progress
-- Horizontal scrollable row above film grid when search is empty
-- Dismiss (✕) stores film_id in localStorage
-- Files: `schemas/watch.py`, `media.py`, `index.html`
-
-### V3-004 — DeepSeek enrichment frontend buttons
-- New "🤖 DeepSeek Enrichment" section in admin page with two buttons
-- "Fill missing (DeepSeek)" → `POST /admin/enrich/deepseek`
-- "Re-enrich all (DeepSeek)" → `POST /admin/enrich/deepseek/all`
-- Pattern: confirm → apiAuth → pollJob → report; shows error if no API key
-- Files: `index.html` only (backend endpoints already existed)
+### SERIES-006 — Series detail page
+- `#series/{id}`: poster, season tabs (switch inline), episode list with Play button. `EpisodeOut` gains `media_id`.
+- Files: `series.py`, `schemas/catalog.py`, `index.html`, `test_catalog.py`
 
 ## Changed files (this session)
 
 ```
-README.md                                         # OPS-001: LAN access section
-src/filmoteka/static/index.html                    # OPS-001 widget + BUGFIX-009 button + Continue Watching
-src/filmoteka/api/admin.py                          # BUGFIX-009 endpoint + BUGFIX-009b fixes
-src/filmoteka/api/schemas/watch.py                  # ContinueWatchingItem/Response
-src/filmoteka/api/media.py                          # GET /media/watch/continue
-docker/Dockerfile.api                               # BUGFIX-007: +postgresql-client
-docker/Dockerfile.worker                            # BUGFIX-007: +postgresql-client
-agent-tasklist.md                                   # OPS-001, BUGFIX-007, BUGFIX-009 marked
-docs/progress.md                                    # all 5 task reports
+agent-tasklist.md                                         # +BUGFIX-027, SERIES-003/004/005/006 [x]
+docs/progress.md                                          # all task reports
+scripts/cleanup_tr.py                                     # one-off cleanup script (new)
+src/filmoteka/domain/importing/pipeline.py                # +Series grouping in bridge
+src/filmoteka/api/series.py                               # new — 3 endpoints (new)
+src/filmoteka/api/schemas/catalog.py                      # +series schemas, +media_id
+src/filmoteka/app.py                                      # +series_router
+src/filmoteka/api/admin.py                                # +web-optimize step in transcode
+src/filmoteka/static/index.html                           # +series cards, +series page, CSS
+tests/integration/test_importing.py                       # +4 series pipeline tests
+tests/integration/test_catalog.py                         # +9 series API tests, media_id check
 ```
 
 ## Known open issues
 
-1. **21 pre-existing test failures** — isolation issues + OMDB real API calls from host env.
-2. **Docker volume mount `H:/downloads`** — not resolvable from WSL CLI.
-3. **LLM recommendation path doesn't filter watched/blacklisted** — differs from keyword fallback.
-4. **No frontend admin buttons for DeepSeek enrichment** — only API endpoints exist (V3-001).
-5. **`docs/agent-tasklist.md` deleted from git** — still present on disk, tracked as deleted.
+1. **TV Series incomplete** — SERIES-007 (prev/next in player), SERIES-008 (series continue) remain.
+2. **Pre-existing test failures** — ~27 integration tests fail when OMDB_API_KEY is set (host env triggers real OMDB calls). `test_health.py` fixture error (`conftest.py` deleted from git).
+3. **BUGFIX-027** — ffmpeg remux fallback (`empty_moov`/`delay_moov`) planned for removal after all files are transcoded. Task exists in tasklist.
+4. **BUGFIX-011, 012, 015** — Done but still marked `[ ]` in tasklist. Can be bulk-closed.
+5. **V1-007** — Enrichment pipeline tests not written.
 
 ## First things to verify on next run
 
-1. `docker compose up -d db redis` — start database and cache
-2. `bash scripts/run-all-checks.sh` — full test matrix
-3. Check `GET /health` — `{"status":"ok"}`
-4. Login as `mrsalt3000` / `dev`
-5. Test Continue Watching: start a film → see it in the new section
-6. Test AC3 transcode: click "🎵 Transcode AC3 audio" in admin
-7. Test LAN access: open `http://<windows-ip>/` from another device
+1. `docker compose build api && docker compose up -d api` — rebuild with new code
+2. Re-scan library — verify series grouping: check `series_id`, `season_number`, `episode_number` in `GET /films/{id}` for episode files
+3. Check `GET /series` returns list with episode_count
+4. Open `#series/1` in browser — verify poster, season tabs, episode list with Play button
+5. Click Play on an episode — verify it goes to player
+6. Check `#list` — verify series cards appear instead of 90 individual episode cards
+7. Run **Transcode & web-optimize** button — verify `.tr.mp4` is created, `.tr.mkv` is deleted
+8. Open player for a `.tr.mp4` file — verify full duration and seeking
 
 ## Next recommended task
 
-Определяется владельцем проекта.
+**SERIES-007** — Кнопки prev/next в плеере. При просмотре эпизода показывать кнопки для переключения на предыдущий/следующий эпизод того же сериала. Потребуется небольшой API-эндпойнт для получения соседних эпизодов по `media_id` + фронтенд-кнопки в `renderPlayer()`.
