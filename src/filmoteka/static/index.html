@@ -63,6 +63,8 @@ nav input::placeholder { color: var(--text2); }
 .film-card .watch-badge { position: absolute; bottom: .25rem; left: .25rem; right: .25rem; padding: .35rem .5rem; border-radius: calc(var(--radius) - 2px); font-size: .8rem; font-weight: 600; text-align: center; pointer-events: none; }
 .film-card .watch-badge.continue { background: var(--accent); color: var(--play-btn-text); }
 .film-card .watch-badge.watched { background: #2e7d32; color: #fff; }
+.film-card .series-badge { position: absolute; bottom: .25rem; left: .25rem; right: .25rem; padding: .35rem .5rem; border-radius: calc(var(--radius) - 2px); font-size: .8rem; font-weight: 600; text-align: center; background: rgba(0,0,0,.6); color: #fff; pointer-events: none; }
+body.dark .film-card .series-badge { background: rgba(0,0,0,.7); }
 .film-card .progress-track { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--surface2); border-radius: 0 0 calc(var(--radius) - 2px) calc(var(--radius) - 2px); overflow: hidden; }
 .film-card .progress-fill { height: 100%; background: var(--accent); transition: width .3s; }
 
@@ -499,7 +501,16 @@ async function renderList(el) {
   if (q) params.set('q', q);
   if (listMode === 'family') params.set('include_family', 'true');
   const data = await api(`/films?${params}`);
-  if (data.items.length === 0) {
+
+  // Also fetch series to show as cards (hides individual episode cards)
+  let seriesData = { items: [] };
+  if (listMode !== 'family') {
+    try {
+      seriesData = await api('/series?limit=100');
+    } catch { /* grid without series */ }
+  }
+
+  if (data.items.length === 0 && seriesData.items.length === 0) {
     const emptyMsg = listMode === 'family'
       ? 'No family videos found.'
       : (q ? 'No films match your search.' : 'Library is empty.');
@@ -507,10 +518,13 @@ async function renderList(el) {
     return;
   }
 
+  // Filter out episode films (they are represented by series cards instead)
+  const films = data.items.filter(f => f.series_id == null);
+
   // Batch-fetch watch states if logged in
   let watchStates = {};
   if (currentUser) {
-    const filmIds = data.items.map(f => f.id);
+    const filmIds = films.map(f => f.id);
     try {
       const resp = await apiAuth('/media/watch/states-by-film', 'POST', { film_ids: filmIds });
       watchStates = resp.states || {};
@@ -523,20 +537,22 @@ async function renderList(el) {
     continueHtml = await _fetchContinueWatching();
   }
 
-  el.innerHTML = _tabsHtml() + continueHtml + `<div class="film-grid">${data.items.map(f => {
-    const st = watchStates[f.id];
-    let badgeHtml = '';
-    let progressHtml = '';
-    if (st && st.has_state) {
-      if (st.finished) {
-        badgeHtml = `<div class="watch-badge watched">✓ Watched</div>`;
-      } else if (st.last_position > 0 && st.duration_secs > 0) {
-        const pct = Math.min(100, Math.round((st.last_position / st.duration_secs) * 100));
-        progressHtml = `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>`;
-        badgeHtml = `<div class="watch-badge continue">▶ Continue</div>`;
+  el.innerHTML = _tabsHtml() + continueHtml + `<div class="film-grid">${
+    // Regular film cards (no series_id)
+    films.map(f => {
+      const st = watchStates[f.id];
+      let badgeHtml = '';
+      let progressHtml = '';
+      if (st && st.has_state) {
+        if (st.finished) {
+          badgeHtml = `<div class="watch-badge watched">✓ Watched</div>`;
+        } else if (st.last_position > 0 && st.duration_secs > 0) {
+          const pct = Math.min(100, Math.round((st.last_position / st.duration_secs) * 100));
+          progressHtml = `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>`;
+          badgeHtml = `<div class="watch-badge continue">▶ Continue</div>`;
+        }
       }
-    }
-    return `
+      return `
     <div class="film-card" onclick="navigate('film/${f.id}')">
       <div class="poster-wrap">
         ${f.poster_url
@@ -548,7 +564,23 @@ async function renderList(el) {
       <h3>${esc(f.title)}</h3>
       <div class="year">${f.year || '—'}</div>
     </div>`;
-  }).join('')}</div>`;
+    }).join('') +
+    // Series cards
+    seriesData.items.map(s => {
+      const epLabel = s.episode_count === 1 ? '1 ep.' : `${s.episode_count} eps.`;
+      return `
+    <div class="film-card" onclick="navigate('series/${s.id}')">
+      <div class="poster-wrap">
+        ${s.poster_url
+          ? `<img class="poster" src="${esc(s.poster_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+          : `<div class="poster-placeholder">📺</div>`}
+        <div class="series-badge">${epLabel}</div>
+      </div>
+      <h3>${esc(s.title)}</h3>
+      <div class="year">Series</div>
+    </div>`;
+    }).join('')
+  }</div>`;
 }
 
 function switchListMode(mode) {

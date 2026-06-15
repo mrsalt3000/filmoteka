@@ -4,6 +4,24 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: SERIES-005 — 2026-06-15
+
+- Status: `done`
+- Summary: Сериалы — одна карточка на главной.
+  - **index.html:renderList()** — теперь загружает `/series?limit=100`, фильтрует эпизоды (`series_id == null`) из сетки, рендерит сериальные карточки после фильмов.
+  - **CSS** — `.series-badge`: полупрозрачный чёрный плашкой с "N eps." внизу постера.
+  - В family mode сериалы не показываются.
+  - Клик по карточке → `#series/{id}` (роут пока без обработчика — SERIES-006).
+- Changed files:
+  - `src/filmoteka/static/index.html` — renderList() переписан, +CSS
+  - `agent-tasklist.md` — SERIES-005 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - Визуальный review кода: ✅
+  - Старые тесты не затрагиваются (только frontend)
+- Next task:
+  - SERIES-006 — Страница сериала — выбор сезона/серии
+
 ## Task Report: SERIES-004 — 2026-06-15
 
 - Status: `done`
