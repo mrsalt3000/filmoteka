@@ -808,33 +808,60 @@
      ограничен (меньшая проблема, чем ошибка).
   3. Без ffmpeg — 415 как раньше.
 
-- [ ] **BUGFIX-009** Фоновая задача транскодирования AC3→AAC + кнопка в админке.
+- [~] **BUGFIX-009** Transcode & web-optimize — AC3→AAC + MKV→MP4 одной кнопкой.
 
-  Проблема: AC3/E-AC3 аудио несовместимо с `empty_moov` в ffmpeg.
-  BUGFIX-006 решил это через `delay_moov`, но тогда прогресс-бар
-  показывает ~10 сек и растёт постепенно — видео нельзя листать.
+  **Корневая причина:** `empty_moov` в ffmpeg-ремуксе (`media.py`)
+  не позволяет браузеру узнать длительность видео. При стриминге
+  MKV `-movflags frag_keyframe+empty_moov+default_base_moof` —
+  moov-атом пустой, длительность неизвестна, прогресс-бар ~10 сек.
 
-  Решение: новая admin-кнопка "🎵 Transcode AC3 audio", которая
-  запускает фоновую задачу:
-  - ffprobe каждого MediaFile для детекции AC3/E-AC3
-  - ffmpeg `-c:v copy -c:a aac -b:a 256k` — видео копируется,
-    аудио транскодируется в AAC (легковесно)
-  - Файл заменяется in-place, `audio_codec` в БД обновляется на "aac"
-  - После транскодирования ffmpeg remux не требует `delay_moov`,
-    прогресс-бар работает полноценно
+  Транскодирование AC3→AAC в `.tr.mkv` ничего не меняет, потому что
+  `.tr.mkv` всё равно проходит через тот же ремукс с `empty_moov`.
+
+  **Решение:** изменить `_run_transcode_audio()` на двухшаговый
+  "Transcode & web-optimize":
+  1. AC3→AAC: ffmpeg `-c:v copy -c:a aac -b:a 256k` → `.ac3fix.mkv` → `.tr.mkv`
+  2. MKV→MP4: ffmpeg `-i .tr.mkv -c copy -movflags +faststart` → `.tr.mp4`
+  3. `MediaFile.file_path` обновляется на `.tr.mp4`
+  4. `.tr.mkv` удаляется (промежуточный)
+
+  Когда файл имеет расширение `.mp4`, `stream_media()` отдаёт его
+  через **`FileResponse`** — с `Content-Length`, `Accept-Ranges: bytes`,
+  полноценным range-поиском. Браузер получает moov-атом с длительностью
+  в начале файла → прогресс-бар работает.
 
   **Что меняется:**
-  - `admin.py`: новый endpoint `POST /admin/media/transcode-audio` + worker
-  - `index.html`: кнопка в админке + `runTranscodeAudio()` + отчёт
-  - **НЕ меняется:** `media.py` (delay_moov остаётся fallback для
-    непротранскодированных файлов), модели, миграции
+  - `admin.py`:
+    - `_run_transcode_audio()` — добавить второй проход ffmpeg + clean `.tr.mkv`
+    - Обновить имя кнопки, отчёт (transcoded + web-optimized)
+    - Per-file progress: этап 1 "transcoding" / этап 2 "optimizing"
+  - `index.html`:
+    - Кнопка "🎵 Transcode & web-optimize" вместо "🎵 Transcode AC3 audio"
+    - В прогресс-таблице добавить стадию "optimizing" (жёлтый)
+    - В отчёте: transcoded, web_optimized, skipped, errors
+  - **НЕ меняется:** `media.py` (fallback-ремукс с `empty_moov` остаётся
+    для нетранскодированных файлов)
+
+  **Checked items из старого BUGFIX-009, которые уже реализованы отдельно:**
+  - [x] Per-file progress table (Transcode progress table task, 2026-06-13)
+  - [x] `.tr.mkv` вместо in-place (BUGFIX-013)
+  - [x] Per-file commit (BUGFIX-026)
+  - [x] Consecutive timeout guard (BUGFIX-025)
+  - [x] Orphan `.ac3fix.mkv` cleanup (BUGFIX-023)
+  - [x] Guard от конкурентного запуска (BUGFIX-023)
+  - [x] Скрыть оригинал если есть `.tr` (BUGFIX-015)
+  - [x] Скрыть skipped из таблицы (BUGFIX-011)
+  - [x] Показать причину ошибки (BUGFIX-012)
 
   Проверка результата:
-  1. `ruff check` и `mypy` на `admin.py`
-  2. Кнопка "🎵 Transcode AC3 audio" видна в админке
-  3. После нажатия — confirm → spinner → job polling → отчёт
-  4. AC3 MKV → после транскодирования прогресс-бар полный
-  5. Не-AC3 файлы не трогаются (skipped)
+  1. `ruff check` на изменённых файлах
+  2. Кнопка "🎵 Transcode & web-optimize" в админке
+  3. После нажатия — confirm → живая таблица с двумя стадиями (transcoding / optimizing)
+  4. После завершения — рядом с файлом появляется `.tr.mp4`, `.tr.mkv` удалён
+  5. `MediaFile.file_path` = `.tr.mp4`, `audio_codec` = "aac"
+  6. Открыть в браузере — прогресс-бар показывает полную длительность
+  7. Оригинальный `.mkv` не тронут, скрыт из каталога
+  8. Импорт не индексирует `.tr.mp4`
 
 - [x] **BUGFIX-010** Добавить per-file progress table и флаг alias_processed для Media Aliases.
 

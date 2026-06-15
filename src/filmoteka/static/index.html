@@ -167,6 +167,7 @@ nav input::placeholder { color: var(--text2); }
 .tx-badge.tx-probing { background: #fff8e1; color: #f57f17; }
 .tx-badge.tx-processing { background: #e3f2fd; color: #1565c0; }
 .tx-badge.tx-transcoding { background: #e3f2fd; color: #1565c0; }
+.tx-badge.tx-optimizing { background: #e0f7fa; color: #00695c; }
 .tx-badge.tx-completed { background: #e8f5e9; color: #2e7d32; }
 .tx-badge.tx-skipped { background: #f5f5f5; color: #9e9e9e; }
 .tx-badge.tx-error { background: #ffebee; color: #c62828; }
@@ -176,6 +177,7 @@ nav input::placeholder { color: var(--text2); }
 body.dark .tx-badge.tx-queued { background: #424242; color: #bdbdbd; }
 body.dark .tx-badge.tx-probing { background: #3e2723; color: #ffcc80; }
 body.dark .tx-badge.tx-transcoding { background: #1a237e; color: #90caf9; }
+body.dark .tx-badge.tx-optimizing { background: #004d40; color: #80cbc4; }
 body.dark .tx-badge.tx-completed { background: #1b5e20; color: #a5d6a7; }
 body.dark .tx-badge.tx-skipped { background: #303030; color: #757575; }
 body.dark .tx-badge.tx-error { background: #b71c1c; color: #ffcdd2; }
@@ -880,10 +882,10 @@ async function renderAdmin(el) {
       </div>
 
       <div class="poster-section">
-        <h3>🎵 Audio Transcoding</h3>
-        <p>Transcode AC3/E-AC3 audio tracks to AAC for all media files. This fixes the progress bar in browser playback — after transcoding, you can seek through videos with AC3 audio.</p>
+        <h3>🎵 Transcode & web-optimize</h3>
+        <p>AC3/E-AC3 → AAC + remux to MP4 with faststart. Creates a browser-friendly <code>.tr.mp4</code> with full duration and seeking support.</p>
         <div class="poster-btns">
-          <button class="poster-btn" id="transcode-btn" onclick="runTranscodeAudio()">🎵 Transcode AC3 audio</button>
+          <button class="poster-btn" id="transcode-btn" onclick="runTranscodeAudio()">🎵 Transcode & web-optimize</button>
         </div>
         <div id="transcode-report"></div>
       </div>
@@ -1738,7 +1740,7 @@ async function runTranscodeAudio() {
   const reportEl = document.getElementById('transcode-report');
   if (!btn || !reportEl) return;
 
-  if (!confirm('Transcode AC3/E-AC3 audio to AAC for all media files? This may take a while and will modify files in-place.')) return;
+  if (!confirm('Transcode AC3→AAC and remux to web-optimised MP4 for all media files? This may take a while.')) return;
 
   btn.disabled = true;
   btn.textContent = '⏳ Starting…';
@@ -1781,11 +1783,11 @@ async function runTranscodeAudio() {
 
       // Update table — hide skipped entries, show all others
       if (entries.length > 0) {
-        const counts = { queued: 0, probing: 0, transcoding: 0, completed: 0, skipped: 0, error: 0 };
+        const counts = { queued: 0, probing: 0, transcoding: 0, optimizing: 0, completed: 0, skipped: 0, error: 0 };
         entries.forEach(e => { if (counts[e.status] !== undefined) counts[e.status]++; });
 
         summaryEl.textContent = `${entries.length} files — ` +
-          `${counts.completed} completed, ${counts.transcoding} transcoding, ${counts.probing} probing, ${counts.queued} queued, ${counts.skipped} skipped, ${counts.error} errors`;
+          `${counts.completed} completed, ${counts.optimizing} optimizing, ${counts.transcoding} transcoding, ${counts.probing} probing, ${counts.queued} queued, ${counts.skipped} skipped, ${counts.error} errors`;
 
         const visible = entries.filter(e => e.status !== 'skipped');
         tbody.innerHTML = visible.map((e, i) => {
@@ -1815,6 +1817,7 @@ async function runTranscodeAudio() {
               <table>
                 <tr><td>Total media files scanned</td><td>${r ? r.total : '?'}</td></tr>
                 <tr><td>Transcoded (AC3→AAC)</td><td>${r ? r.transcoded : '?'}</td></tr>
+                <tr><td>Web-optimised (.tr.mp4)</td><td>${r ? r.web_optimized : '?'}</td></tr>
                 <tr><td>Skipped (no AC3)</td><td>${r ? r.skipped : '?'}</td></tr>
                 <tr><td>Errors</td><td>${r ? r.error_count : '?'}</td></tr>
               </table>
@@ -1839,7 +1842,7 @@ async function runTranscodeAudio() {
     if (!existing) reportEl.innerHTML = `<div class="error">Transcoding failed: ${esc(e.message)}</div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = '🎵 Transcode AC3 audio';
+    btn.textContent = '🎵 Transcode & web-optimize';
   }
 }
 

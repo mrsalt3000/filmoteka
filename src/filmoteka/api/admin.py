@@ -1666,15 +1666,20 @@ def transcode_media_audio(
     current_user: User = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    """Transcode AC3/E-AC3 audio tracks to AAC for all media files.
+    """Transcode AC3/E-AC3 audio tracks to AAC and remux to web-optimised MP4.
 
-    Files with AC3/E-AC3 audio are probed via ffprobe then transcoded
-    in-place using ffmpeg (video copy, audio only).  After transcoding
-    the browser can render a proper seekable progress bar.
+    Two-step process per file:
+
+    1. **AC3→AAC**: ffmpeg ``-c:v copy -c:a aac -b:a 256k`` → ``.tr.mkv``
+    2. **MKV→MP4**: ffmpeg ``-c copy -movflags +faststart`` → ``.tr.mp4``
+
+    The final ``.tr.mp4`` has the moov atom at the beginning so the
+    browser knows the full duration and seeking works natively.
 
     Per-file progress is available at
     ``GET /admin/transcode-progress/{job_id}`` for the duration of the
-    job.
+    job.  Status includes ``queued`` → ``probing`` → ``transcoding`` →
+    ``optimizing`` → ``completed`` / ``error``.
 
     Starts a background task.  Poll ``GET /admin/jobs/{job_id}``
     for completion.
@@ -1725,7 +1730,17 @@ def _clean_orphan_ac3fix(db: Session) -> None:
 
 
 def _run_transcode_audio(db: Session | None = None) -> dict | None:
-    """Scan all media files, probe for AC3/E-AC3, transcode to AAC."""
+    """Scan all media files, probe for AC3/E-AC3, transcode to AAC.
+
+    Two-step process per file:
+    1. AC3→AAC: ``ffmpeg -c:v copy -c:a aac`` → ``.tr.mkv``
+    2. MKV→MP4: ``ffmpeg -c copy -movflags +faststart`` → ``.tr.mp4``
+
+    After step 2 the DB record points to the web-optimised MP4, which
+    is served via ``FileResponse`` with native range support — the
+    browser gets full duration in the moov atom and a proper progress
+    bar.
+    """
     close = db is None
     if db is None:
         db = SessionLocal()
@@ -1736,6 +1751,7 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
         media_files = db.query(MediaFile).all()
         total = len(media_files)
         transcoded = 0
+        web_optimized = 0
         skipped = 0
         errors: list[str] = []
         consecutive_timeouts = 0
@@ -1785,7 +1801,7 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                 skipped += 1
                 continue
 
-            # ── Transcode ──
+            # ── Step 1: AC3→AAC ──
             with _transcode_lock:
                 progress[idx].status = "transcoding"
 
@@ -1822,18 +1838,91 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
                     continue
 
                 # Place transcoded file alongside original with .tr suffix
-                result_path = path.parent / f"{path.stem}.tr{path.suffix}"
-                temp_path.rename(result_path)
-                mf.file_path = str(result_path)
+                tr_mkv = path.parent / f"{path.stem}.tr{path.suffix}"
+                temp_path.rename(tr_mkv)
+                mf.file_path = str(tr_mkv)
                 mf.audio_codec = "aac"
                 db.commit()
                 _logger.info(
-                    "Transcoded AC3→AAC for media %d: %s", mf.id, result_path.name,
+                    "Transcoded AC3→AAC for media %d: %s", mf.id, tr_mkv.name,
                 )
                 transcoded += 1
                 consecutive_timeouts = 0
+
+                # ── Step 2: MKV→MP4 web-optimise ──
                 with _transcode_lock:
-                    progress[idx].status = "completed"
+                    progress[idx].status = "optimizing"
+                tr_mp4 = path.parent / f"{path.stem}.tr.mp4"
+                try:
+                    opt_cmd = [
+                        "ffmpeg",
+                        "-i", str(tr_mkv),
+                        "-c", "copy",
+                        "-movflags", "+faststart",
+                        "-y",
+                        str(tr_mp4),
+                    ]
+                    opt_result = subprocess.run(
+                        opt_cmd, capture_output=True, text=True,
+                        errors="replace", timeout=7200,
+                    )
+                    if opt_result.returncode != 0:
+                        msg = (opt_result.stderr.strip()[:500]
+                               or "(no stderr)")
+                        _logger.warning(
+                            "Web-optimise remux failed for %s: %s",
+                            tr_mkv.name, msg,
+                        )
+                        errors.append(
+                            f"Media {mf.id} ({path.name}):"
+                            f" web-optimise remux error — {msg}",
+                        )
+                        # Keep .tr.mkv as fallback — already committed above
+                        with _transcode_lock:
+                            progress[idx].status = "completed"
+                            progress[idx].error = (
+                                "transcode ok, web-optimise failed"
+                            )
+                    else:
+                        tr_mkv.unlink(missing_ok=True)
+                        mf.file_path = str(tr_mp4)
+                        db.commit()
+                        _logger.info(
+                            "Web-optimised MP4 for media %d: %s",
+                            mf.id, tr_mp4.name,
+                        )
+                        web_optimized += 1
+                        with _transcode_lock:
+                            progress[idx].status = "completed"
+                except subprocess.TimeoutExpired:
+                    _logger.warning(
+                        "Web-optimise timed out for %s, keeping .tr.mkv",
+                        tr_mkv.name,
+                    )
+                    errors.append(
+                        f"Media {mf.id} ({path.name}):"
+                        f" web-optimise timed out",
+                    )
+                    with _transcode_lock:
+                        progress[idx].status = "completed"
+                        progress[idx].error = (
+                            "transcode ok, web-optimise timed out"
+                        )
+                except Exception as exc:
+                    _logger.warning(
+                        "Web-optimise exception for %s: %s",
+                        tr_mkv.name, exc,
+                    )
+                    errors.append(
+                        f"Media {mf.id} ({path.name}):"
+                        f" web-optimise error — {exc}",
+                    )
+                    tr_mp4.unlink(missing_ok=True)
+                    with _transcode_lock:
+                        progress[idx].status = "completed"
+                        progress[idx].error = (
+                            "transcode ok, web-optimise failed"
+                        )
             except subprocess.TimeoutExpired:
                 errors.append(f"Media {mf.id} ({path.name}): ffmpeg timed out")
                 temp_path.unlink(missing_ok=True)
@@ -1863,6 +1952,7 @@ def _run_transcode_audio(db: Session | None = None) -> dict | None:
         return {
             "total": total,
             "transcoded": transcoded,
+            "web_optimized": web_optimized,
             "skipped": skipped,
             "error_count": len(errors),
             "errors": errors,

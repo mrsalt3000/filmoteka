@@ -4,6 +4,32 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-009 — 2026-06-15
+
+- Status: `done`
+- Summary: Transcode & web-optimize — AC3→AAC + MKV→MP4 одной кнопкой.
+  - **Корневая причина:** `empty_moov` в ffmpeg-ремуксе — moov-атом пустой, браузер не знает длительность. Транскодирование AC3→AAC в `.tr.mkv` не помогало, потому что `.tr.mkv` всё равно проходил через тот же ремукс.
+  - **Решение:** `_run_transcode_audio()` теперь двухшаговый:
+    1. AC3→AAC (как раньше) → `.tr.mkv`
+    2. MKV→MP4: `ffmpeg -c copy -movflags +faststart` → `.tr.mp4`
+  - После шага 2 `MediaFile.file_path` = `.tr.mp4`, `.tr.mkv` удаляется, `audio_codec` = "aac".
+  - `.tr.mp4` отдаётся через `FileResponse` с `Content-Length` и `Accept-Ranges: bytes` — браузер знает длительность, прогресс-бар полный.
+  - Если шаг 2 упал — `.tr.mkv` сохраняется как fallback (не хуже, чем было).
+  - Per-file progress: новая стадия `optimizing` (teal badge).
+  - Кнопка: `"🎵 Transcode & web-optimize"` + отчёт с `Web-optimised (.tr.mp4)`.
+  - `_dedup_tr_media()` и `scan.py` уже поддерживают `.tr.mp4` без изменений.
+- Changed files:
+  - `agent-tasklist.md` — BUGFIX-009 updated to `[~]`
+  - `src/filmoteka/api/admin.py` — `_run_transcode_audio()`: +шаг 2 + `optimizing` status + `web_optimized` в отчёте
+  - `src/filmoteka/static/index.html` — кнопка `"🎵 Transcode & web-optimize"`, CSS `.tx-optimizing`, счётчики, отчёт
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff check admin.py: ✅ All checks passed
+  - `_dedup_tr_media()` handles `.tr.mp4`: ✅ (already works via `suffixes[:-1]`)
+  - `scan.py` excludes `.tr.mp4`: ✅ (already works)
+- Next task:
+  - SERIES-003 — Группировка эпизодов в Series в pipeline
+
 ## Task Report: V2-028 — 2026-06-14
 
 - Status: `done`
