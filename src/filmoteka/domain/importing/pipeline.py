@@ -34,11 +34,15 @@ from filmoteka.domain.importing.scan import probe_candidates, scan_downloads
 from filmoteka.infrastructure.deepseek_provider import (
     DeepSeekEnrichmentResult,
     deepseek_enrich_metadata,
-    deepseek_generate_alias,
+    deepseek_extract_search_info,
 )
 from filmoteka.infrastructure.filename_parser import parse_filename
 from filmoteka.infrastructure.library_config import LibraryConfig
-from filmoteka.infrastructure.metadata_providers import omdb_search_poster
+from filmoteka.infrastructure.metadata_providers import (
+    CleanedTitle,
+    detect_search_type,
+    omdb_search_poster_v2,
+)
 from filmoteka.infrastructure.settings import settings
 
 _logger = logging.getLogger(__name__)
@@ -178,21 +182,30 @@ def _bridge_to_catalog(
     film.needs_review = False
 
     # --- Generate alias for poster search (best-effort, before OMDB) ---
-    alias_for_search: str | None = None
+    deepseek_title: str | None = None
+    content_type: str | None = None
     if settings.deepseek_api_key:
         file_stem = Path(candidate.file_path).stem
         try:
-            alias_for_search = deepseek_generate_alias(file_stem, settings.deepseek_api_key)
+            search_info = deepseek_extract_search_info(file_stem, settings.deepseek_api_key)
+            if search_info:
+                deepseek_title = search_info["title"]
+                content_type = search_info["type"]
         except Exception:
-            _logger.exception("Alias generation failed for %s", file_stem)
+            _logger.exception("DeepSeek search info failed for %s", file_stem)
 
-    # Use alias, or parsed.series_title (for TV episodes), or parsed.title
-    poster_search_title = alias_for_search or parsed.series_title or parsed.title
+    # Fallback: use parsed data when DeepSeek is unavailable
+    clean_title_str: str = deepseek_title or parsed.series_title or parsed.title
+    if content_type is None:
+        content_type = detect_search_type(clean_title_str, series_id=film.series_id)
 
-    # --- Poster enrichment via OMDB (best-effort) ---
+    poster_search_title = clean_title_str
+
+    # --- Poster enrichment via OMDB v2 (type-aware, best-effort) ---
     poster_found = False
     if film.poster_url is None and settings.omdb_api_key:
-        result = omdb_search_poster(poster_search_title, parsed.year, settings.omdb_api_key)
+        cleaned = CleanedTitle(poster_search_title, parsed.year)
+        result = omdb_search_poster_v2(cleaned, settings.omdb_api_key, type_=content_type)
         if result is not None:
             film.poster_url, film.poster_source = result
             poster_found = True
@@ -263,7 +276,7 @@ def _bridge_to_catalog(
         file_path=candidate.file_path,
         file_size=candidate.size,
         content_hash=content_hash_val,
-        media_alias=alias_for_search,
+        media_alias=deepseek_title,
         duration_secs=candidate.duration_secs,
         width=candidate.width,
         height=candidate.height,

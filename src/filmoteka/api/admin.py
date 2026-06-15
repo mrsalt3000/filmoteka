@@ -73,7 +73,12 @@ from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import SessionLocal, get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
 from filmoteka.infrastructure.media_probe import MediaProbeError, probe_media
-from filmoteka.infrastructure.metadata_providers import omdb_search_poster
+from filmoteka.infrastructure.metadata_providers import (
+    CleanedTitle,
+    clean_title_for_omdb,
+    detect_search_type,
+    omdb_search_poster_v2,
+)
 from filmoteka.infrastructure.settings import settings
 
 _logger = logging.getLogger(__name__)
@@ -844,22 +849,33 @@ def poster_fill_missing(
     return {"job_id": job.id, "status": "pending", "type": "poster_fill_missing"}
 
 
-def _poster_search_title(film: Film, db: Session) -> str:
-    """Return the best title to use when searching for this film's poster.
+def _poster_search_info(film: Film, db: Session) -> tuple[str, str | None, int | None]:
+    """Return the best title, OMDB type, and year for poster search.
 
     Priority:
     1. ``media_alias`` from the first MediaFile that has one
-    2. ``film.title`` (fallback to the filename-parsed title)
+       (already cleaned by DeepSeek during import)
+    2. ``film.title`` cleaned via :func:`clean_title_for_omdb`
+       (fallback for films imported without DeepSeek)
+
+    Returns ``(title, type_, year)`` where ``type_`` is ``"movie"``,
+    ``"series"``, or ``None``.
     """
     for ed in film.editions:
         for mf in ed.media_files:
             if mf.media_alias:
-                return mf.media_alias
-    return film.title
+                title = mf.media_alias
+                type_ = detect_search_type(title, series_id=film.series_id)
+                return title, type_, film.year
+
+    # Fallback: clean the raw film title
+    cleaned = clean_title_for_omdb(film.title)
+    type_ = detect_search_type(cleaned.title, series_id=film.series_id)
+    return cleaned.title, type_, cleaned.year or film.year
 
 
 def _run_fill_missing(db: Session | None = None) -> dict | None:
-    """Query films without posters and fill via OMDB."""
+    """Query films without posters and fill via OMDB v2."""
     close = db is None
     if db is None:
         db = SessionLocal()
@@ -873,8 +889,9 @@ def _run_fill_missing(db: Session | None = None) -> dict | None:
 
         for film in films:
             try:
-                search_title = _poster_search_title(film, db)
-                result = omdb_search_poster(search_title, film.year, api_key)
+                search_title, search_type, search_year = _poster_search_info(film, db)
+                cleaned = CleanedTitle(search_title, search_year)
+                result = omdb_search_poster_v2(cleaned, api_key, type_=search_type)
                 if result is not None:
                     film.poster_url, film.poster_source = result
                     updated += 1
@@ -915,7 +932,7 @@ def poster_refresh_all(
 
 
 def _run_refresh_all(db: Session | None = None) -> dict | None:
-    """Refresh posters for all films via OMDB."""
+    """Refresh posters for all films via OMDB v2."""
     close = db is None
     if db is None:
         db = SessionLocal()
@@ -929,8 +946,9 @@ def _run_refresh_all(db: Session | None = None) -> dict | None:
 
         for film in films:
             try:
-                search_title = _poster_search_title(film, db)
-                result = omdb_search_poster(search_title, film.year, api_key)
+                search_title, search_type, search_year = _poster_search_info(film, db)
+                cleaned = CleanedTitle(search_title, search_year)
+                result = omdb_search_poster_v2(cleaned, api_key, type_=search_type)
                 if result is not None:
                     film.poster_url, film.poster_source = result
                     updated += 1

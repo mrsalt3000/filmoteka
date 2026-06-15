@@ -473,7 +473,7 @@ class TestAdminPosters:
         db_session.commit()
         id_with, id_without = film_with.id, film_without.id
 
-        with patch("filmoteka.api.admin.omdb_search_poster") as mock_search:
+        with patch("filmoteka.api.admin.omdb_search_poster_v2") as mock_search:
             mock_search.return_value = ("http://new/poster.jpg", "omdb")
             # Call the job function directly with the test DB
             from filmoteka.api.admin import _run_fill_missing
@@ -511,7 +511,7 @@ class TestAdminPosters:
         db_session.commit()
         id_a, id_b = film_a.id, film_b.id
 
-        with patch("filmoteka.api.admin.omdb_search_poster") as mock_search:
+        with patch("filmoteka.api.admin.omdb_search_poster_v2") as mock_search:
             mock_search.return_value = ("http://new/poster.jpg", "omdb")
             from filmoteka.api.admin import _run_refresh_all
             result = _run_refresh_all(db=db_session)

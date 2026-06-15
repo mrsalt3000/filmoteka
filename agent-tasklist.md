@@ -1923,7 +1923,7 @@
   3. При ошибке DeepSeek — fallback на `clean_title_for_omdb()` с type=None
   4. Старая `deepseek_generate_alias()` продолжает работать
 
-- [ ] **POSTER-003** Проводка нового поиска в pipeline + admin poster jobs.
+- [x] **POSTER-003** Проводка нового поиска в pipeline + admin poster jobs.
 
   **Проблема:** pipeline и admin poster jobs используют старый `omdb_search_poster()`
   без type. Новый search и структурированный DeepSeek alias не подключены.

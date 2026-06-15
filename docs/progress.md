@@ -71,7 +71,30 @@
 - Next task:
   - POSTER-003 — Проводка нового поиска в pipeline + admin poster jobs
 
----
+
+## Task Report: POSTER-003 — 2026-06-15
+
+- Status: `done`
+- Summary: Проводка omdb_search_poster_v2 + deepseek_extract_search_info в pipeline и admin poster jobs.
+  - **pipeline.py:** imports, alias generation через `deepseek_extract_search_info()`,
+    poster search через `omdb_search_poster_v2()` с type; media_alias из DeepSeek title
+  - **admin.py:** `_poster_search_info()` возвращает `(title, type_, year)`;
+    `_run_fill_missing()` / `_run_refresh_all()` используют v2 search
+  - **tests:** patch targets обновлены в test_importing.py и test_admin.py
+- Changed files:
+  - `src/filmoteka/domain/importing/pipeline.py`
+  - `src/filmoteka/api/admin.py`
+  - `tests/integration/test_importing.py`
+  - `tests/integration/test_admin.py`
+  - `agent-tasklist.md` — POSTER-003 [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - pytest: 4/4 import OMDB + 9/9 admin poster + 179 unit tests passed
+- Next task:
+  - Блок POSTER завершён. Рекомендую **BUGFIX-027** (удалить ffmpeg remux fallback)
+    или **восстановление conftest.py** для чистой тестовой базы.
+
 
 ## Task Report: SERIES-008 — 2026-06-15
 

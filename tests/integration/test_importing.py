@@ -440,6 +440,9 @@ class TestPipelineBridge:
         with patch(
             "filmoteka.domain.importing.pipeline.deepseek_enrich_metadata",
             return_value=None,
+        ), patch(
+            "filmoteka.domain.importing.pipeline.deepseek_extract_search_info",
+            return_value=None,
         ):
             yield
 
@@ -548,7 +551,7 @@ class TestPipelineBridge:
     # ── Quality flags: OMDB enrichment ────────────────────────────
 
     @patch.object(settings, "omdb_api_key", "test_key")
-    @patch("filmoteka.domain.importing.pipeline.omdb_search_poster")
+    @patch("filmoteka.domain.importing.pipeline.omdb_search_poster_v2")
     def test_bridge_omdb_success_upgrades_quality(
         self,
         mock_poster: object,
@@ -576,7 +579,7 @@ class TestPipelineBridge:
         assert film.poster_url == "http://img/poster.jpg"
 
     @patch.object(settings, "omdb_api_key", "test_key")
-    @patch("filmoteka.domain.importing.pipeline.omdb_search_poster")
+    @patch("filmoteka.domain.importing.pipeline.omdb_search_poster_v2")
     def test_bridge_omdb_empty_sets_needs_review(
         self,
         mock_poster: object,
@@ -956,7 +959,7 @@ class TestPipelineBridge:
     # ── Graceful degradation when metadata providers are unavailable ──
 
     @patch.object(settings, "omdb_api_key", "test_key")
-    @patch("filmoteka.domain.importing.pipeline.omdb_search_poster", return_value=None)
+    @patch("filmoteka.domain.importing.pipeline.omdb_search_poster_v2", return_value=None)
     def test_import_graceful_no_metadata(
         self,
         _mock_poster,
