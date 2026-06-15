@@ -1825,7 +1825,7 @@
   `ParsedFilename` + `series_title`, `season_number`, `episode_number`,
   `episode_title`. Извлекать из стема до/после SxxExx маркеров.
 
-- [ ] **SERIES-003** Научить pipeline группировать эпизоды в Series.
+- [x] **SERIES-003** Научить pipeline группировать эпизоды в Series.
 
   В `_bridge_to_catalog()`: если есть `parsed.series_title` — find-or-create
   Series, заполнять `film.series_id`, `film.season_number`, `film.episode_number`.

@@ -4,6 +4,29 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: SERIES-003 — 2026-06-15
+
+- Status: `done`
+- Summary: Pipeline группирует эпизоды в Series.
+  - **pipeline.py:** `_bridge_to_catalog()` теперь при `parsed.series_title`:
+    - Вызывает `_find_or_create_series()` — поиск/создание Series по title (case-insensitive)
+    - Ищет существующий Film по `series_id + season_number + episode_number` (не по title+year)
+    - Создаёт Film с `series_id`, `season_number`, `episode_number`, `episode_title`
+    - Обновляет `series.year_start` / `year_end` из года фильма
+  - Если не сериал — поведение не изменилось (dedup по title+year)
+  - Добавлен хелпер `_find_or_create_series(db, title)` — нормализация title, ilike-поиск
+- Changed files:
+  - `src/filmoteka/domain/importing/pipeline.py` — +Series import, +_find_or_create_series(), изменён _bridge_to_catalog()
+  - `tests/integration/test_importing.py` — +4 теста в TestPipelineBridge
+  - `agent-tasklist.md` — SERIES-003 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - 4/4 new tests passed
+  - 28/30 existing import tests passed (2 pre-existing OMDB failures, unrelated)
+- Next task:
+  - SERIES-004 — API endpoints для сериалов
+
 ## Task Report: BUGFIX-009 — 2026-06-15
 
 - Status: `done`

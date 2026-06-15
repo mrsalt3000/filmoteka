@@ -843,6 +843,116 @@ class TestPipelineBridge:
         assert film.needs_review is False
 
 
+    # ── TV series episode grouping ──
+
+    def test_bridge_tv_episode_creates_series_and_film(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """A single TV episode creates a Series and links the Film."""
+        from filmoteka.domain.catalog.models import Film, Series
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        video = root / "The.Series.Name.S01E02.Episode.Title.1080p.mkv"
+        _make_test_video(video)
+        config = _make_config(root)
+
+        report = run_import(config, db_session)
+
+        assert report.files_indexed == 1
+
+        series_list = db_session.query(Series).all()
+        assert len(series_list) == 1
+        assert series_list[0].title == "The Series Name"
+
+        film = db_session.query(Film).one()
+        assert film.series_id == series_list[0].id
+        assert film.season_number == 1
+        assert film.episode_number == 2
+        assert film.episode_title is not None
+        assert "Episode Title" in film.title
+
+    def test_bridge_tv_episode_dedup_reimport(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """Re-importing the same episode is idempotent — no new record."""
+        from filmoteka.domain.catalog.models import Film, Series
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        video = root / "My.Show.S01E03.Re-import.Test.720p.mkv"
+        _make_test_video(video)
+        config = _make_config(root)
+
+        report1 = run_import(config, db_session)
+        assert report1.files_indexed == 1
+        assert db_session.query(Series).count() == 1
+        assert db_session.query(Film).count() == 1
+
+        # Re-import: same file, same path
+        report2 = run_import(config, db_session)
+        assert report2.files_indexed == 0  # skipped by path dedup
+        assert db_session.query(Series).count() == 1
+        assert db_session.query(Film).count() == 1  # no new film
+
+    def test_bridge_two_episodes_same_series(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """Two episodes of the same series → one Series, two Films."""
+        from filmoteka.domain.catalog.models import Film, Series
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        ep1 = root / "My.Show.S01E01.First.Episode.1080p.mkv"
+        ep2 = root / "My.Show.S01E02.Second.Episode.1080p.mkv"
+        _make_test_video(ep1)
+        _make_test_video(ep2)
+        config = _make_config(root)
+
+        report = run_import(config, db_session)
+        assert report.files_indexed == 2
+
+        series_list = db_session.query(Series).all()
+        assert len(series_list) == 1
+        assert series_list[0].title == "My Show"
+
+        films = db_session.query(Film).order_by(Film.episode_number).all()
+        assert len(films) == 2
+        assert films[0].series_id == series_list[0].id
+        assert films[0].season_number == 1
+        assert films[0].episode_number == 1
+        assert films[1].series_id == series_list[0].id
+        assert films[1].season_number == 1
+        assert films[1].episode_number == 2
+
+    def test_bridge_two_episodes_different_series(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """Episodes from different series → two Series, two Films."""
+        from filmoteka.domain.catalog.models import Film, Series
+        from filmoteka.domain.importing.pipeline import run_import
+
+        root = tmp_path
+        ep1 = root / "Series.A.S01E01.Ep.One.720p.mkv"
+        ep2 = root / "Series.B.S01E01.Ep.One.1080p.mkv"
+        _make_test_video(ep1)
+        _make_test_video(ep2)
+        config = _make_config(root)
+
+        report = run_import(config, db_session)
+        assert report.files_indexed == 2
+
+        series_list = db_session.query(Series).order_by(Series.title).all()
+        assert len(series_list) == 2
+        assert series_list[0].title == "Series A"
+        assert series_list[1].title == "Series B"
+
+        films = db_session.query(Film).order_by(Film.id).all()
+        assert len(films) == 2
+        assert films[0].series_id == series_list[0].id
+        assert films[1].series_id == series_list[1].id
+
+
     # ── Graceful degradation when metadata providers are unavailable ──
 
     @patch.object(settings, "omdb_api_key", "test_key")

@@ -21,6 +21,7 @@ from filmoteka.domain.catalog.models import (
     MediaFile,
     MovieEdition,
     Person,
+    Series,
     film_person,
 )
 from filmoteka.domain.importing.models import (
@@ -122,17 +123,52 @@ def _bridge_to_catalog(
     """
     parsed = parse_filename(Path(candidate.file_path))
 
+    # --- Series lookup (for TV episodes) ---
+    series = None
+    if parsed.series_title is not None:
+        series = _find_or_create_series(db, parsed.series_title)
+
     # --- Film ---
-    existing_film = _find_film(db, parsed.title, parsed.year)
+    if series is not None:
+        # TV episode: dedup by series_id + season_number + episode_number
+        existing_film = (
+            db.query(Film)
+            .filter(
+                Film.series_id == series.id,
+                Film.season_number == parsed.season_number,
+                Film.episode_number == parsed.episode_number,
+            )
+            .first()
+        )
+    else:
+        # Regular film: dedup by title + year
+        existing_film = _find_film(db, parsed.title, parsed.year)
+
     if existing_film is not None:
         film = existing_film
     else:
         film = Film(
             title=parsed.title,
             year=parsed.year,
+            series_id=series.id if series else None,
+            season_number=parsed.season_number,
+            episode_number=parsed.episode_number,
+            episode_title=parsed.episode_title,
         )
         db.add(film)
         db.flush()
+
+    # Update series year range from film year
+    if series is not None and parsed.year is not None:
+        changed = False
+        if series.year_start is None or parsed.year < series.year_start:
+            series.year_start = parsed.year
+            changed = True
+        if series.year_end is None or parsed.year > series.year_end:
+            series.year_end = parsed.year
+            changed = True
+        if changed:
+            db.flush()
 
     # --- Metadata quality: initial from filename ---
     has_year = parsed.year is not None
@@ -315,6 +351,21 @@ def _find_or_create_edition(
     db.add(edition)
     db.flush()
     return edition
+
+
+def _find_or_create_series(db: Session, title: str) -> Series:
+    """Find an existing ``Series`` by title (case-insensitive) or create one.
+
+    Title is normalised (stripped, whitespace collapsed) before matching.
+    """
+    norm = " ".join(title.split())
+    existing = db.query(Series).filter(Series.title.ilike(norm)).first()
+    if existing is not None:
+        return existing
+    series = Series(title=norm)
+    db.add(series)
+    db.flush()
+    return series
 
 
 # ---------------------------------------------------------------------------
