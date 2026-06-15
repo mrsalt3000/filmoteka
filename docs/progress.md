@@ -46,6 +46,31 @@
 - Next task:
   - POSTER-002 — DeepSeek возвращает структурированный type + clean title
 
+
+## Task Report: POSTER-002 — 2026-06-15
+
+- Status: `done`
+- Summary: DeepSeek возвращает структурированный type + clean title.
+  - **deepseek_provider.py:**
+    - `deepseek_extract_search_info(file_stem, api_key)` — новая функция:
+      - Prompt просит JSON: `{"title": "...", "year": ..., "type": "movie"|"series"|"episode"}`
+      - Парсит JSON из ответа (включая markdown-wrapped), валидирует type, coerce year
+    - `_fallback_search_info(file_stem)` — использует `clean_title_for_omdb()` при ошибке DeepSeek; type=None
+    - `deepseek_generate_alias()` не тронута
+  - **test_deepseek_provider.py** (новый, 13 тестов):
+    - Happy path: movie, series, markdown-wrapped, type normalisation, null type
+    - Fallback: non-200, network error, invalid JSON, empty content, missing title, cleans markers
+- Changed files:
+  - `src/filmoteka/infrastructure/deepseek_provider.py` — +import, +prompt, +extract func, +fallback
+  - `tests/unit/test_deepseek_provider.py` — новый файл
+  - `agent-tasklist.md` — POSTER-002 [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - pytest: 13/13 new passed, 179 total unit tests passed
+- Next task:
+  - POSTER-003 — Проводка нового поиска в pipeline + admin poster jobs
+
 ---
 
 ## Task Report: SERIES-008 — 2026-06-15

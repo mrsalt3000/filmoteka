@@ -1900,7 +1900,7 @@
   3. IMDb ID fallback: после s= результаты фильтруются и i= даёт poster
   4. Старая `omdb_search_poster()` не сломана
 
-- [ ] **POSTER-002** DeepSeek возвращает структурированный type + clean title.
+- [x] **POSTER-002** DeepSeek возвращает структурированный type + clean title.
 
   **Проблема:** `deepseek_generate_alias()` возвращает только `"Title (Year)"`.
   Нет информации о типе контента (movie/series/episode). Приходится определять

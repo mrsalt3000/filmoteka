@@ -14,6 +14,8 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+from filmoteka.infrastructure.metadata_providers import clean_title_for_omdb
+
 logger = logging.getLogger(__name__)
 
 DEEPSEEK_API_BASE = "https://api.deepseek.com"
@@ -241,3 +243,149 @@ def deepseek_generate_alias(file_stem: str, api_key: str) -> str | None:
         logger.exception("DeepSeek alias parse failed for %r", file_stem)
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Structured search info extraction (title + year + type)
+# ---------------------------------------------------------------------------
+
+
+_SEARCH_INFO_SYSTEM_PROMPT = (
+    "You are a film filename parser. Given a media filename (without extension), "
+    "extract the title, year, and content type. "
+    "Return ONLY a JSON object with these fields, no markdown, no explanation:\n"
+    "{\n"
+    '  "title": "extracted movie or show title",\n'
+    '  "year": <4-digit year or null if unknown>,\n'
+    '  "type": "movie" or "series" or "episode" or null\n'
+    "}\n\n"
+    "Guidelines:\n"
+    '- "movie": feature films, documentaries, standalone content\n'
+    '- "series": TV series, mini-series, TV shows (any multi-episode format)\n'
+    '- "episode": individual episode of a series (has SxxExx pattern)\n'
+    "- null: unable to determine\n\n"
+    "Examples:\n"
+    '- "The.Matrix.1999.1080p.BluRay.x264" → {"title": "The Matrix", "year": 1999, "type": "movie"}\n'  # noqa: E501
+    '- "Gravity.Falls.S01E01.IVI.SOFCI" → {"title": "Gravity Falls", "year": 2012, "type": "series"}\n'  # noqa: E501
+    '- "The.Mandalorian.S02E03.Chapter.11.2160p" → {"title": "The Mandalorian", "year": 2020, "type": "series"}\n'  # noqa: E501
+    '- "Inception.2010.1080p" → {"title": "Inception", "year": 2010, "type": "movie"}\n'
+    '- "My.Family.Vacation.2021.HDRip" → {"title": "My Family Vacation", "year": 2021, "type": "movie"}\n'  # noqa: E501
+    '- "UFC.300.Main.Card.PPV.1080p" → {"title": "UFC 300", "year": 2024, "type": "movie"}\n'
+)
+
+
+def deepseek_extract_search_info(
+    file_stem: str,
+    api_key: str,
+) -> dict[str, Any] | None:
+    """Extract structured search info from a media filename via DeepSeek.
+
+    Returns a dict with keys:
+    - ``title`` (str) — cleaned title suitable for OMDB search
+    - ``year`` (int | None) — extracted year
+    - ``type`` (str | None) — ``"movie"``, ``"series"``, or ``None``
+
+    Falls back to :func:`clean_title_for_omdb` when DeepSeek is unavailable
+    or returns an invalid response (``type`` will be ``None`` on fallback).
+    """
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": _SEARCH_INFO_SYSTEM_PROMPT},
+            {"role": "user", "content": file_stem},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 150,
+    }
+
+    try:
+        req = Request(
+            f"{DEEPSEEK_API_BASE}/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+        resp = urlopen(req, timeout=30)
+
+        if resp.status != 200:
+            logger.warning("DeepSeek search info returned %s", resp.status)
+            return _fallback_search_info(file_stem)
+
+        raw: dict[str, Any] = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        logger.exception("DeepSeek search info failed for %r", file_stem)
+        return _fallback_search_info(file_stem)
+
+    try:
+        content: str = raw["choices"][0]["message"]["content"]
+        if not content:
+            logger.warning("DeepSeek search info returned empty content for %r", file_stem)
+            return _fallback_search_info(file_stem)
+
+        # Strip markdown code fences
+        text = content.strip()
+        if text.startswith("```"):
+            for line in text.split("\n"):
+                stripped = line.strip()
+                if stripped in ("```json", "```", ""):
+                    continue
+                if stripped.endswith("```"):
+                    text = stripped[:-3].strip()
+                    break
+            else:
+                start = text.find("\n")
+                end = text.rfind("```")
+                if start != -1 and end != -1:
+                    text = text[start:end].strip()
+
+        data: dict[str, Any] = json.loads(text)
+    except (KeyError, IndexError, json.JSONDecodeError, TypeError):
+        snippet = (content[:200] + "...") if content else "empty"
+        logger.exception(
+            "DeepSeek search info parse failed for %r — response: %s",
+            file_stem, snippet,
+        )
+        return _fallback_search_info(file_stem)
+
+    title = data.get("title")
+    if not title or not isinstance(title, str):
+        logger.warning("DeepSeek search info missing title for %r", file_stem)
+        return _fallback_search_info(file_stem)
+
+    year: int | None = data.get("year")
+    if year is not None:
+        try:
+            year = int(year)
+        except (ValueError, TypeError):
+            year = None
+
+    raw_type: Any = data.get("type")
+    content_type: str | None = None
+    if isinstance(raw_type, str) and raw_type.lower() in ("movie", "series", "episode"):
+        content_type = raw_type.lower()
+
+    result: dict[str, Any] = {
+        "title": title,
+        "year": year,
+        "type": content_type,
+    }
+    logger.info(
+        "DeepSeek search info for %r → %r", file_stem, result,
+    )
+    return result
+
+
+def _fallback_search_info(file_stem: str) -> dict[str, Any]:
+    """Fallback when DeepSeek is unavailable: use title cleaner heuristics."""
+    cleaned = clean_title_for_omdb(file_stem)
+    result: dict[str, Any] = {
+        "title": cleaned.title,
+        "year": cleaned.year,
+        "type": None,
+    }
+    logger.info(
+        "DeepSeek search info fallback for %r → %r", file_stem, result,
+    )
+    return result
