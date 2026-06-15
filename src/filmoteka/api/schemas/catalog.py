@@ -88,6 +88,17 @@ class AdjacentEpisodeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SeriesContinueOut(BaseModel):
+    """Best episode to resume watching in a series."""
+
+    media_id: int | None = None
+    season_number: int | None = None
+    episode_number: int | None = None
+    episode_title: str | None = None
+    last_position: float | None = None
+    duration_secs: float | None = None
+
+
 class SeriesEpisodesResponse(BaseModel):
     series_id: int
     season_number: int | None

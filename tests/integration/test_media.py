@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from filmoteka.api.dependencies import get_library_config
 from filmoteka.app import create_app
+from filmoteka.domain.access.models import User
 from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition, Series
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
@@ -960,6 +961,195 @@ class TestAdjacentEpisode:
         body = resp.json()
         assert body["prev_media_id"] is None
         assert body["next_media_id"] == m4.id
+
+
+class TestSeriesContinue:
+    """GET /series/{series_id}/continue — resume latest unwatched episode."""
+
+    def _make_episode(
+        self, db_session: Session, series: Series, season: int, ep: int
+    ) -> tuple[Film, MediaFile]:
+        film = Film(
+            title=f"Ep {season}-{ep}",
+            year=2020,
+            series_id=series.id,
+            season_number=season,
+            episode_number=ep,
+        )
+        db_session.add(film)
+        db_session.flush()
+        edition = MovieEdition(film_id=film.id)
+        db_session.add(edition)
+        db_session.flush()
+        media = MediaFile(
+            edition_id=edition.id,
+            file_path=f"/tmp/continue_s{season}e{ep}.mkv",
+            duration_secs=1200.0,
+        )
+        db_session.add(media)
+        db_session.flush()
+        return film, media
+
+    def _register(self, client: TestClient) -> tuple[str, User]:
+        resp = client.post(
+            "/auth/register",
+            json={"username": "serieswatch", "password": "secret123"},
+        )
+        assert resp.status_code == 201
+        token = resp.json()["access_token"]
+        # Find the user in DB
+        user = (
+            client.app.dependency_overrides[get_db]()
+            .query(User)
+            .filter(User.username == "serieswatch")
+            .first()
+        )
+        assert user is not None
+        return token, user
+
+    def test_no_auth(self, client: TestClient, db_session: Session) -> None:
+        """Without auth token, the endpoint returns all-null."""
+        resp = client.get("/series/999/continue")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["media_id"] is None
+        assert body["season_number"] is None
+        assert body["last_position"] is None
+
+    def test_no_watch_events(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Without any watch events, return all-null."""
+        series = Series(title="No Watch Series")
+        db_session.add(series)
+        db_session.commit()
+
+        token, _ = self._register(client)
+
+        resp = client.get(
+            f"/series/{series.id}/continue",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["media_id"] is None
+
+    def test_finished_only(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Only finished watch events → all-null."""
+        series = Series(title="Finished Series")
+        db_session.add(series)
+        db_session.flush()
+
+        film, media = self._make_episode(db_session, series, 1, 1)
+        db_session.commit()
+
+        token, user = self._register(client)
+
+        # Create a finished watch event
+        event = WatchEvent(
+            media_file_id=media.id,
+            user_id=user.id,
+            last_position=600.0,
+            finished=True,
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        resp = client.get(
+            f"/series/{series.id}/continue",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["media_id"] is None
+
+    def test_unfinished(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Unfinished watch event → returns correct episode info."""
+        series = Series(title="Continue Series")
+        db_session.add(series)
+        db_session.flush()
+
+        film, media = self._make_episode(db_session, series, 2, 3)
+        db_session.commit()
+
+        token, user = self._register(client)
+
+        event = WatchEvent(
+            media_file_id=media.id,
+            user_id=user.id,
+            last_position=300.5,
+            finished=False,
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        resp = client.get(
+            f"/series/{series.id}/continue",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["media_id"] == media.id
+        assert body["season_number"] == 2
+        assert body["episode_number"] == 3
+        assert body["last_position"] == 300.5
+        assert body["duration_secs"] == 1200.0
+
+    def test_latest_unfinished(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Multiple unfinished events → returns the most recent one."""
+        series = Series(title="Multi Continue Series")
+        db_session.add(series)
+        db_session.flush()
+
+        ep1, m1 = self._make_episode(db_session, series, 1, 1)
+        ep2, m2 = self._make_episode(db_session, series, 1, 2)
+        ep3, m3 = self._make_episode(db_session, series, 2, 1)
+        db_session.commit()
+
+        token, user = self._register(client)
+
+        from datetime import datetime, timedelta
+
+        # Watch events with different started_at times
+        e1 = WatchEvent(
+            media_file_id=m1.id,
+            user_id=user.id,
+            last_position=100.0,
+            finished=False,
+            started_at=datetime.now() - timedelta(hours=3),
+        )
+        e2 = WatchEvent(
+            media_file_id=m2.id,
+            user_id=user.id,
+            last_position=500.0,
+            finished=False,
+            started_at=datetime.now() - timedelta(hours=1),
+        )
+        e3 = WatchEvent(
+            media_file_id=m3.id,
+            user_id=user.id,
+            last_position=50.0,
+            finished=False,
+            started_at=datetime.now() - timedelta(hours=2),
+        )
+        db_session.add_all([e1, e2, e3])
+        db_session.commit()
+
+        resp = client.get(
+            f"/series/{series.id}/continue",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Latest started_at is e2 (1 hour ago)
+        assert body["media_id"] == m2.id
+        assert body["last_position"] == 500.0
 
 
 def _register_user(client: TestClient, username: str, password: str) -> str:

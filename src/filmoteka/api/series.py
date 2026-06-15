@@ -8,18 +8,23 @@ import logging
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import false as sa_false
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
+from filmoteka.api.auth import get_optional_current_user
 from filmoteka.api.schemas.catalog import (
     EpisodeOut,
     SeasonGroup,
+    SeriesContinueOut,
     SeriesDetailOut,
     SeriesEpisodesResponse,
     SeriesListItem,
     SeriesListResponse,
 )
-from filmoteka.domain.catalog.models import Film, MovieEdition, Series
+from filmoteka.domain.access.models import User
+from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition, Series
+from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
 
 _logger = logging.getLogger(__name__)
@@ -190,4 +195,69 @@ def list_episodes(
         season_number=season,
         items=[EpisodeOut.model_validate(f) for f in films],
         total=total,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Continue (resume latest unfinished episode)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{series_id}/continue", response_model=SeriesContinueOut)
+def series_continue(
+    series_id: int,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user),
+) -> SeriesContinueOut:
+    """Return the best episode to resume for the current user.
+
+    Finds the most recent unfinished watch event across all episodes
+    in the series and returns its position and episode info.
+    Returns all-null fields if no unfinished watch exists or user
+    is not authenticated.
+    """
+    if current_user is None:
+        return SeriesContinueOut()
+
+    # Get all media_file_ids for this series in one query
+    media_file_ids = (
+        db.query(MediaFile.id)
+        .join(MovieEdition, MediaFile.edition_id == MovieEdition.id)
+        .join(Film, MovieEdition.film_id == Film.id)
+        .filter(Film.series_id == series_id)
+        .scalar_subquery()
+    )
+
+    # Find the latest unfinished watch event on any of these media files
+    event = (
+        db.query(WatchEvent)
+        .options(joinedload(WatchEvent.media_file))
+        .filter(
+            WatchEvent.media_file_id.in_(media_file_ids),
+            WatchEvent.user_id == current_user.id,
+            WatchEvent.finished == sa_false(),
+            WatchEvent.incognito == sa_false(),
+        )
+        .order_by(WatchEvent.started_at.desc())
+        .first()
+    )
+
+    if event is None:
+        return SeriesContinueOut()
+
+    # Resolve the film (episode) through edition chain
+    edition = db.get(MovieEdition, event.media_file.edition_id)
+    if edition is None:
+        return SeriesContinueOut()
+    film = db.get(Film, edition.film_id)
+    if film is None or film.series_id != series_id:
+        return SeriesContinueOut()
+
+    return SeriesContinueOut(
+        media_id=event.media_file_id,
+        season_number=film.season_number,
+        episode_number=film.episode_number,
+        episode_title=film.episode_title,
+        last_position=event.last_position,
+        duration_secs=event.media_file.duration_secs,
     )

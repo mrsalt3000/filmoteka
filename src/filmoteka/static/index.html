@@ -120,6 +120,9 @@ body.dark .film-card .series-badge { background: rgba(0,0,0,.7); }
 .ep-nav-btn:hover { background: var(--surface3); }
 .ep-nav-disabled { opacity: 0.4; cursor: default; }
 .ep-nav-disabled:hover { background: var(--surface2); }
+.series-continue { margin-top: 0.5rem; }
+.series-continue-btn { padding: 0.5rem 1.25rem; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 0.95rem; cursor: pointer; font-weight: 600; }
+.series-continue-btn:hover { filter: brightness(1.1); }
 .media-list { list-style: none; padding-left: 0; margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text2); }
 .media-list li { padding: 0.1rem 0; }
 .back { display: inline-block; margin-bottom: 1rem; color: var(--text2); cursor: pointer; }
@@ -618,6 +621,15 @@ async function renderSeries(el, seriesId) {
 
   // Track current season; default to first
   let currentSeason = s.seasons[0].season_number;
+  let continueInfo = null;
+
+  // Fetch continue state if logged in
+  if (currentUser) {
+    try {
+      const r = await apiAuth('/series/' + seriesId + '/continue');
+      if (r && r.media_id != null) continueInfo = r;
+    } catch { /* ignore */ }
+  }
 
   // Render the full page
   function renderPage() {
@@ -626,6 +638,19 @@ async function renderSeries(el, seriesId) {
     const yearRange = s.year_start && s.year_end && s.year_start !== s.year_end
       ? `${s.year_start}–${s.year_end}`
       : (s.year_start || '—');
+
+    // Build Continue button
+    let continueHtml = '';
+    if (continueInfo) {
+      const label = '▶ Continue S' + String(continueInfo.season_number).padStart(2, '0')
+        + 'E' + String(continueInfo.episode_number).padStart(2, '0');
+      const posLabel = continueInfo.last_position != null ? ' (' + formatTime(continueInfo.last_position) + ')' : '';
+      continueHtml = `<div class="series-continue">
+        <button class="series-continue-btn" onclick="navigate('play/${continueInfo.media_id}')">
+          ${esc(label)}${posLabel}
+        </button>
+      </div>`;
+    }
 
     el.innerHTML = `
       <div class="back" onclick="navigate('list')">← Back to list</div>
@@ -639,6 +664,7 @@ async function renderSeries(el, seriesId) {
           <div class="detail-info">
             <h2>${esc(s.title)}</h2>
             <div class="meta">${yearRange} · ${s.episode_count} episode${s.episode_count !== 1 ? 's' : ''}</div>
+            ${continueHtml}
           </div>
         </div>
         <div class="detail section">
