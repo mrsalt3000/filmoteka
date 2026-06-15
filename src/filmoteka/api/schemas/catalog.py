@@ -21,6 +21,63 @@ class SeriesOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SeriesListItem(BaseModel):
+    """Series item for the list endpoint with computed episode count."""
+
+    id: int
+    title: str
+    poster_url: str | None = None
+    year_start: int | None = None
+    year_end: int | None = None
+    episode_count: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SeriesListResponse(BaseModel):
+    items: list[SeriesListItem]
+    total: int
+
+
+class EpisodeOut(BaseModel):
+    """Lightweight film schema for episode listing."""
+
+    id: int
+    title: str
+    poster_url: str | None = None
+    season_number: int | None = None
+    episode_number: int | None = None
+    episode_title: str | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SeasonGroup(BaseModel):
+    season_number: int
+    episodes: list[EpisodeOut]
+
+
+class SeriesDetailOut(BaseModel):
+    """Series detail with episodes grouped by season."""
+
+    id: int
+    title: str
+    poster_url: str | None = None
+    year_start: int | None = None
+    year_end: int | None = None
+    created_at: datetime
+    seasons: list[SeasonGroup]
+    episode_count: int
+
+
+class SeriesEpisodesResponse(BaseModel):
+    series_id: int
+    season_number: int | None
+    items: list[EpisodeOut]
+    total: int
+
+
 # ---------------------------------------------------------------------------
 # List
 # ---------------------------------------------------------------------------

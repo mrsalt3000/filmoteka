@@ -1293,3 +1293,169 @@ class TestGetFilm:
         resp = client.get(f"/films/{film.id}")
         assert resp.status_code == 200
         assert resp.json()["needs_review"] is False
+
+
+# ── Series API ─────────────────────────────────────────────────────
+
+
+class TestListSeries:
+    """GET /series"""
+
+    def test_empty_list(self, client: TestClient) -> None:
+        resp = client.get("/series")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == {"items": [], "total": 0}
+
+    def test_list_with_one_series(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        from filmoteka.domain.catalog.models import Series
+
+        s = Series(title="My Show")
+        db_session.add(s)
+        db_session.flush()
+        ep1 = Film(title="Pilot", year=2020, series_id=s.id,
+                    season_number=1, episode_number=1)
+        ep2 = Film(title="Second", year=2020, series_id=s.id,
+                    season_number=1, episode_number=2)
+        db_session.add_all([ep1, ep2])
+        db_session.commit()
+
+        resp = client.get("/series")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        item = body["items"][0]
+        assert item["title"] == "My Show"
+        assert item["episode_count"] == 2
+
+    def test_pagination(self, client: TestClient, db_session: Session) -> None:
+        from filmoteka.domain.catalog.models import Series
+
+        for i in range(3):
+            s = Series(title=f"Series {i}")
+            db_session.add(s)
+        db_session.commit()
+
+        resp = client.get("/series?skip=1&limit=2")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 3
+        assert len(body["items"]) == 2
+
+
+class TestGetSeries:
+    """GET /series/{id}"""
+
+    def test_not_found(self, client: TestClient) -> None:
+        resp = client.get("/series/99999")
+        assert resp.status_code == 404
+
+    def test_detail_with_seasons(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        from filmoteka.domain.catalog.models import Series
+
+        s = Series(title="Multi Season")
+        db_session.add(s)
+        db_session.flush()
+        # Season 1
+        e1 = Film(title="Pilot", year=2020, series_id=s.id,
+                   season_number=1, episode_number=1)
+        e2 = Film(title="Second", year=2020, series_id=s.id,
+                   season_number=1, episode_number=2)
+        # Season 2
+        e3 = Film(title="Return", year=2021, series_id=s.id,
+                   season_number=2, episode_number=1)
+        db_session.add_all([e1, e2, e3])
+        db_session.commit()
+
+        resp = client.get(f"/series/{s.id}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["title"] == "Multi Season"
+        assert body["episode_count"] == 3
+        assert len(body["seasons"]) == 2
+        # Season 1 has 2 episodes, Season 2 has 1
+        s1 = [sg for sg in body["seasons"] if sg["season_number"] == 1][0]
+        assert len(s1["episodes"]) == 2
+        s2 = [sg for sg in body["seasons"] if sg["season_number"] == 2][0]
+        assert len(s2["episodes"]) == 1
+        assert s2["episodes"][0]["title"] == "Return"
+
+
+class TestListEpisodes:
+    """GET /series/{id}/episodes"""
+
+    def test_not_found(self, client: TestClient) -> None:
+        resp = client.get("/series/99999/episodes")
+        assert resp.status_code == 404
+
+    def test_all_episodes(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        from filmoteka.domain.catalog.models import Series
+
+        s = Series(title="Show")
+        db_session.add(s)
+        db_session.flush()
+        eps = [
+            Film(title=f"Ep {i}", year=2020, series_id=s.id,
+                 season_number=1, episode_number=i)
+            for i in range(1, 4)
+        ]
+        db_session.add_all(eps)
+        db_session.commit()
+
+        resp = client.get(f"/series/{s.id}/episodes")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["series_id"] == s.id
+        assert body["season_number"] is None
+        assert body["total"] == 3
+        assert len(body["items"]) == 3
+
+    def test_filter_by_season(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        from filmoteka.domain.catalog.models import Series
+
+        s = Series(title="Test")
+        db_session.add(s)
+        db_session.flush()
+        s1 = Film(title="S1E1", series_id=s.id,
+                   season_number=1, episode_number=1)
+        s2 = Film(title="S2E1", series_id=s.id,
+                   season_number=2, episode_number=1)
+        db_session.add_all([s1, s2])
+        db_session.commit()
+
+        resp = client.get(f"/series/{s.id}/episodes?season=1")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["season_number"] == 1
+        assert body["items"][0]["title"] == "S1E1"
+
+    def test_pagination(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        from filmoteka.domain.catalog.models import Series
+
+        s = Series(title="Long")
+        db_session.add(s)
+        db_session.flush()
+        eps = [
+            Film(title=f"Ep {i}", series_id=s.id,
+                 season_number=1, episode_number=i)
+            for i in range(1, 6)
+        ]
+        db_session.add_all(eps)
+        db_session.commit()
+
+        resp = client.get(f"/series/{s.id}/episodes?skip=2&limit=2")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 5
+        assert len(body["items"]) == 2

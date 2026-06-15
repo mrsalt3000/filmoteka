@@ -4,6 +4,31 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: SERIES-004 — 2026-06-15
+
+- Status: `done`
+- Summary: API endpoints для сериалов.
+  - **schemas/catalog.py:** +`SeriesListItem`, `SeriesListResponse`, `EpisodeOut`, `SeasonGroup`, `SeriesDetailOut`, `SeriesEpisodesResponse`
+  - **api/series.py:** новый модуль с 3 endpoints:
+    - `GET /series` — список с episode_count (subquery + outerjoin)
+    - `GET /series/{id}` — деталка с grouped-by-season эпизодами (joinedload + sorted defaultdict)
+    - `GET /series/{id}/episodes?season=N` — пагинированные эпизоды с фильтром по сезону
+  - **app.py:** +`series_router`
+  - **test_catalog.py:** 9 тестов (3 класса: TestListSeries, TestGetSeries, TestListEpisodes)
+- Changed files:
+  - `src/filmoteka/api/schemas/catalog.py` — новые схемы
+  - `src/filmoteka/api/series.py` — новый файл
+  - `src/filmoteka/app.py` — +import router, +include_router
+  - `tests/integration/test_catalog.py` — +9 тестов
+  - `agent-tasklist.md` — SERIES-004 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed (3 B008 suppressed in series.py)
+  - 9/9 new tests passed
+  - 63/63 existing catalog tests passed
+- Next task:
+  - SERIES-005 — Главная — сериалы как одна карточка
+
 ## Task Report: SERIES-003 — 2026-06-15
 
 - Status: `done`
