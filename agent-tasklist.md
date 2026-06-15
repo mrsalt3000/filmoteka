@@ -808,7 +808,7 @@
      ограничен (меньшая проблема, чем ошибка).
   3. Без ffmpeg — 415 как раньше.
 
-- [~] **BUGFIX-009** Transcode & web-optimize — AC3→AAC + MKV→MP4 одной кнопкой.
+- [x] **BUGFIX-009** Transcode & web-optimize — AC3→AAC + MKV→MP4 одной кнопкой.
 
   **Корневая причина:** `empty_moov` в ffmpeg-ремуксе (`media.py`)
   не позволяет браузеру узнать длительность видео. При стриминге
@@ -1267,6 +1267,40 @@
   Проверка результата:
   1. После успешного транскодирования файла → commit сразу, `.tr` в БД
   2. Рестарт во время транскодирования → готовые файлы не теряются
+
+- [ ] **BUGFIX-027** Удалить ffmpeg remux fallback (empty_moov/delay_moov) из media.py.
+
+  **Контекст:** BUGFIX-009 заменил старый подход (fragmented MP4 через
+  ffmpeg pipe с `empty_moov`) на Transcode & web-optimize (создание
+  `.tr.mp4` с `+faststart`). После того как все файлы прошли
+  транскодирование, ремукс-код в `media.py` никогда не вызывается.
+
+  **Что удалить из `media.py`:**
+  - `_ffmpeg_remux_stream()` — вся функция
+  - `_ffmpeg_available()` — только для remux
+  - Импорты: `subprocess`, `Generator`, `Thread`, `StreamingResponse`,
+    `MediaProbeError`, `probe_media`
+  - Из `stream_media()`: проверка ffmpeg + 415, HEAD-endpoint MKV special
+    case, весь `if suffix == ".mkv":` блок
+  - Из `_MIME_MAP`: неиспользуемые форматы
+
+  **Что поправить (косметика):**
+  - `admin.py:743` — комментарий `.tr.mkv originals` → обобщить
+  - `admin.py:765` — original_path для `.tr.mp4` (строит `.mp4` вместо `.mkv`)
+  - `catalog.py:251-252` — докстринг `_dedup_tr_media()` (говорит только `.tr.mkv`)
+  - `index.html:895` — описание секции `.tr.mkv` → `.tr.mp4`
+
+  **Что остаётся (не трогать):**
+  - `_run_transcode_audio()` — новый pipeline
+  - `list_transcoded_files()` / `delete_transcoded_original()` — управление `.tr`
+  - transcode progress
+  - `scan.py` — `.tr` exclusion (всё ещё нужно)
+  - `catalog.py` — `_dedup_tr_media()` (всё ещё нужно для `.tr.mp4`)
+
+  **Проверка результата:**
+  1. `ruff check src/filmoteka/api/media.py`
+  2. `pytest` — стриминг `.tr.mp4` через FileResponse не сломан
+  3. Открыть плеер — прогресс-бар полный, перемотка работает
 
 ---
 
