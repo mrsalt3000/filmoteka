@@ -49,6 +49,7 @@ class EpisodeOut(BaseModel):
     episode_number: int | None = None
     episode_title: str | None = None
     created_at: datetime
+    media_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

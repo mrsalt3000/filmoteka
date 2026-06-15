@@ -19,7 +19,7 @@ from filmoteka.api.schemas.catalog import (
     SeriesListItem,
     SeriesListResponse,
 )
-from filmoteka.domain.catalog.models import Film, Series
+from filmoteka.domain.catalog.models import Film, MovieEdition, Series
 from filmoteka.infrastructure.database import get_db
 
 _logger = logging.getLogger(__name__)
@@ -83,7 +83,11 @@ def get_series(series_id: int, db: Session = Depends(get_db)) -> SeriesDetailOut
     """Return series detail with episodes grouped by season."""
     series = (
         db.query(Series)
-        .options(joinedload(Series.films))
+        .options(
+            joinedload(Series.films)
+            .joinedload(Film.editions)
+            .joinedload(MovieEdition.media_files)
+        )
         .filter(Series.id == series_id)
         .one_or_none()
     )
@@ -92,6 +96,13 @@ def get_series(series_id: int, db: Session = Depends(get_db)) -> SeriesDetailOut
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Series not found",
         )
+
+    # Helper to extract the first media ID from a Film's editions
+    def _first_media_id(f: Film) -> int | None:
+        for ed in f.editions:
+            for mf in ed.media_files:
+                return mf.id
+        return None
 
     # Group films by season_number (None → treat as season 0)
     by_season: dict[int, list[Film]] = defaultdict(list)
@@ -106,9 +117,26 @@ def get_series(series_id: int, db: Session = Depends(get_db)) -> SeriesDetailOut
         seasons.append(
             SeasonGroup(
                 season_number=season_num,
-                episodes=[EpisodeOut.model_validate(f) for f in episodes],
+                episodes=[
+                    EpisodeOut.model_validate(
+                        f,
+                        from_attributes=True,
+                    )
+                    for f in episodes
+                ],
             )
         )
+
+    # Populate media_id from the first MediaFile of each episode
+    ep_by_id: dict[int, EpisodeOut] = {}
+    for sg in seasons:
+        for ep in sg.episodes:
+            ep_by_id[ep.id] = ep
+
+    for f in series.films:
+        ep = ep_by_id.get(f.id)
+        if ep is not None:
+            ep.media_id = _first_media_id(f)
 
     return SeriesDetailOut(
         id=series.id,

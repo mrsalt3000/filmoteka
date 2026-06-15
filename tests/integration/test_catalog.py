@@ -1355,20 +1355,36 @@ class TestGetSeries:
     def test_detail_with_seasons(
         self, client: TestClient, db_session: Session
     ) -> None:
-        from filmoteka.domain.catalog.models import Series
+        from filmoteka.domain.catalog.models import (
+            MediaFile,
+            MovieEdition,
+            Series,
+        )
 
         s = Series(title="Multi Season")
         db_session.add(s)
         db_session.flush()
-        # Season 1
+        # Season 1 — with media files
         e1 = Film(title="Pilot", year=2020, series_id=s.id,
                    season_number=1, episode_number=1)
         e2 = Film(title="Second", year=2020, series_id=s.id,
                    season_number=1, episode_number=2)
-        # Season 2
+        # Season 2 — with media file
         e3 = Film(title="Return", year=2021, series_id=s.id,
                    season_number=2, episode_number=1)
         db_session.add_all([e1, e2, e3])
+        db_session.flush()
+
+        # Add editions + media files so media_id is populated
+        ed1 = MovieEdition(film_id=e1.id)
+        ed2 = MovieEdition(film_id=e2.id)
+        ed3 = MovieEdition(film_id=e3.id)
+        db_session.add_all([ed1, ed2, ed3])
+        db_session.flush()
+
+        mf1 = MediaFile(edition_id=ed1.id, file_path="/fakes/pilot.mkv")
+        mf3 = MediaFile(edition_id=ed3.id, file_path="/fakes/return.mkv")
+        db_session.add_all([mf1, mf3])
         db_session.commit()
 
         resp = client.get(f"/series/{s.id}")
@@ -1380,9 +1396,14 @@ class TestGetSeries:
         # Season 1 has 2 episodes, Season 2 has 1
         s1 = [sg for sg in body["seasons"] if sg["season_number"] == 1][0]
         assert len(s1["episodes"]) == 2
+        assert s1["episodes"][0]["title"] == "Pilot"
+        assert s1["episodes"][0]["media_id"] == mf1.id  # has media
+        assert s1["episodes"][1]["title"] == "Second"
+        assert s1["episodes"][1]["media_id"] is None   # no media file
         s2 = [sg for sg in body["seasons"] if sg["season_number"] == 2][0]
         assert len(s2["episodes"]) == 1
         assert s2["episodes"][0]["title"] == "Return"
+        assert s2["episodes"][0]["media_id"] == mf3.id  # has media
 
 
 class TestListEpisodes:

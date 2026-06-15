@@ -4,6 +4,31 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: SERIES-006 — 2026-06-15
+
+- Status: `done`
+- Summary: Страница сериала с выбором сезона/серии.
+  - **schemas/catalog.py:** `EpisodeOut` + `media_id` для прямой кнопки Play
+  - **api/series.py:** `get_series()` — joinedload editions+media_files, заполняет `media_id` на EpisodeOut
+  - **index.html:**
+    - `render()` — новая ветка `route.view === 'series'`
+    - `renderSeries()` — загружает `/series/{id}`, рендерит постер + сезонные табы + список эпизодов с Play
+    - Селектор сезона: переиспользует `.view-tabs` / `.view-tab`, переключает inline без перезапроса API
+    - CSS: `.episode-list`, `.episode-item`, `.ep-play-btn`, `.season-tabs`
+  - **test_catalog.py:** деталка проверяет `media_id` (с MediaFile и без)
+- Changed files:
+  - `src/filmoteka/api/schemas/catalog.py` — +media_id на EpisodeOut
+  - `src/filmoteka/api/series.py` — joinedload + media_id population
+  - `src/filmoteka/static/index.html` — renderSeries(), роутинг, CSS
+  - `tests/integration/test_catalog.py` — обновлён test_detail_with_seasons
+  - `agent-tasklist.md` — SERIES-006 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - pytest: 9/9 series tests passed, 63/63 existing passed
+- Next task:
+  - SERIES-007 — Кнопки prev/next в плеере
+
 ## Task Report: SERIES-005 — 2026-06-15
 
 - Status: `done`

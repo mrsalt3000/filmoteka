@@ -103,6 +103,16 @@ body.dark .film-card .series-badge { background: rgba(0,0,0,.7); }
 .detail .progress-fill { height: 100%; background: var(--accent); transition: width .3s; border-radius: 2px; }
 .detail .progress-label { font-size: .8rem; color: var(--text2); margin-top: .25rem; }
 .detail .watched-label { display: inline-block; margin-top: .5rem; padding: .25rem .6rem; background: #2e7d32; color: #fff; border-radius: var(--radius); font-size: .85rem; font-weight: 600; }
+
+/* ── Series detail — episode list ──────────────── */
+.detail .episode-list { list-style: none; margin-top: .5rem; }
+.detail .episode-item { display: flex; align-items: center; gap: 1rem; padding: .5rem .75rem; border-radius: var(--radius); cursor: pointer; transition: background .15s; }
+.detail .episode-item:hover { background: var(--surface2); }
+.detail .episode-item .ep-number { color: var(--text2); font-size: .9rem; min-width: 4.5rem; flex-shrink: 0; }
+.detail .episode-item .ep-title { flex: 1; font-size: .95rem; }
+.detail .episode-item .ep-play-btn { padding: .3rem .8rem; background: var(--accent); color: var(--play-btn-text); border: none; border-radius: var(--radius); font-size: .8rem; cursor: pointer; flex-shrink: 0; }
+.detail .episode-item .ep-play-btn:hover { opacity: .9; }
+.detail .season-tabs { margin-bottom: 1rem; }
 .player-page video { width: 100%; max-height: 80vh; background: #000; border-radius: var(--radius); }
 .player-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text); }
 .media-list { list-style: none; padding-left: 0; margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text2); }
@@ -475,6 +485,8 @@ async function render() {
   try {
     if (route.view === 'film' && route.id) {
       await renderFilm(el, route.id);
+    } else if (route.view === 'series' && route.id) {
+      await renderSeries(el, route.id);
     } else if (route.view === 'play' && route.id) {
       await renderPlayer(el, route.id);
     } else if (route.view === 'admin') {
@@ -581,6 +593,86 @@ async function renderList(el) {
     </div>`;
     }).join('')
   }</div>`;
+}
+
+// ── Series detail page ────────────────────────────────────────────
+async function renderSeries(el, seriesId) {
+  el.innerHTML = '<div class="spinner">Loading series...</div>';
+  let s;
+  try {
+    s = await api('/series/' + seriesId);
+  } catch {
+    el.innerHTML = `<div class="error">Series not found.</div>`;
+    return;
+  }
+  if (!s || !s.seasons || s.seasons.length === 0) {
+    el.innerHTML = `<div class="back" onclick="navigate('list')">← Back to list</div>
+      <div class="empty">This series has no episodes.</div>`;
+    return;
+  }
+
+  // Track current season; default to first
+  let currentSeason = s.seasons[0].season_number;
+
+  // Render the full page
+  function renderPage() {
+    const season = s.seasons.find(sg => sg.season_number === currentSeason);
+    const episodes = season ? season.episodes : [];
+    const yearRange = s.year_start && s.year_end && s.year_start !== s.year_end
+      ? `${s.year_start}–${s.year_end}`
+      : (s.year_start || '—');
+
+    el.innerHTML = `
+      <div class="back" onclick="navigate('list')">← Back to list</div>
+      <div class="detail">
+        <div class="detail-layout">
+          <div class="detail-poster">
+            ${s.poster_url
+              ? `<img src="${esc(s.poster_url)}" alt="${esc(s.title)}" onerror="this.style.display='none'">`
+              : `<div class="poster-placeholder">📺</div>`}
+          </div>
+          <div class="detail-info">
+            <h2>${esc(s.title)}</h2>
+            <div class="meta">${yearRange} · ${s.episode_count} episode${s.episode_count !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+        <div class="detail section">
+          <h3>Seasons</h3>
+          <div class="view-tabs season-tabs">
+            ${s.seasons.map(sg =>
+              `<span class="view-tab ${sg.season_number === currentSeason ? 'active' : ''}"
+                     onclick="renderSeriesSeason(${seriesId}, ${sg.season_number})">S${sg.season_number}</span>`
+            ).join('')}
+          </div>
+          <ul class="episode-list">
+            ${episodes.map(ep => {
+              const epNum = ep.episode_number != null ? `S${currentSeason}E${String(ep.episode_number).padStart(2, '0')}` : '—';
+              const playBtn = ep.media_id
+                ? `<button class="ep-play-btn" onclick="event.stopPropagation();navigate('play/${ep.media_id}')">▶ Play</button>`
+                : '';
+              return `<li class="episode-item" onclick="navigate('film/${ep.id}')">
+                <span class="ep-number">${epNum}</span>
+                <span class="ep-title">${esc(ep.title)}</span>
+                ${playBtn}
+              </li>`;
+            }).join('')}
+          </ul>
+        </div>
+      </div>`;
+  }
+
+  // Store season switcher globally
+  window._renderSeriesSeason = function(id, seasonNum) {
+    currentSeason = seasonNum;
+    renderPage();
+  };
+
+  renderPage();
+}
+
+// Global helper called from inline onclick in season tabs
+function renderSeriesSeason(id, seasonNum) {
+  if (window._renderSeriesSeason) window._renderSeriesSeason(id, seasonNum);
 }
 
 function switchListMode(mode) {
