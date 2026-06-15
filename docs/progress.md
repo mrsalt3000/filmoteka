@@ -4,6 +4,50 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: POSTER-001 — 2026-06-15
+
+- Status: `done`
+- Summary: Type-aware OMDB поиск с title cleaning и IMDb ID fallback.
+  - **metadata_providers.py:**
+    - `CleanedTitle` dataclass — title + year
+    - `clean_title_for_omdb(raw)` — удаляет техмаркеры (HDTVRip, WEB-DL, BluRay,
+      x264, 1080p, RUS, DUB, [groups], by_Studio, Main Card, Prelims),
+      нормализует тире/двоеточия/пробелы, извлекает год из скобок
+    - `detect_search_type(title, series_id)` — эвристика: series_id → series,
+      keywords (Season, Episode) → series, иначе movie
+    - `omdb_search_poster_v2(cleaned, api_key, type_)` — multi-step стратегия:
+      1. `?t=<title>&y=<year>&type=<type>` exact match
+      2. `?s=<title>&y=<year>&type=<type>` search + `_pick_best_candidate()`
+      3. `?i=<imdbID>` IMDb ID lookup от лучшего кандидата
+      4. Если type_=None — повтор 1–3 с type=series, затем type=movie
+      5. Финальный fallback: `?s=<title>` без year/type
+    - `_omdb_get()` — добавлен `type_` parameter
+    - `_omdb_get_by_imdb_id()` — новая функция для `?i=` запросов
+    - `_omdb_search()` — добавлен `type_` parameter
+    - Старая `omdb_search_poster()` сохранена без изменений (legacy)
+  - **test_metadata_providers.py:**
+    - `TestCleanTitleForOmdb` — 11 тестов (техмаркеры, broadcast tails, brackets,
+      separators, year, cyrillic, dashes)
+    - `TestDetectSearchType` — 5 тестов (series_id, keywords, movie default)
+    - `TestOmdbSearchPosterV2` — 8 тестов (exact with type, URL params,
+      search→i= fallback, double shot, not found)
+    - Все старые 10 тестов `TestOmdbSearchPoster` продолжают проходить
+- Changed files:
+  - `src/filmoteka/infrastructure/metadata_providers.py` — +CleanedTitle,
+    +clean_title_for_omdb(), +detect_search_type(), +omdb_search_poster_v2(),
+    +_omdb_get_by_imdb_id(), +type_ param на _omdb_get()/_omdb_search()
+  - `tests/unit/test_metadata_providers.py` — +24 новых теста (очистка, тип, v2)
+  - `agent-tasklist.md` — POSTER-001 [x]
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - pytest: 34/34 tests passed (11 cleaner + 5 type + 8 v2 + 10 legacy)
+  - Все unit tests: 166 passed, 3 pre-existing errors (не связаны)
+- Next task:
+  - POSTER-002 — DeepSeek возвращает структурированный type + clean title
+
+---
+
 ## Task Report: SERIES-008 — 2026-06-15
 
 - Status: `done`

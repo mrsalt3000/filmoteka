@@ -1862,3 +1862,84 @@
   Кнопка "▶ Continue" на странице сериала — находит последний
   запущенный (не завершённый) эпизод и запускает плеер.
   Если все эпизоды просмотрены — кнопка "▶ Play from beginning".
+
+---
+
+# 7. Poster search improvements
+
+> Улучшение поиска постеров через OMDB: type-aware запросы, IMDb ID fallback,
+> структурированный DeepSeek alias с типом контента, проводка в pipeline и admin jobs.
+
+- [x] **POSTER-001** Type-aware OMDB поиск с title cleaning и IMDb ID fallback.
+
+  **Проблема:** `omdb_search_poster()` не использует параметр `type=movie|series`
+  и не имеет `i=` (IMDb ID) fallback. Для сериалов OMDB возвращает неверный постер
+  или не находит его. Техмаркеры из filename не чистятся перед запросом.
+
+  **Решение:**
+  - `metadata_providers.py`:
+    - `clean_title_for_omdb(title: str) -> CleanedTitle` — удаляет техмаркеры
+      (HDTVRip, WEB-DL, BluRay, 1080p, RUS, DUB, [группа], Main Card, Prelims),
+      нормализует тире/двоеточия/пробелы, извлекает год из скобок
+    - `detect_search_type(film: Film) -> str | None` — эвристика:
+      `"series"` если `film.series_id` или ключевые слова в title
+      (Season, Episode, Series); `"movie"` иначе; `None` если неясно
+    - Новый `omdb_search_poster_v2(title, year, api_key, type_=None)`:
+      1. `?t=<title>&y=<year>&type=<type>` — exact match
+      2. `?s=<title>&y=<year>&type=<type>` — search с type
+      3. `?i=<imdbID>` — по IMDb ID из лучшего кандидата
+      4. Если type=None — повторить 1–3 с `type=series`, потом `type=movie`
+      5. Fallback как сейчас (s= без year/type)
+  - Старая `omdb_search_poster()` остаётся как fallback (используется в health check
+    и external suggestions)
+  - `tests/`: unit-тесты на cleaner + mock-тесты на search с type + IMDb ID
+
+  Проверка результата:
+  1. Тесты на cleaner: техмаркеры удалены, год извлечён, пробелы нормализованы
+  2. Тесты на search: с type=series возвращается series poster, type=movie — movie
+  3. IMDb ID fallback: после s= результаты фильтруются и i= даёт poster
+  4. Старая `omdb_search_poster()` не сломана
+
+- [ ] **POSTER-002** DeepSeek возвращает структурированный type + clean title.
+
+  **Проблема:** `deepseek_generate_alias()` возвращает только `"Title (Year)"`.
+  Нет информации о типе контента (movie/series/episode). Приходится определять
+  type эвристически, что менее надёжно.
+
+  **Решение:**
+  - `deepseek_provider.py`:
+    - Новая `deepseek_extract_search_info(file_stem: str, api_key: str)`
+      → `dict | None` с полями: `title`, `year`, `type` (movie/series/episode)
+    - Prompt просит JSON: `{"title": "...", "year": ..., "type": "movie"|"series"|"episode"}`
+    - Old `deepseek_generate_alias()` не трогаем (используется в UI alias generation)
+    - Fallback: если DeepSeek недоступен → вызываем `clean_title_for_omdb()`
+  - `tests/`: unit-тест на парсинг JSON-ответа + fallback при None
+
+  Проверка результата:
+  1. `deepseek_extract_search_info("Gravity.Falls.S01E01...")`
+     → `{"title": "Gravity Falls", "year": 2012, "type": "series"}`
+  2. `deepseek_extract_search_info("The.Matrix.1999.1080p...")`
+     → `{"title": "The Matrix", "year": 1999, "type": "movie"}`
+  3. При ошибке DeepSeek — fallback на `clean_title_for_omdb()` с type=None
+  4. Старая `deepseek_generate_alias()` продолжает работать
+
+- [ ] **POSTER-003** Проводка нового поиска в pipeline + admin poster jobs.
+
+  **Проблема:** pipeline и admin poster jobs используют старый `omdb_search_poster()`
+  без type. Новый search и структурированный DeepSeek alias не подключены.
+
+  **Решение:**
+  - `pipeline.py` `_bridge_to_catalog()`:
+    - Заменить `deepseek_generate_alias()` на `deepseek_extract_search_info()`
+    - Передавать `type` в `omdb_search_poster_v2()`
+    - Сохранять `media_alias` = `result["title"]` на MediaFile
+  - `admin.py`:
+    - Обновить `_poster_search_title()` — возвращать `(title, type)`
+    - `_run_fill_missing()` / `_run_refresh_all()` — передавать type
+  - `tests/`: integration-тест pipeline с mocked DeepSeek/OMDB
+
+  Проверка результата:
+  1. Pipeline: для сериалов poster ищется с `type=series`
+  2. Admin poster fill-missing: использует type из `_poster_search_title()`
+  3. Старое поведение для фильмов без DeepSeek не сломано
+  4. Integration-тесты проходят
