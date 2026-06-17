@@ -1303,6 +1303,11 @@
   `filmoteka:filmoteka@localhost:5432/filmoteka_test`. 71 integration
   тестов проходят (1 pre-existing failure — test_keep_edition_removes_other_editions).
 
+- [x] **BUGFIX-029** — Fix `test_keep_edition_removes_other_editions` (data leak).
+
+  Добавлен `.filter(MovieEdition.film_id == f.id)` вместо `.all()`.
+  85 integration тестов проходят.
+
 
 ## 3.12. Provider migration
 

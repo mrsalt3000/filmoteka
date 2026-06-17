@@ -1268,7 +1268,7 @@ class TestAdminConflicts:
         assert body["deleted_media"] == 1
         assert body["deleted_editions"] == 1
 
-        remaining = db_session.query(MovieEdition).all()
+        remaining = db_session.query(MovieEdition).filter(MovieEdition.film_id == f.id).all()
         assert len(remaining) == 1
         assert remaining[0].id == ed_keep.id
 

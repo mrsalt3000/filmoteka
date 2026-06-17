@@ -4,6 +4,22 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-029 — 2026-06-17
+
+- Status: `done`
+- Summary: Fix `test_keep_edition_removes_other_editions` — query filtered by film_id.
+  - `db_session.query(MovieEdition).all()` → `.filter(MovieEdition.film_id == f.id).all()`
+  - 85 integration tests pass (0 failed)
+- Changed files:
+  - `tests/integration/test_admin.py` — 1-line fix
+  - `agent-tasklist.md` — BUGFIX-029 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - pytest integration: 85 passed, 0 failed
+- Next task:
+  - V3-004 — Frontend buttons for DeepSeek enrichment
+
+
 ## Task Report: BUGFIX-028 — 2026-06-17
 
 - Status: `done`
