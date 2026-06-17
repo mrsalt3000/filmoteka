@@ -13,6 +13,7 @@ from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from filmoteka.domain.catalog.models import (
@@ -22,6 +23,7 @@ from filmoteka.domain.catalog.models import (
     MovieEdition,
     Person,
     Series,
+    film_genre,
     film_person,
 )
 from filmoteka.domain.importing.models import (
@@ -285,6 +287,9 @@ def _bridge_to_catalog(
     )
     db.add(media)
     db.flush()
+
+    # Update FTS vector for the film
+    _update_fts_vector(film, db)
     return True
 
 
@@ -444,6 +449,45 @@ def _apply_deepseek_enrichment(
     film.metadata_confidence = 0.9
     film.metadata_enriched_at = datetime.now()
     film.needs_review = False
+
+    _update_fts_vector(film, db)
+
+
+def _update_fts_vector(film: Film, db: Session) -> None:
+    """Rebuild the full-text search vector for *film*.
+
+    Concatenates the film's title, description, episode_title, genre names,
+    and person names into a PostgreSQL ``tsvector`` using the ``russian``
+    text search configuration.
+    """
+    genre_names = (
+        db.query(func.string_agg(Genre.name, " "))
+        .join(film_genre, film_genre.c.genre_id == Genre.id)
+        .filter(film_genre.c.film_id == film.id)
+        .scalar()
+        or ""
+    )
+    person_names = (
+        db.query(func.string_agg(Person.name, " "))
+        .join(film_person, film_person.c.person_id == Person.id)
+        .filter(film_person.c.film_id == film.id)
+        .scalar()
+        or ""
+    )
+
+    text_parts = " ".join(
+        part
+        for part in [
+            film.title or "",
+            film.description or "",
+            film.episode_title or "",
+            genre_names,
+            person_names,
+        ]
+        if part
+    )
+
+    film.fts_vector = func.to_tsvector("russian", text_parts)
 
 
 # ---------------------------------------------------------------------------

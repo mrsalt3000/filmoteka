@@ -457,14 +457,20 @@
 
 ## 3.2. Расширенный поиск и фильтры
 
-- [ ] **V1-008** Реализовать FTS по:
-  - названию,
-  - описанию,
-  - жанрам,
-  - актёрам.
-  
-  Проверка результата:
-  1. Один фильм можно найти несколькими способами.
+- [x] **V1-008** Реализовать FTS (PostgreSQL full-text search).
+
+  - Миграция: `fts_vector TSVECTOR` колонка + GIN index + backfill
+    (title, description, episode_title, genre names, person names).
+  - Film model: `fts_vector` column (TSVECTOR).
+  - `_update_fts_vector(film, db)` в pipeline.py — собирает текст из film +
+    genre/person names, вызывает `to_tsvector('russian', ...)`.
+  - API: q-фильтр заменён с 5 ILIKE на `fts_vector @@ plainto_tsquery`,
+    ordering при q — `ts_rank DESC`.
+  - Admin `update_film` + pipeline (_bridge_to_catalog,
+    _apply_deepseek_enrichment) обновляют FTS вектор.
+  - tests/unit/conftest.py: TSVECTOR→TEXT для SQLite + SQLite функции
+    to_tsvector/plainto_tsquery/ts_rank.
+  - tests/unit/test_enrichment.py: +3 теста TestUpdateFtsVector.
 
 - [x] **V1-009** Реализовать фильтры:
   - по жанру (slug),

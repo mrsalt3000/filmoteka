@@ -1514,6 +1514,11 @@ def update_film(
     db.commit()
     db.refresh(film)
 
+    # Update the FTS vector after film fields/genres/persons may have changed
+    from filmoteka.domain.importing.pipeline import _update_fts_vector
+    _update_fts_vector(film, db)
+    db.commit()
+
     # Reload relations after commit
     rows = (
         db.execute(

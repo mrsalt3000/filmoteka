@@ -4,6 +4,39 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-008 — 2026-06-17
+
+- Status: `done`
+- Summary: PostgreSQL Full-Text Search (FTS) for catalog — replaces 5 ILIKE with tsvector/GIN.
+  - **Migration** (`migrations/versions/6f7a8b9c0d1e_add_fts_vector_to_films.py`):
+    - `fts_vector TSVECTOR` column on `films` + GIN index
+    - Backfill via raw SQL: film.title + description + episode_title + genre names + person names
+  - **Film model** (`src/filmoteka/domain/catalog/models.py`): +`fts_vector` column (TSVECTOR)
+  - **`_update_fts_vector(film, db)`** (`src/filmoteka/domain/importing/pipeline.py`):
+    - Builds tsvector from title, description, episode_title, genre names (via film_genre→Genre), person names (via film_person→Person)
+    - Called after: `_bridge_to_catalog` import, `_apply_deepseek_enrichment`, admin `update_film`
+  - **API** (`src/filmoteka/api/catalog.py`):
+    - q-filter: `fts_vector @@ plainto_tsquery('russian', q)` вместо 5 ILIKE
+    - Ordering: `ts_rank DESC` when `q` present, else `created_at DESC`
+  - **Tests** (`tests/unit/conftest.py`): TSVECTOR → TEXT compiles + SQLite proxy functions (to_tsvector, plainto_tsquery, ts_rank)
+  - **Tests** (`tests/unit/test_enrichment.py`): +3 `TestUpdateFtsVector` tests
+- Changed files:
+  - New: `migrations/versions/6f7a8b9c0d1e_add_fts_vector_to_films.py`
+  - New: `tests/unit/conftest.py`
+  - Modified: `src/filmoteka/domain/catalog/models.py` — +fts_vector
+  - Modified: `src/filmoteka/domain/importing/pipeline.py` — +_update_fts_vector + calls
+  - Modified: `src/filmoteka/api/catalog.py` — FTS q-filter + ts_rank ordering
+  - Modified: `src/filmoteka/api/admin.py` — _update_fts_vector in update_film
+  - Modified: `tests/unit/test_enrichment.py` — +3 FTS tests
+  - Modified: `agent-tasklist.md`, `docs/progress.md`
+- Checks:
+  - ruff: ✅ All checks passed
+  - pytest unit tests: 200 passed, 3 pre-existing errors (test_health — unrelated)
+- Next task:
+  - BUGFIX-027 — remove ffmpeg remux fallback
+  - Or fix `tests/conftest.py` to unblock all integration tests
+
+
 ## Task Report: V1-007 — 2026-06-17
 
 - Status: `done`

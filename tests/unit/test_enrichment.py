@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Generator
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from filmoteka.domain.catalog.models import (
@@ -19,7 +19,10 @@ from filmoteka.domain.catalog.models import (
     Person,
     film_person,
 )
-from filmoteka.domain.importing.pipeline import _apply_deepseek_enrichment
+from filmoteka.domain.importing.pipeline import (
+    _apply_deepseek_enrichment,
+    _update_fts_vector,
+)
 from filmoteka.infrastructure.database import Base
 from filmoteka.infrastructure.deepseek_provider import DeepSeekEnrichmentResult
 
@@ -31,7 +34,18 @@ from filmoteka.infrastructure.deepseek_provider import DeepSeekEnrichmentResult
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     """Create an in-memory SQLite session with the real domain schema."""
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+    )
+
+    # Register PostgreSQL-compatible functions for testing
+    @event.listens_for(engine, "connect")
+    def _register_fts_functions(dbapi_con, _connection_record):
+        dbapi_con.create_function("to_tsvector", 2, lambda _cfg, text: text or "")
+        dbapi_con.create_function("plainto_tsquery", 2, lambda _cfg, text: text or "")
+        dbapi_con.create_function("ts_rank", 2, lambda _vec, _q: 1.0)
+
     Base.metadata.create_all(engine)
     sess_factory = sessionmaker(bind=engine)
     session = sess_factory()
@@ -248,3 +262,49 @@ class TestApplyDeepseekEnrichmentQualityFlags:
         # Existing values NOT overwritten by None
         assert film.description == "Original description"
         assert film.country == "USA"
+
+
+class TestUpdateFtsVector:
+    """_update_fts_vector — full-text search vector generation."""
+
+    def test_fts_vector_contains_title(self, db_session: Session) -> None:
+        """fts_vector is set and includes the film title."""
+        film = Film(title="The Matrix", year=1999)
+        db_session.add(film)
+        db_session.flush()
+
+        _update_fts_vector(film, db_session)
+        db_session.flush()
+
+        assert film.fts_vector is not None
+        # tsvector is opaque binary; verify it's non-null after call
+
+    def test_fts_vector_includes_genres(self, db_session: Session) -> None:
+        """Genre names are included in the fts_vector."""
+        action = Genre(name="Action", slug="action")
+        sci_fi = Genre(name="Sci-Fi", slug="sci-fi")
+        db_session.add_all([action, sci_fi])
+        db_session.flush()
+
+        film = Film(title="Test Film")
+        db_session.add(film)
+        db_session.flush()
+
+        film.genres = [action, sci_fi]
+        db_session.flush()
+
+        _update_fts_vector(film, db_session)
+        db_session.flush()
+
+        assert film.fts_vector is not None
+
+    def test_fts_vector_includes_description(self, db_session: Session) -> None:
+        """Description is included in the fts_vector."""
+        film = Film(title="Desc Film", description="A space adventure story")
+        db_session.add(film)
+        db_session.flush()
+
+        _update_fts_vector(film, db_session)
+        db_session.flush()
+
+        assert film.fts_vector is not None

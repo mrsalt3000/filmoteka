@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import false as sa_false
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from filmoteka.api.auth import get_optional_current_user
@@ -106,17 +106,8 @@ def list_films(
     query = db.query(Film)
 
     if q:
-        query = query.filter(
-            Film.title.ilike(f"%{q}%")
-            | Film.description.ilike(f"%{q}%")
-            | Film.genres.any(Genre.name.ilike(f"%{q}%"))
-            | Film.persons.any(Person.name.ilike(f"%{q}%"))
-            | Film.id.in_(
-                db.query(MovieEdition.film_id)
-                .join(MediaFile)
-                .filter(MediaFile.media_alias.ilike(f"%{q}%"))
-            )
-        )
+        fts_query = func.plainto_tsquery("russian", q)
+        query = query.filter(Film.fts_vector.op("@@")(fts_query))
 
     if genre is not None:
         query = query.filter(Film.genres.any(Genre.slug == genre))
@@ -239,7 +230,16 @@ def list_films(
         query = query.filter(Film.id.notin_(watched_ids))
 
     total = query.count()
-    items = query.order_by(Film.created_at.desc()).offset(skip).limit(limit).all()
+
+    if q:
+        fts_query = func.plainto_tsquery("russian", q)
+        items = (
+            query
+            .order_by(func.ts_rank(Film.fts_vector, fts_query).desc())
+            .offset(skip).limit(limit).all()
+        )
+    else:
+        items = query.order_by(Film.created_at.desc()).offset(skip).limit(limit).all()
 
     return FilmListResponse(
         items=[FilmOut.model_validate(f) for f in items],
