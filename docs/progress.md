@@ -4,6 +4,34 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: POSTER-004 — 2026-06-17
+
+- Status: `done`
+- Summary: Per-file progress table for poster fill-missing / refresh-all.
+  - **admin.py:**
+    - `PosterFileStatus` dataclass — film_id, title, clean_title, year, search_type, status, poster_url, error
+    - `_poster_progress`, `_poster_lock`, `_active_poster_job_id` — module-level state
+    - `_build_poster_progress_entries(films, db)` — pre-populates progress table with search info (queued)
+    - `GET /admin/poster-progress/{job_id}` — returns per-film entries; for completed reads poster_url from DB
+    - `_run_fill_missing()` / `_run_refresh_all()` — now write per-file progress (queued → processing → completed/error) with `should_stop()` cancellation support
+    - `poster_fill_missing` / `poster_refresh_all` endpoints — set `_active_poster_job_id`, clear progress on start
+  - **index.html:**
+    - `runPosterOp()` — rewritten: shows live progress table (columns: #, Title, Clean Title, Year, Type, Status) with 2s polling, colored badges. On completion: final table with Poster URL column.
+  - All old utility functions (`pollJob`, `cancelJob`, `resetAlias`) preserved.
+- Changed files:
+  - `src/filmoteka/api/admin.py` — +PosterFileStatus, +state, +endpoint, +progress in both run functions
+  - `src/filmoteka/static/index.html` — rewritten runPosterOp(), preserved shared utilities
+  - `agent-tasklist.md` — POSTER-004 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - pytest unit tests: 179 passed, 3 pre-existing errors (unrelated)
+- Next task:
+  - V1-007 — enrichment pipeline tests (never written)
+  - OR BUGFIX-027 — remove ffmpeg remux fallback
+  - OR fix tests/conftest.py to unblock integration tests
+
+
 ## Task Report: POSTER-001 — 2026-06-15
 
 - Status: `done`

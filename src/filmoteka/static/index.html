@@ -1626,15 +1626,15 @@ async function runPosterOp(mode, btnLabel) {
   if (!btn || !reportEl) return;
 
   const label = mode === 'fill-missing' ? 'Fill missing posters' : 'Refresh all posters';
+  const endpoint = `/admin/posters/${mode}`;
   if (!confirm(`Start "${label}"? This will query OMDB for each film.`)) return;
 
   btn.disabled = true;
-  btn.textContent = '⏳ Working…';
+  btn.textContent = '⏳ Starting…';
   reportEl.innerHTML = '<div class="spinner">Starting…</div>';
 
   try {
-    const startResp = await apiAuth(`/admin/posters/${mode}`, 'POST');
-
+    const startResp = await apiAuth(endpoint, 'POST');
     if (startResp.status === 'error') {
       reportEl.innerHTML = `<div class="error">${esc(startResp.error || 'Unknown error')}</div>`;
       return;
@@ -1644,20 +1644,128 @@ async function runPosterOp(mode, btnLabel) {
     if (!jobId) throw new Error('No job_id returned');
     loadJobs();
 
-    reportEl.innerHTML = '<div class="spinner">Processing posters… this may take a moment.</div>';
-    const job = await pollJob(jobId);
-    if (job.status === 'completed') {
-      reportEl.innerHTML = buildPosterReportHTML(job.result, label);
-    } else {
-      throw new Error(job.error || 'Unknown error');
+    let jobCompleted = false;
+
+    // Build the progress table shell
+    reportEl.innerHTML = `
+      <div class="transcode-progress-wrap">
+        <h3>${esc(label)} — Progress</h3>
+        <div class="transcode-summary" id="pr-summary">Initialising…</div>
+        <div class="transcode-table-wrap">
+          <table class="transcode-table">
+            <thead><tr><th>#</th><th>Title</th><th>Clean Title</th><th>Year</th><th>Type</th><th>Status</th></tr></thead>
+            <tbody id="pr-tbody"></tbody>
+          </table>
+        </div>
+      </div>`;
+
+    const tbody = document.getElementById('pr-tbody');
+    const summaryEl = document.getElementById('pr-summary');
+
+    // Poll loop: fetch progress + job status every 2s
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Fetch per-file progress
+      let entries = [];
+      try {
+        const pr = await apiAuth(`/admin/poster-progress/${jobId}`);
+        entries = pr.entries || [];
+      } catch { /* keep old entries */ }
+
+      // Update table
+      if (entries.length > 0) {
+        const counts = { queued: 0, processing: 0, completed: 0, error: 0 };
+        entries.forEach(e => { if (counts[e.status] !== undefined) counts[e.status]++; });
+
+        summaryEl.textContent = `${entries.length} films — ` +
+          `${counts.completed} completed, ${counts.processing} processing, ${counts.queued} queued, ${counts.error} errors`;
+
+        const visible = entries.filter(e => e.status !== 'queued' || counts.completed + counts.processing + counts.error === 0);
+        tbody.innerHTML = visible.map((e, i) => {
+          const statusClass = 'tx-' + e.status;
+          const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
+          const errorMsg = e.error ? `<span class="tx-error-msg">: ${esc(e.error)}</span>` : '';
+          return `<tr>
+            <td>${i + 1}</td>
+            <td class="tx-file">${esc(e.title)}</td>
+            <td>${esc(e.clean_title)}</td>
+            <td>${e.year != null ? e.year : '—'}</td>
+            <td>${e.search_type ? esc(e.search_type) : '—'}</td>
+            <td><span class="tx-badge ${statusClass}">${label}</span>${errorMsg}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // Check job status
+      if (jobCompleted) break;
+      try {
+        const job = await apiAuth(`/admin/jobs/${jobId}`);
+        if (job.status === 'completed' || job.status === 'failed') {
+          jobCompleted = true;
+          if (job.status === 'completed') {
+            const r = job.result || {};
+            const errors = r.errors || [];
+
+            // Fetch final enriched progress for the result table
+            let finalEntries = [];
+            try {
+              const pr = await apiAuth(`/admin/poster-progress/${jobId}`);
+              finalEntries = pr.entries || [];
+            } catch { /* fallback to empty */ }
+
+            const resultRows = finalEntries
+              .filter(e => e.status !== 'queued')
+              .map((e, i) => {
+                const statusClass = 'tx-' + e.status;
+                const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
+                const posterTxt = e.poster_url
+                  ? `<a href="${esc(e.poster_url)}" target="_blank" rel="noopener">link</a>`
+                  : '—';
+                const errorMsg = e.error ? `<span class="tx-error-msg">: ${esc(e.error)}</span>` : '';
+                return `<tr>
+                  <td>${i + 1}</td>
+                  <td class="tx-file">${esc(e.title)}</td>
+                  <td>${esc(e.clean_title)}</td>
+                  <td>${e.year != null ? e.year : '—'}</td>
+                  <td>${e.search_type ? esc(e.search_type) : '—'}</td>
+                  <td>${posterTxt}</td>
+                  <td><span class="tx-badge ${statusClass}">${label}</span>${errorMsg}</td>
+                </tr>`;
+              }).join('');
+
+            reportEl.innerHTML = `<div class="admin-report">
+              <h3>${esc(label)} — Complete</h3>
+              <div class="transcode-summary">Total: ${r.total || '?'} | Updated: ${r.updated || '?'} | Skipped: ${r.skipped || '?'} | Errors: ${(errors).length}</div>
+              <div class="transcode-table-wrap" style="max-height:30rem">
+                <table class="transcode-table">
+                  <thead><tr><th>#</th><th>Title</th><th>Clean Title</th><th>Year</th><th>Type</th><th>Poster</th><th>Status</th></tr></thead>
+                  <tbody>${resultRows || '<tr><td colspan="7" style="text-align:center;color:var(--text2)">No films processed.</td></tr>'}</tbody>
+                </table>
+              </div>
+            </div>`;
+          } else {
+            reportEl.innerHTML += `<div class="error" style="margin-top:1rem">${esc(label)} failed: ${esc(job.error || 'Unknown error')}</div>`;
+          }
+          break;
+        }
+      } catch { /* keep polling */ }
     }
+
+    if (!jobCompleted) throw new Error('Job timed out after 20 minutes');
+
   } catch (e) {
-    reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    const existing = reportEl.querySelector('.admin-report, .error');
+    if (!existing) {
+      reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = btnLabel;
   }
 }
+
+// ── Shared poster/scan utilities ──────────────────────────────────
 
 async function pollJob(jobId) {
   for (let i = 0; i < 600; i++) {
@@ -1692,23 +1800,6 @@ async function resetAlias(mediaId, btn) {
     btn.disabled = false;
     btn.textContent = 'Delete';
   }
-}
-
-function buildPosterReportHTML(report, label) {
-  const errors = report.errors || [];
-  return `<div class="admin-report">
-    <h3>${esc(label)} — Complete</h3>
-    <table>
-      <tr><td>Total films</td><td>${report.total}</td></tr>
-      <tr><td>Updated</td><td>${report.updated}</td></tr>
-      <tr><td>Skipped</td><td>${report.skipped}</td></tr>
-    </table>
-    ${errors.length > 0 ? `
-      <div class="report-errors">
-        <strong>Errors (${errors.length})</strong>
-        <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
-      </div>` : ''}
-  </div>`;
 }
 
 // ── DeepSeek Enrichment ────────────────────────────────────────────

@@ -1943,3 +1943,21 @@
   2. Admin poster fill-missing: использует type из `_poster_search_title()`
   3. Старое поведение для фильмов без DeepSeek не сломано
   4. Integration-тесты проходят
+
+- [x] **POSTER-004** Per-file progress table для poster fill-missing / refresh-all.
+
+  Backend: `PosterFileStatus` dataclass, `_poster_progress` dict, `_poster_lock`,
+  `_build_poster_progress_entries()`, `GET /admin/poster-progress/{job_id}`.
+  `_run_fill_missing` и `_run_refresh_all` теперь пишут per-file progress
+  (queued → processing → completed/error) с поддержкой `should_stop()`.
+  Endpoints устанавливают `_active_poster_job_id` и очищают прогресс при старте.
+
+  Frontend: live-таблица с колонками Title, Clean Title, Year, Type, Status.
+  Polling каждые 2 сек. На финише — финальная таблица с колонкой Poster (+link).
+
+  Проверка результата:
+  1. После запуска fill-missing — появляется таблица с per-file прогрессом
+  2. Каждый фильм показывает: original title → clean title → year → type → статус
+  3. В процессе выполнения — live обновление каждые 2 сек
+  4. После завершения — финальная таблица вместо старого суммарного отчёта
+  5. Refresh-all работает аналогично

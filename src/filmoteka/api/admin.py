@@ -827,6 +827,28 @@ _poster_tasks: dict[str, dict[str, object]] = {}
 _POSTER_TASK_ID = "poster-op"
 
 
+# ---------------------------------------------------------------------------
+# Poster job per-file progress
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PosterFileStatus:
+    film_id: int
+    title: str
+    clean_title: str
+    year: int | None
+    search_type: str | None
+    status: str  # "queued" | "processing" | "completed" | "error"
+    poster_url: str | None = None
+    error: str | None = None
+
+
+_poster_progress: dict[int, list[PosterFileStatus]] = {}
+_active_poster_job_id: int | None = None
+_poster_lock = threading.Lock()
+
+
 @router.post("/posters/fill-missing", status_code=202)
 def poster_fill_missing(
     current_user: User = Depends(require_role("admin")),
@@ -846,6 +868,10 @@ def poster_fill_missing(
         "poster_fill_missing", _run_fill_missing,
         session_factory=_background_session_factory,
     )
+    global _active_poster_job_id
+    _active_poster_job_id = job.id
+    with _poster_lock:
+        _poster_progress.clear()
     return {"job_id": job.id, "status": "pending", "type": "poster_fill_missing"}
 
 
@@ -874,8 +900,34 @@ def _poster_search_info(film: Film, db: Session) -> tuple[str, str | None, int |
     return cleaned.title, type_, cleaned.year or film.year
 
 
+def _build_poster_progress_entries(
+    films: list[Film], db: Session,
+) -> list[PosterFileStatus]:
+    """Build initial ``PosterFileStatus`` list for *films* (all queued).
+
+    Each entry is pre-populated with the search info so the frontend
+    can display Clean Title / Year / Type columns immediately.
+    """
+    entries: list[PosterFileStatus] = []
+    for film in films:
+        search_title, search_type, search_year = _poster_search_info(film, db)
+        entries.append(PosterFileStatus(
+            film_id=film.id,
+            title=film.title,
+            clean_title=search_title,
+            year=search_year,
+            search_type=search_type,
+            status="queued",
+        ))
+    return entries
+
+
 def _run_fill_missing(db: Session | None = None) -> dict | None:
-    """Query films without posters and fill via OMDB v2."""
+    """Query films without posters and fill via OMDB v2.
+
+    Progress is written to the in-memory ``_poster_progress`` dict,
+    keyed by the active job id.
+    """
     close = db is None
     if db is None:
         db = SessionLocal()
@@ -887,7 +939,21 @@ def _run_fill_missing(db: Session | None = None) -> dict | None:
         updated = 0
         errors: list[str] = []
 
-        for film in films:
+        # Initialise in-memory progress table (all queued).
+        progress = _build_poster_progress_entries(films, db)
+        job_id = _active_poster_job_id or 0
+        with _poster_lock:
+            _poster_progress[job_id] = progress
+
+        for idx, film in enumerate(films):
+            # ── Check for cancellation ──
+            if should_stop(job_id, _background_session_factory):
+                _logger.info("Poster job %d cancelled — stopping", job_id)
+                break
+
+            with _poster_lock:
+                progress[idx].status = "processing"
+
             try:
                 search_title, search_type, search_year = _poster_search_info(film, db)
                 cleaned = CleanedTitle(search_title, search_year)
@@ -895,8 +961,15 @@ def _run_fill_missing(db: Session | None = None) -> dict | None:
                 if result is not None:
                     film.poster_url, film.poster_source = result
                     updated += 1
+                with _poster_lock:
+                    progress[idx].status = "completed"
+                    if result is not None:
+                        progress[idx].poster_url = result[0]
             except Exception as exc:
                 errors.append(f"Film #{film.id} ({film.title}): {exc}")
+                with _poster_lock:
+                    progress[idx].status = "error"
+                    progress[idx].error = str(exc)
 
         db.commit()
         return {"total": len(films), "updated": updated,
@@ -928,11 +1001,19 @@ def poster_refresh_all(
         "poster_refresh_all", _run_refresh_all,
         session_factory=_background_session_factory,
     )
+    global _active_poster_job_id
+    _active_poster_job_id = job.id
+    with _poster_lock:
+        _poster_progress.clear()
     return {"job_id": job.id, "status": "pending", "type": "poster_refresh_all"}
 
 
 def _run_refresh_all(db: Session | None = None) -> dict | None:
-    """Refresh posters for all films via OMDB v2."""
+    """Refresh posters for all films via OMDB v2.
+
+    Progress is written to the in-memory ``_poster_progress`` dict,
+    keyed by the active job id.
+    """
     close = db is None
     if db is None:
         db = SessionLocal()
@@ -944,7 +1025,21 @@ def _run_refresh_all(db: Session | None = None) -> dict | None:
         updated = 0
         errors: list[str] = []
 
-        for film in films:
+        # Initialise in-memory progress table (all queued).
+        progress = _build_poster_progress_entries(films, db)
+        job_id = _active_poster_job_id or 0
+        with _poster_lock:
+            _poster_progress[job_id] = progress
+
+        for idx, film in enumerate(films):
+            # ── Check for cancellation ──
+            if should_stop(job_id, _background_session_factory):
+                _logger.info("Poster job %d cancelled — stopping", job_id)
+                break
+
+            with _poster_lock:
+                progress[idx].status = "processing"
+
             try:
                 search_title, search_type, search_year = _poster_search_info(film, db)
                 cleaned = CleanedTitle(search_title, search_year)
@@ -952,8 +1047,15 @@ def _run_refresh_all(db: Session | None = None) -> dict | None:
                 if result is not None:
                     film.poster_url, film.poster_source = result
                     updated += 1
+                with _poster_lock:
+                    progress[idx].status = "completed"
+                    if result is not None:
+                        progress[idx].poster_url = result[0]
             except Exception as exc:
                 errors.append(f"Film #{film.id} ({film.title}): {exc}")
+                with _poster_lock:
+                    progress[idx].status = "error"
+                    progress[idx].error = str(exc)
 
         db.commit()
         return {"total": len(films), "updated": updated,
@@ -964,6 +1066,45 @@ def _run_refresh_all(db: Session | None = None) -> dict | None:
     finally:
         if close:
             db.close()
+
+
+@router.get("/poster-progress/{job_id}")
+def get_poster_progress(
+    job_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Return per-film progress for a poster job.
+
+    Returns the list of ``PosterFileStatus`` entries — each entry
+    has ``film_id``, ``title``, ``clean_title``, ``year``, ``search_type``,
+    ``status``, ``poster_url``, and optionally ``error``.  The data lives
+    in memory only and is cleared when a new poster job starts.
+    """
+    with _poster_lock:
+        entries = _poster_progress.get(job_id)
+        if entries is None:
+            return {"entries": [], "total": 0}
+
+        result_entries: list[dict[str, object]] = []
+        for e in entries:
+            poster_url: str | None = None
+            if e.status == "completed":
+                film = db.get(Film, e.film_id)
+                if film is not None:
+                    poster_url = film.poster_url
+            result_entries.append({
+                "film_id": e.film_id,
+                "title": e.title,
+                "clean_title": e.clean_title,
+                "year": e.year,
+                "search_type": e.search_type,
+                "status": e.status,
+                "poster_url": poster_url,
+                "error": e.error,
+            })
+
+        return {"entries": result_entries, "total": len(entries)}
 
 
 # ---------------------------------------------------------------------------
