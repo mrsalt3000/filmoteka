@@ -1713,18 +1713,16 @@
      кнопки показывают сообщение «LLM not configured».
   4. Поиск по алиасу находит фильм.
 
-- [ ] **V3-004** Добавить frontend-кнопки для DeepSeek enrichment в админку.
+- [x] **V3-004** Добавить frontend-кнопки для DeepSeek enrichment в админку.
 
-  Проблема: `POST /admin/enrich/deepseek` и `/enrich/deepseek/all` существуют
-  как API, но в admin UI нет кнопок для их запуска.
+  Backend: +`DeepseekFilmStatus` dataclass, `_deepseek_progress`/`_deepseek_lock`
+  /`_active_enrich_job_id`, `GET /admin/enrich-progress/{job_id}`.
+  `_run_deepseek_enrich` — per-film progress (queued→processing→completed/error)
+  с `should_stop()`.
+  Frontend: live-таблица с колонками #, Film, Status, 2s polling, финальная таблица.
 
-  Решение: добавить секцию "🤖 DeepSeek Enrichment" в админку с двумя
-  кнопками — "Fill missing (DeepSeek)" и "Re-enrich all (DeepSeek)".
-  Pattern как у poster/alias кнопок: confirm → apiAuth → pollJob → отчёт.
-  Без `DEEPSEEK_API_KEY` показывать ошибку из `startResp.error`.
 
-  **Что меняется:**
-  - `index.html` — секция в renderAdmin() + JS функции
+## 3.14. Final acceptance
 
   Проверка результата:
   1. Кнопки видны в админке

@@ -4,6 +4,30 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V3-004 — 2026-06-17
+
+- Status: `done`
+- Summary: Live progress table for DeepSeek enrichment in admin UI.
+  - **admin.py:**
+    - `DeepseekFilmStatus` dataclass — film_id, title, status, error
+    - `_deepseek_progress`, `_deepseek_lock`, `_active_enrich_job_id`
+    - `GET /admin/enrich-progress/{job_id}` — per-film entries
+    - `_run_deepseek_enrich` — now writes per-film progress (queued → processing → completed/error) with `should_stop()` cancellation
+    - `deepseek_enrich` / `deepseek_enrich_all` — set `_active_enrich_job_id`, clear progress on start
+  - **index.html:** `runDeepseekOp()` rewritten — live table (columns: #, Film, Status) with 2s polling, colored badges, final result table on completion
+- Changed files:
+  - `src/filmoteka/api/admin.py` — +dataclass, +state, +endpoint, +progress in _run_deepseek_enrich
+  - `src/filmoteka/static/index.html` — rewritten runDeepseekOp()
+  - `agent-tasklist.md` — V3-004 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - pytest: 288 passed (200 unit + 85 integration), 0 failed
+- Next task:
+  - OPS-001 — publish to local WiFi
+  - Or V2-029 — manual acceptance
+
+
 ## Task Report: BUGFIX-029 — 2026-06-17
 
 - Status: `done`

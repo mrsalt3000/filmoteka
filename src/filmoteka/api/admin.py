@@ -1112,6 +1112,19 @@ def get_poster_progress(
 # ---------------------------------------------------------------------------
 
 
+@dataclass
+class DeepseekFilmStatus:
+    film_id: int
+    title: str
+    status: str  # "queued" | "processing" | "completed" | "error"
+    error: str | None = None
+
+
+_deepseek_progress: dict[int, list[DeepseekFilmStatus]] = {}
+_active_enrich_job_id: int | None = None
+_deepseek_lock = threading.Lock()
+
+
 @router.post("/enrich/deepseek", status_code=202)
 def deepseek_enrich(
     current_user: User = Depends(require_role("admin")),
@@ -1135,6 +1148,10 @@ def deepseek_enrich(
         "deepseek_enrich", _run_deepseek_enrich, False,
         session_factory=_background_session_factory,
     )
+    global _active_enrich_job_id
+    _active_enrich_job_id = job.id
+    with _deepseek_lock:
+        _deepseek_progress.clear()
     return {"job_id": job.id, "status": "pending", "type": "deepseek_enrich"}
 
 
@@ -1160,6 +1177,10 @@ def deepseek_enrich_all(
         "deepseek_enrich_all", _run_deepseek_enrich, True,
         session_factory=_background_session_factory,
     )
+    global _active_enrich_job_id
+    _active_enrich_job_id = job.id
+    with _deepseek_lock:
+        _deepseek_progress.clear()
     return {"job_id": job.id, "status": "pending", "type": "deepseek_enrich_all"}
 
 
@@ -1168,6 +1189,9 @@ def _run_deepseek_enrich(force: bool, db: Session | None = None) -> dict | None:
 
     When *force* is ``False``, only films where ``metadata_source != "deepseek"``
     are processed.  When *force* is ``True``, all films are processed.
+
+    Progress is written to the in-memory ``_deepseek_progress`` dict,
+    keyed by the active job id.
     """
     from filmoteka.domain.importing.pipeline import _apply_deepseek_enrichment
     from filmoteka.infrastructure.deepseek_provider import deepseek_enrich_metadata
@@ -1187,14 +1211,36 @@ def _run_deepseek_enrich(force: bool, db: Session | None = None) -> dict | None:
         updated = 0
         errors: list[str] = []
 
-        for film in films:
+        # Initialise in-memory progress table (all queued).
+        progress: list[DeepseekFilmStatus] = [
+            DeepseekFilmStatus(film_id=f.id, title=f.title, status="queued")
+            for f in films
+        ]
+        job_id = _active_enrich_job_id or 0
+        with _deepseek_lock:
+            _deepseek_progress[job_id] = progress
+
+        for idx, film in enumerate(films):
+            # ── Check for cancellation ──
+            if should_stop(job_id, _background_session_factory):
+                _logger.info("DeepSeek enrich job %d cancelled — stopping", job_id)
+                break
+
+            with _deepseek_lock:
+                progress[idx].status = "processing"
+
             try:
                 result = deepseek_enrich_metadata(film.title, film.year, api_key)
                 if result is not None:
                     _apply_deepseek_enrichment(film, result, db)
                     updated += 1
+                with _deepseek_lock:
+                    progress[idx].status = "completed"
             except Exception as exc:
                 errors.append(f"Film #{film.id} ({film.title}): {exc}")
+                with _deepseek_lock:
+                    progress[idx].status = "error"
+                    progress[idx].error = str(exc)
 
         db.commit()
         return {
@@ -1209,6 +1255,36 @@ def _run_deepseek_enrich(force: bool, db: Session | None = None) -> dict | None:
     finally:
         if close:
             db.close()
+
+
+@router.get("/enrich-progress/{job_id}")
+def get_enrich_progress(
+    job_id: int,
+    current_user: User = Depends(require_role("admin")),
+) -> dict[str, object]:
+    """Return per-film progress for a DeepSeek enrichment job.
+
+    Returns the list of ``DeepseekFilmStatus`` entries — each entry
+    has ``film_id``, ``title``, ``status``, and optionally ``error``.
+    The data lives in memory only and is cleared when a new enrichment
+    job starts.
+    """
+    with _deepseek_lock:
+        entries = _deepseek_progress.get(job_id)
+        if entries is None:
+            return {"entries": [], "total": 0}
+
+        result_entries: list[dict[str, object]] = [
+            {
+                "film_id": e.film_id,
+                "title": e.title,
+                "status": e.status,
+                "error": e.error,
+            }
+            for e in entries
+        ]
+
+        return {"entries": result_entries, "total": len(entries)}
 
 
 # ---------------------------------------------------------------------------

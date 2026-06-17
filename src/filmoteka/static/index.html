@@ -1821,7 +1821,7 @@ async function runDeepseekOp(mode, btnLabel) {
   if (!confirm(`Start "${label}"? This will query DeepSeek for each film.`)) return;
 
   btn.disabled = true;
-  btn.textContent = '⏳ Working…';
+  btn.textContent = '⏳ Starting…';
   reportEl.innerHTML = '<div class="spinner">Starting…</div>';
 
   try {
@@ -1836,29 +1836,111 @@ async function runDeepseekOp(mode, btnLabel) {
     if (!jobId) throw new Error('No job_id returned');
     loadJobs();
 
-    reportEl.innerHTML = '<div class="spinner">Enriching films via DeepSeek… this may take a while.</div>';
-    const job = await pollJob(jobId);
-    if (job.status === 'completed') {
-      const r = job.result;
-      const errors = (r && r.errors) || [];
-      reportEl.innerHTML = `<div class="admin-report">
-        <h3>${esc(label)} — Complete</h3>
-        <table>
-          <tr><td>Total films processed</td><td>${r ? r.total : '?'}</td></tr>
-          <tr><td>Updated</td><td>${r ? r.updated : '?'}</td></tr>
-          <tr><td>Skipped</td><td>${r ? r.skipped : '?'}</td></tr>
-        </table>
-        ${errors.length > 0 ? `
-          <div class="report-errors">
-            <strong>Errors (${errors.length})</strong>
-            <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
-          </div>` : ''}
+    let jobCompleted = false;
+
+    // Build the progress table shell
+    reportEl.innerHTML = `
+      <div class="transcode-progress-wrap">
+        <h3>${esc(label)} — Progress</h3>
+        <div class="transcode-summary" id="ds-summary">Initialising…</div>
+        <div class="transcode-table-wrap">
+          <table class="transcode-table">
+            <thead><tr><th>#</th><th>Film</th><th>Status</th></tr></thead>
+            <tbody id="ds-tbody"></tbody>
+          </table>
+        </div>
       </div>`;
-    } else {
-      throw new Error(job.error || 'Unknown error');
+
+    const tbody = document.getElementById('ds-tbody');
+    const summaryEl = document.getElementById('ds-summary');
+
+    // Poll loop: fetch progress + job status every 2s
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Fetch per-file progress
+      let entries = [];
+      try {
+        const pr = await apiAuth(`/admin/enrich-progress/${jobId}`);
+        entries = pr.entries || [];
+      } catch { /* keep old entries */ }
+
+      // Update table
+      if (entries.length > 0) {
+        const counts = { queued: 0, processing: 0, completed: 0, error: 0 };
+        entries.forEach(e => { if (counts[e.status] !== undefined) counts[e.status]++; });
+
+        summaryEl.textContent = `${entries.length} films — ` +
+          `${counts.completed} completed, ${counts.processing} processing, ${counts.queued} queued, ${counts.error} errors`;
+
+        const visible = entries.filter(e => e.status !== 'queued' || counts.completed + counts.processing + counts.error === 0);
+        tbody.innerHTML = visible.map((e, i) => {
+          const statusClass = 'tx-' + e.status;
+          const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
+          const errorMsg = e.error ? `<span class="tx-error-msg">: ${esc(e.error)}</span>` : '';
+          return `<tr>
+            <td>${i + 1}</td>
+            <td class="tx-file">${esc(e.title)}</td>
+            <td><span class="tx-badge ${statusClass}">${label}</span>${errorMsg}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // Check job status
+      if (jobCompleted) break;
+      try {
+        const job = await apiAuth(`/admin/jobs/${jobId}`);
+        if (job.status === 'completed' || job.status === 'failed') {
+          jobCompleted = true;
+          if (job.status === 'completed') {
+            const r = job.result || {};
+            const errors = r.errors || [];
+
+            // Fetch final enriched progress for the result table
+            let finalEntries = [];
+            try {
+              const pr = await apiAuth(`/admin/enrich-progress/${jobId}`);
+              finalEntries = pr.entries || [];
+            } catch { /* fallback to empty */ }
+
+            const resultRows = finalEntries
+              .filter(e => e.status !== 'queued')
+              .map((e, i) => {
+                const statusClass = 'tx-' + e.status;
+                const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
+                const errorMsg = e.error ? `<span class="tx-error-msg">: ${esc(e.error)}</span>` : '';
+                return `<tr>
+                  <td>${i + 1}</td>
+                  <td class="tx-file">${esc(e.title)}</td>
+                  <td><span class="tx-badge ${statusClass}">${label}</span>${errorMsg}</td>
+                </tr>`;
+              }).join('');
+
+            reportEl.innerHTML = `<div class="admin-report">
+              <h3>${esc(label)} — Complete</h3>
+              <div class="transcode-summary">Total: ${r.total || '?'} | Updated: ${r.updated || '?'} | Skipped: ${r.skipped || '?'} | Errors: ${(errors).length}</div>
+              <div class="transcode-table-wrap" style="max-height:30rem">
+                <table class="transcode-table">
+                  <thead><tr><th>#</th><th>Film</th><th>Status</th></tr></thead>
+                  <tbody>${resultRows || '<tr><td colspan="3" style="text-align:center;color:var(--text2)">No films processed.</td></tr>'}</tbody>
+                </table>
+              </div>
+            </div>`;
+          } else {
+            reportEl.innerHTML += `<div class="error" style="margin-top:1rem">${esc(label)} failed: ${esc(job.error || 'Unknown error')}</div>`;
+          }
+          break;
+        }
+      } catch { /* keep polling */ }
     }
+
+    if (!jobCompleted) throw new Error('Job timed out after 20 minutes');
+
   } catch (e) {
-    reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    const existing = reportEl.querySelector('.admin-report, .error');
+    if (!existing) {
+      reportEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = btnLabel;
