@@ -4,6 +4,23 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: OPS-001 — 2026-06-17
+
+- Status: `done`
+- Summary: LAN/WiFi access documentation and admin widget.
+  - README: секция "🌐 LAN Access" уже существовала (ipconfig, firewall, WSL2 NAT, mDNS)
+  - Admin: `renderNetworkAccess()` — при localhost → инструкция, при LAN IP → URL + QR-код
+  - Cleanup: устаревшие MKV-упоминания в README (после BUGFIX-027) — performance notes, Просмотр, Known issues
+- Changed files:
+  - `README.md` — 3 outdated MKV references fixed
+  - `agent-tasklist.md` — OPS-001 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - Визуальный review README
+- Next task:
+  - V2-029 — manual acceptance
+
+
 ## Task Report: V3-004 — 2026-06-17
 
 - Status: `done`
