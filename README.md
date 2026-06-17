@@ -89,10 +89,16 @@ curl -X POST http://localhost:8000/admin/import/scan \
 
 - `GET /films` — список фильмов с пагинацией, фильтрацией и поиском
 - `GET /films/{id}` — карточка фильма (описание, жанры, актёры, версии, файлы)
-- `GET /films?q=...` — поиск по названию, описанию, жанрам, актёрам
+- `GET /films?q=...` — полнотекстовый поиск по названию, описанию, жанрам,
+  актёрам (PostgreSQL FTS, русский словарь, ранжирование по релевантности)
 - `GET /films?genre=...&year_from=...&year_to=...` — фильтры
+- `GET /films?resolution=...&codec=...&audio_codec=...` — технические фильтры
+- `GET /films?has_subtitles=true&audio_lang=...&subtitle_lang=...` — языковые
 - `GET /films?is_family_video=true` — семейное видео
 - `GET /films?include_family=true` — показать семейное видео в общей выдаче
+- `GET /series` — список сериалов с количеством эпизодов
+- `GET /series/{id}` — детальная страница сериала (сезоны, эпизоды)
+- `GET /series/{id}/episodes?season=N` — эпизоды конкретного сезона
 
 ### Просмотр
 
@@ -131,8 +137,14 @@ Child-аккаунты: возрастная группа `age_group` (0_6, 7_12
 
 Все admin-эндпоинты доступны только с ролью `admin`:
 - `POST /admin/import/scan` — запустить импорт (фоновый job, 202)
+- `POST /admin/import/reconcile` — очистка осиротевших MediaFile/edition/film
 - `POST /admin/posters/fill-missing` — заполнить отсутствующие постеры
-- `POST /admin/posters/refresh-all` — обновить все постеры
+- `POST /admin/posters/refresh-all` — обновить все постеры (live progress table)
+- `POST /admin/aliases/generate` — генерация алиасов через DeepSeek (live progress)
+- `POST /admin/aliases/generate-all` — ре-генерация всех алиасов
+- `POST /admin/enrich/deepseek` — обогащение метаданных DeepSeek (live progress)
+- `POST /admin/enrich/deepseek/all` — переобогатить все фильмы
+- `POST /admin/media/transcode-audio` — транскодирование AC3→AAC (live progress)
 - `GET /admin/conflicts` — конфликты дедупликации
 - `PATCH /admin/conflicts/{id}/resolve` — разрешить конфликт
 - `POST /admin/media/reindex` — переиндексация путей
@@ -140,6 +152,7 @@ Child-аккаунты: возрастная группа `age_group` (0_6, 7_12
 - `GET /admin/backups` — список backup-файлов
 - `POST /admin/restore/{filename}` — восстановить из backup
 - `GET /admin/jobs` / `GET /admin/jobs/{id}` — статусы фоновых задач
+- `POST /admin/jobs/{id}/cancel` — отмена фоновой задачи
 - `GET /admin/watch-stats` — статистика просмотров
 
 ### Health check

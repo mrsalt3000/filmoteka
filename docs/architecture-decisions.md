@@ -49,6 +49,11 @@
 | ADR-016 | OMDB replaces TMDb as poster source | accepted | 2026-06-10 |
 | ADR-017 | Scan-only import (no copy/move) | accepted | 2026-06-10 |
 | ADR-018 | Caddy reverse proxy + public health endpoint | accepted | 2026-06-10 |
+| ADR-019 | TV Series as separate entity | accepted | 2026-06-17 |
+| ADR-020 | Multi-step poster search with type detection | accepted | 2026-06-17 |
+| ADR-021 | In-memory progress dict for batch operations | accepted | 2026-06-17 |
+| ADR-022 | PostgreSQL full-text search replacing ILIKE | accepted | 2026-06-17 |
+| ADR-023 | Remove ffmpeg remux (superseded by transcode pipeline) | accepted | 2026-06-17 |
 
 ---
 
@@ -110,6 +115,198 @@
 ---
 
 # Accepted Decisions
+
+## ADR-019: TV Series as separate entity
+
+- Status: `accepted`
+- Date: `2026-06-17`
+- Deciders: mrsalt3000
+- Related:
+  - Tasklist items: SERIES-001, SERIES-002, SERIES-003, SERIES-004
+  - Supersedes: (none — new feature)
+
+### Context
+
+90 из 164 фильмов в библиотеке — эпизоды 5 сериалов (Gravity Falls,
+The Mandalorian, Andor, Ahsoka, Obi Wan Kenobi). Каждый эпизод хранится
+как отдельный Film с названием вида "Gravity Falls S01E01 IVI SOFCJ".
+На главной странице каталога все 164 элемента показываются как
+отдельные карточки.
+
+### Decision
+
+Создать отдельную сущность `Series` с собственным ID, названием,
+постером. На `Film` добавить поля `series_id` (FK → series.id),
+`season_number`, `episode_number`, `episode_title`. Во время импорта
+(filename_parser → _bridge_to_catalog) эпизоды автоматически
+группируются в Series.
+
+### Options considered
+
+1. **Отдельная таблица Series + поля на Film** ← выбрано
+   - Прозрачная модель, простой API, FK integrity
+2. **Группировка через теги/категории** — сложнее поддерживать,
+   нет FK integrity
+3. **Только текстовое поле series_name на Film** — не масштабируется,
+   сложно для API
+
+### Consequences
+
+- Positive: одна карточка на сериал на главной, навигация по сезонам,
+  prev/next в плеере
+- Negative: импорт требует find-or-create Series, ++сложность
+  filename_parser
+
+
+## ADR-020: Multi-step poster search with type detection
+
+- Status: `accepted`
+- Date: `2026-06-17`
+- Deciders: mrsalt3000
+- Related:
+  - Tasklist items: POSTER-001, POSTER-002, POSTER-003
+
+### Context
+
+OMDB API ищет постер по названию, но многие поиски не дают результата
+из-за технических маркеров в названии (HDTVRip, WEB-DL, 1080p, RUS, DUB),
+неправильного типа (movie vs series) и отсутствия IMDb ID.
+
+### Decision
+
+Реализовать 3-шаговый поиск:
+1. **Clean title**: удалить технические маркеры из названия перед поиском
+2. **Type detection**: определить movie/series по эвристикам (season/episode
+   keywords) и году
+3. **IMDb ID fallback**: если title+year не дал результата — использовать
+   DeepSeek-структурированный запрос для получения IMDb ID, затем поиск
+   по `?i=imdbID`
+
+### Options considered
+
+1. **Одношаговый `?t=title&y=year`** — базовый, не находит много постеров
+2. **Многошаговый с type + IMDb ID** ← выбрано
+3. **Поиск через несколько API (OMDB + TMDb)** — избыточно, OMDB достаточно
+
+### Consequences
+
+- Positive: значительно больше постеров находится, особенно для сериалов
+- Negative: увеличение времени поиска (3 запроса вместо 1), зависимость
+  от DeepSeek для IMDb ID
+
+
+## ADR-021: In-memory progress dict for batch operations
+
+- Status: `accepted`
+- Date: `2026-06-17`
+- Deciders: mrsalt3000
+- Related:
+  - Tasklist items: POSTER-004, V3-004, BUGFIX-017
+
+### Context
+
+Фоновые batch-операции (алиасы, постеры, enrichment, транскодинг)
+длятся минуты. Пользователь видит только финальный summary. Невозможно
+отследить, какие файлы обрабатываются и какие упали с ошибкой.
+
+### Decision
+
+Хранить per-item прогресс в in-memory dict (module-level), ключ — job_id.
+Структура: `dict[int, list[FileStatus]]`, где `FileStatus` — dataclass
+с полями (id, name, status, error). Endpoint `GET /admin/{op}-progress/{id}`
+отдаёт текущее состояние. Фронтенд polling каждые 2 секунды.
+
+### Options considered
+
+1. **In-memory dict** ← выбрано — простота, не требует БД/Redis,
+   достаточно для одного admin-пользователя
+2. **Progress в БД (background_jobs.result)** — сложнее, запись на
+   каждый элемент дорого
+3. **Redis pub/sub** — избыточно для текущих потребностей
+
+### Consequences
+
+- Positive: live-таблицы, простой код, переиспользуемый паттерн
+- Negative: прогресс теряется при рестарте API, только для одного
+  admin-пользователя
+
+
+## ADR-022: PostgreSQL full-text search replacing ILIKE
+
+- Status: `accepted`
+- Date: `2026-06-17`
+- Deciders: mrsalt3000
+- Related:
+  - Tasklist items: V1-008
+
+### Context
+
+Поиск по каталогу использовал `ILIKE '%q%'` с пятикратным OR через
+Film.title, Film.description, Genre.name, Person.name, MediaFile.media_alias.
+`ILIKE` не использует индексы при `%q%`, медленный на больших данных,
+не ранжирует результаты.
+
+### Decision
+
+Добавить колонку `fts_vector` (TSVECTOR) + GIN-индекс на films.
+Вектор включает title, description, episode_title, genre names,
+person names. При поиске `?q=...` используем
+`fts_vector @@ plainto_tsquery('russian', q)` и ранжируем по
+`ts_rank DESC`. Функция `_update_fts_vector()` обновляет вектор
+после импорта, enrichment и admin-редактирования.
+
+### Options considered
+
+1. **ILIKE (status quo)** — просто, но не масштабируется
+2. **`fts_vector` + GIN** ← выбрано — нативная PostgreSQL FTS,
+   русский стемминг, ранжирование
+3. **Elasticsearch** — избыточно для локального архива
+
+### Consequences
+
+- Positive: релевантное ранжирование, русский стемминг, быстрый поиск
+- Negative: нужно обновлять `fts_vector` при изменении данных,
+  миграция для существующих данных
+
+
+## ADR-023: Remove ffmpeg remux (superseded by transcode pipeline)
+
+- Status: `accepted`
+- Date: `2026-06-17`
+- Deciders: mrsalt3000
+- Related:
+  - Tasklist items: BUGFIX-009, BUGFIX-027
+  - Supersedes: (the old ffmpeg pipe approach from V1)
+
+### Context
+
+BUGFIX-009 заменил on-the-fly ffmpeg pipe для MKV (fragmented MP4
+с `empty_moov`/`delay_moov`) на двухшаговый транскодинг:
+AC3→AAC → MKV→MP4 с `+faststart`. После транскодирования `.tr.mp4`
+is served via FileResponse с полноценной поддержкой Range-запросов.
+Ремукс-код в `media.py` стал dead code — он не вызывается, если
+все файлы прошли транскодирование.
+
+### Decision
+
+Удалить `_ffmpeg_remux_stream()`, `_ffmpeg_available()`, MKV-415 guard,
+MKV probe+remux block из `stream_media()`. MKV без `.tr.mp4` теперь
+передаётся через FileResponse — браузер сам решает, может ли его
+воспроизвести.
+
+### Options considered
+
+1. **Оставить dead code** — запутывает код, ложные ожидания
+2. **Удалить** ← выбрано — чистота кода, понятное поведение
+3. **Переписать на новый ffmpeg pipe** — не нужно, транскодинг
+   решает проблему
+
+### Consequences
+
+- Positive: -125 строк мёртвого кода, проще `stream_media()`
+- Negative: файлы MKV без `.tr.mp4` не открываются в браузерах
+  без поддержки контейнера (Edge поддерживает, Chrome/Firefox нет)
+
 
 ## ADR-001: Modular monolith as initial architecture
 

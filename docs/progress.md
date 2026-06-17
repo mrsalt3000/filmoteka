@@ -4,6 +4,26 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-030 — 2026-06-17
+
+- Status: `done`
+- Summary: Final documentation update.
+  - **README.md** — обновлён: FTS search, series API, progress tables, admin endpoints
+  - **docs/test-runbook.md** — свежие цифры (200 unit, 273+ integration), acceptance section, cheatsheet
+  - **docs/architecture-decisions.md** — +5 ADR (TV Series, poster search, progress dict, FTS, remux removal)
+  - **AGENTS.md** — без изменений (актуален)
+- Changed files:
+  - `README.md` — FTS, series, admin docs
+  - `docs/test-runbook.md` — переписан
+  - `docs/architecture-decisions.md` — +5 ADRs
+  - `agent-tasklist.md` — V2-030 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - Визуальный review всех документов
+- Next task:
+  - (all V2 tasks complete) — project is feature-complete
+
+
 ## Task Report: V2-029 — 2026-06-17
 
 - Status: `done`
