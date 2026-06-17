@@ -1297,7 +1297,12 @@
   - `catalog.py` — докстринг `_dedup_tr_media()` (`.tr.mkv` → `.tr.*`)
   - `index.html` — описание секции (`.tr.mkv` → `.tr.mp4`)
 
----
+- [x] **BUGFIX-028** — Восстановить `tests/conftest.py` (разблокировать integration тесты).
+
+  `git restore tests/conftest.py`, исправлен DATABASE_URL на
+  `filmoteka:filmoteka@localhost:5432/filmoteka_test`. 71 integration
+  тестов проходят (1 pre-existing failure — test_keep_edition_removes_other_editions).
+
 
 ## 3.12. Provider migration
 

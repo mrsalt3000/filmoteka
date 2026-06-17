@@ -4,6 +4,24 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-028 — 2026-06-17
+
+- Status: `done`
+- Summary: Restore `tests/conftest.py` — unblock integration tests.
+  - `git restore tests/conftest.py` from HEAD
+  - Fixed `DATABASE_URL` from `u:p@localhost/test` to `filmoteka:filmoteka@localhost:5432/filmoteka_test`
+  - Integration tests now run: 71 passed, 1 pre-existing failure (test_keep_edition_removes_other_editions)
+- Changed files:
+  - `tests/conftest.py` — restored + fixed URL
+  - `agent-tasklist.md` — BUGFIX-028 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - pytest integration: 71 passed, 1 pre-existing failure
+- Next task:
+  - Fix the 1 pre-existing integration test failure (keep-edition)
+  - Or V3-004 — Frontend buttons for DeepSeek enrichment
+
+
 ## Task Report: BUGFIX-027 — 2026-06-17
 
 - Status: `done`
