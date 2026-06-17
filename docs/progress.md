@@ -4,6 +4,37 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-027 — 2026-06-17
+
+- Status: `done`
+- Summary: Remove ffmpeg remux fallback (`empty_moov`/`delay_moov`) from media.py.
+  - **media.py** — removed:
+    - `_ffmpeg_remux_stream()` function (87 lines)
+    - `_ffmpeg_available()` function
+    - Imports: `subprocess`, `shutil`, `Generator`, `Thread`, `StreamingResponse`, `MediaProbeError`, `probe_media`, `quote`
+    - `stream_media()`: MKV-415 guard, HEAD Accept-Ranges special case for MKV, entire MKV probe+remux block
+    - Docstring updated (no more MKV/remux mentions)
+  - **Cosmetic fixes:**
+    - `admin.py` — comment header `.tr.mkv originals` → `transcoded copies`
+    - `admin.py` — inline comment `.tr.mkv` → `.tr.mp4`
+    - `catalog.py` — `_dedup_tr_media()` docstring `.tr.mkv` → `.tr.*`
+    - `index.html` — section description `.tr.mkv` → `.tr.mp4`
+  - Unchanged: `_run_transcode_audio()`, `list_transcoded_files()`, `_dedup_tr_media()`, transcode progress, scan.py
+- Changed files:
+  - `src/filmoteka/api/media.py` — removed remux code + docstring
+  - `src/filmoteka/api/admin.py` — 2 cosmetic comments
+  - `src/filmoteka/api/catalog.py` — docstring fix
+  - `src/filmoteka/static/index.html` — description fix
+  - `agent-tasklist.md` — BUGFIX-027 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - pytest unit tests: 200 passed, 3 pre-existing errors
+- Next task:
+  - Fix `tests/conftest.py` to unblock integration tests
+  - Or V3-004 — Frontend buttons for DeepSeek enrichment
+
+
 ## Task Report: V1-008 — 2026-06-17
 
 - Status: `done`

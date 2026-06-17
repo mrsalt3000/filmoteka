@@ -745,7 +745,7 @@ def admin_delete_media(
 
 
 # ---------------------------------------------------------------------------
-# Transcoded files — list and manage .tr.mkv originals
+# Transcoded files — list and manage transcoded copies
 # ---------------------------------------------------------------------------
 
 
@@ -771,7 +771,7 @@ def list_transcoded_files(
             continue
 
         # Reconstruct original path: remove the .tr suffix component
-        # e.g. "file.tr.mkv" → stem="file.tr" → original_stem="file"
+        # e.g. "file.tr.mp4" → stem="file.tr" → original_stem="file"
         original_stem = p.stem[:-3] if p.stem.endswith(".tr") else p.stem
         original_path = p.parent / f"{original_stem}{p.suffix}"
 

@@ -5,15 +5,10 @@
 from __future__ import annotations
 
 import logging
-import shutil
-import subprocess
-from collections.abc import Generator
 from pathlib import Path
-from threading import Thread
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Session, joinedload
 
@@ -35,7 +30,6 @@ from filmoteka.domain.catalog.models import Film, MediaFile, MovieEdition
 from filmoteka.domain.watching.models import WatchEvent
 from filmoteka.infrastructure.database import get_db
 from filmoteka.infrastructure.library_config import LibraryConfig
-from filmoteka.infrastructure.media_probe import MediaProbeError, probe_media
 
 _logger = logging.getLogger(__name__)
 
@@ -60,104 +54,6 @@ _MIME_MAP: dict[str, str] = {
 def _mime_type(suffix: str) -> str:
     """Return the MIME type for a given file extension suffix."""
     return _MIME_MAP.get(suffix.lower(), "application/octet-stream")
-
-
-def _ffmpeg_available() -> bool:
-    """Return ``True`` if ``ffmpeg`` is found on ``PATH``."""
-    return shutil.which("ffmpeg") is not None
-
-
-# ---------------------------------------------------------------------------
-# FFmpeg remux streaming
-# ---------------------------------------------------------------------------
-
-
-def _ffmpeg_remux_stream(
-    path: Path,
-    *,
-    delay_moov: bool = False,
-    display_name: str | None = None,
-) -> StreamingResponse:
-    """Remux *path* (typically .mkv) to fragmented MP4 via ffmpeg.
-
-    Uses stream copy (no re-encoding) so it is fast and lossless.
-    The output is a fragmented MP4 that browsers can play progressively.
-
-    Set *delay_moov* to ``True`` for files with AC3/E-AC3 audio tracks
-    to work around an ffmpeg incompatibility with ``empty_moov`` + AC3.
-    Without this flag the browser receives full duration metadata in the
-    init segment, enabling a proper seekable progress bar.
-
-    *display_name* is used for the ``Content-Disposition`` header.
-    Defaults to ``path.stem``.
-    """
-    _base_movflags = "frag_keyframe+empty_moov+default_base_moof"
-    movflags = _base_movflags + "+delay_moov" if delay_moov else _base_movflags
-
-    stem = display_name or path.stem
-
-    def generate() -> Generator[bytes, None, None]:
-        cmd = [
-            "ffmpeg",
-            "-i", str(path),
-            "-c", "copy",
-            "-f", "mp4",
-            "-movflags", movflags,
-            "pipe:1",
-        ]
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        stderr_lines: list[str] = []
-
-        def _read_stderr() -> None:
-            for line in process.stderr or []:
-                stderr_lines.append(line.decode("utf-8", errors="replace"))
-
-        stderr_thread = Thread(target=_read_stderr, daemon=True)
-        stderr_thread.start()
-
-        bytes_yielded = 0
-        try:
-            stdout = process.stdout
-            if stdout is None:
-                return
-            while True:
-                chunk = stdout.read(65536)
-                if not chunk:
-                    break
-                bytes_yielded += len(chunk)
-                yield chunk
-        finally:
-            process.terminate()
-            process.wait()
-            stderr_thread.join(timeout=2)
-
-        # If ffmpeg produced only the init segment (< 10 KB) something
-        # went wrong — log the full error for diagnostics.
-        if bytes_yielded < 10000:
-            err_text = "".join(stderr_lines).strip()
-            _logger.warning(
-                "ffmpeg remux produced only %d bytes for %s — likely a codec "
-                "incompatibility: %s",
-                bytes_yielded, path.name, err_text,
-            )
-        elif stderr_lines:
-            _logger.info(
-                "ffmpeg remux stderr for %s: %s",
-                path.name, "".join(stderr_lines)[:500],
-            )
-
-    return StreamingResponse(
-        generate(),
-        media_type="video/mp4",
-        headers={
-            "Content-Disposition": f"inline; filename*=UTF-8''{quote(stem + '.mp4', safe='')}",
-            "Accept-Ranges": "none",
-        },
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +109,7 @@ def stream_media(
     request: Request,
     db: Session = Depends(get_db),
     config: LibraryConfig = Depends(get_library_config),
-) -> FileResponse | Response | StreamingResponse:
+) -> FileResponse | Response:
     """Stream a media file by its ID.
 
     Supports two HTTP methods:
@@ -221,16 +117,8 @@ def stream_media(
     - **HEAD**: returns headers only (no body) for availability checks.
     - **GET**: returns the media content.
 
-    For native browser formats (MP4, WebM) the file is served via
-    ``FileResponse`` with native Range-header seek support.
-
-    For MKV files, if ``ffmpeg`` is available on ``PATH``, the file is
-    remuxed to fragmented MP4 on the fly (stream copy, no re-encode)
-    via ``StreamingResponse``.  Range-header seeking is not supported
-    in this mode.
-
-    If MKV and ffmpeg is not available, returns 415 Unsupported Media
-    Type.
+    All supported formats are served via ``FileResponse`` with native
+    Range-header seek support.
 
     If the stored file path does not resolve, the function attempts to
     locate the file by name under the configured library root and updates
@@ -265,43 +153,16 @@ def stream_media(
     suffix = path.suffix.lower()
     mime = _mime_type(suffix)
 
-    # MKV without ffmpeg is unsupported
-    if suffix == ".mkv" and not _ffmpeg_available():
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="MKV format is not supported in browser",
-        )
-
     # HEAD — return minimal headers without body
     if request.method == "HEAD":
         return Response(
             headers={
                 "Content-Type": mime,
-                "Accept-Ranges": "none" if suffix == ".mkv" else "bytes",
+                "Accept-Ranges": "bytes",
             },
         )
 
-    # MKV with ffmpeg — streaming remux
-    if suffix == ".mkv":
-        # Probe audio codec: AC3/E-AC3 needs delay_moov to avoid
-        # "Cannot write moov atom before AC3 packets" error.
-        # Without delay_moov the init segment carries full duration
-        # metadata, enabling a proper seekable progress bar.
-        use_delay_moov = True  # safe default
-        try:
-            probe = probe_media(path)
-            if probe.audio_codec and probe.audio_codec.lower() in ("ac3", "eac3"):
-                use_delay_moov = True
-            else:
-                use_delay_moov = False
-        except MediaProbeError:
-            _logger.warning("ffprobe failed for %s, falling back to delay_moov", path.name)
-
-        return _ffmpeg_remux_stream(
-            path, delay_moov=use_delay_moov, display_name=media.media_alias,
-        )
-
-    # All other formats — standard FileResponse with Range support
+    # All formats — standard FileResponse with Range support
     display_name = media.media_alias or path.name
     return FileResponse(
         path=path,

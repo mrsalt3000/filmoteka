@@ -248,8 +248,8 @@ def list_films(
 
 
 def _dedup_tr_media(media_files: Sequence[MediaFile]) -> list[MediaFile]:
-    """If both ``file.mkv`` and ``file.tr.mkv`` exist in the same edition,
-    keep only the ``.tr.mkv`` version (hide the original).
+    """If both ``file.mkv`` and ``file.tr.mkv`` (or ``file.mp4`` and ``file.tr.mp4``)
+    exist in the same edition, keep only the ``.tr.*`` version (hide the original).
 
     Files without a ``.tr`` counterpart are returned as-is.
     """
