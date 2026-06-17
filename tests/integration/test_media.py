@@ -122,65 +122,46 @@ class TestStreamMedia:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "video/x-msvideo"
 
-    def test_stream_mkv_without_ffmpeg_returns_415(
+    def test_stream_mkv_returns_file(
         self, client: TestClient, db_session: Session, tmp_path: Path
     ) -> None:
-        """MKV without ffmpeg returns 415."""
+        """MKV is now served via FileResponse (no remux)."""
         video = tmp_path / "movie.mkv"
-        video.write_bytes(b"fake mkv")
+        video.write_bytes(b"fake mkv content")
         media = self._create_media(db_session, str(video))
 
-        with patch("filmoteka.api.media._ffmpeg_available", return_value=False):
-            resp = client.get(f"/media/{media.id}/stream")
-        assert resp.status_code == 415
-        assert "MKV" in resp.text
-
-    def test_head_mkv_without_ffmpeg_returns_415(
-        self, client: TestClient, db_session: Session, tmp_path: Path
-    ) -> None:
-        """HEAD for MKV without ffmpeg also returns 415."""
-        video = tmp_path / "movie.mkv"
-        video.write_bytes(b"fake mkv")
-        media = self._create_media(db_session, str(video))
-
-        with patch("filmoteka.api.media._ffmpeg_available", return_value=False):
-            resp = client.head(f"/media/{media.id}/stream")
-        assert resp.status_code == 415
-
-    def test_head_mkv_with_ffmpeg_returns_ok(
-        self, client: TestClient, db_session: Session, tmp_path: Path
-    ) -> None:
-        """HEAD for MKV with ffmpeg returns 200 and correct MIME."""
-        video = tmp_path / "movie.mkv"
-        video.write_bytes(b"fake mkv")
-        media = self._create_media(db_session, str(video))
-
-        with patch("filmoteka.api.media._ffmpeg_available", return_value=True):
-            resp = client.head(f"/media/{media.id}/stream")
+        resp = client.get(f"/media/{media.id}/stream")
         assert resp.status_code == 200
-        # MIME is still video/x-matroska for the HEAD check
         assert resp.headers["content-type"] == "video/x-matroska"
+        assert resp.content == b"fake mkv content"
+
+    def test_head_mkv_returns_headers(
+        self, client: TestClient, db_session: Session, tmp_path: Path
+    ) -> None:
+        """HEAD for MKV returns headers like any other format."""
+        video = tmp_path / "movie.mkv"
+        video.write_bytes(b"fake mkv")
+        media = self._create_media(db_session, str(video))
+
+        resp = client.head(f"/media/{media.id}/stream")
+        assert resp.status_code == 200
+        assert resp.headers.get("content-type") == "video/x-matroska"
 
     def test_mkv_with_cyrillic_filename_does_not_500(
         self, client: TestClient, db_session: Session, tmp_path: Path
     ) -> None:
-        """MKV with a non-ASCII filename returns 200 (not 500) when ffmpeg
-        is available.  Regression test for a bug where ``path.stem`` was
-        embedded directly in the ``Content-Disposition`` header, which
-        must be latin-1."""
+        """MKV with a non-ASCII filename returns 200 (not 500) when served
+        via FileResponse.  Regression test for the old bug where
+        ``path.stem`` was embedded directly in the ``Content-Disposition``
+        header."""
         video = tmp_path / "Начало.mkv"
         video.write_bytes(b"fake mkv")
         media = self._create_media(db_session, str(video))
 
-        with patch("filmoteka.api.media._ffmpeg_available", return_value=True):
-            resp = client.get(f"/media/{media.id}/stream")
-        # 200 means the StreamingResponse was constructed successfully;
-        # actual body comes from ffmpeg which isn't really running.
+        resp = client.get(f"/media/{media.id}/stream")
         assert resp.status_code == 200
-        # Content-Disposition header must be present and valid
-        disp = resp.headers.get("content-disposition", "")
-        assert "filename*=UTF-8''" in disp
-        assert "%D0%9D%D0%B0%D1%87%D0%B0%D0%BB%D0%BE" in disp
+        assert resp.headers["content-type"] == "video/x-matroska"
+        assert resp.headers.get("accept-ranges") == "bytes"
 
 
 class TestStreamMediaAutoFix:

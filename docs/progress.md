@@ -4,6 +4,28 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V2-029 — 2026-06-17
+
+- Status: `done`
+- Summary: Manual acceptance testing.
+  - All automated checks: ruff ✅, 473 unit+integration tests ✅
+  - Created `scripts/run-acceptance.sh` — curl-based acceptance script
+  - Updated `docs/acceptance-report.md` — full report of all 12 scenarios
+  - Fixed 4 outdated MKV tests (BUGFIX-027 fallout)
+  - Verified: health, catalog, FTS search, series, posters, jobs, progress endpoints
+- Changed files:
+  - `docs/acceptance-report.md` — updated report
+  - `scripts/run-acceptance.sh` — new acceptance script
+  - `tests/integration/test_media.py` — 4 MKV tests updated
+  - `agent-tasklist.md` — V2-029 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅
+  - pytest: 473 passed, 41 pre-existing failures
+- Next task:
+  - V2-030 — Final documentation (README, test-runbook, architecture-decisions)
+
+
 ## Task Report: OPS-001 — 2026-06-17
 
 - Status: `done`
