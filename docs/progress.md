@@ -4,6 +4,36 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: V1-007 — 2026-06-17
+
+- Status: `done`
+- Summary: Unit tests for enrichment pipeline — `deepseek_enrich_metadata()` provider and `_apply_deepseek_enrichment()` normalization.
+  - **test_deepseek_provider.py**: +`TestDeepseekEnrichMetadata` class (9 tests):
+    - Happy path (full response → `DeepSeekEnrichmentResult`)
+    - Minimal response (no actors/country)
+    - Markdown-wrapped JSON parsing
+    - Genre not a list (graceful handling)
+    - Non-200 / network error / empty choices / empty content / invalid JSON → `None`
+  - **test_enrichment.py**: new file (9 tests) using real domain models (Film, Genre, Person) with in-memory SQLite:
+    - Genre upsert: new genre created with correct slug, existing genre reused, empty genres
+    - Person upsert: new person created, existing person reused, duplicate link skipped
+    - Quality flags: `source="deepseek"`, `confidence=0.9`, `enriched_at` set, `needs_review=False`
+    - Text fields: description/country set, existing values preserved on `None`
+- Changed files:
+  - `tests/unit/test_deepseek_provider.py` — +9 enrichment tests
+  - `tests/unit/test_enrichment.py` — new file, 9 tests
+  - `agent-tasklist.md` — V1-007 `[x]`
+  - `docs/progress.md` (this report)
+- Checks:
+  - ruff: ✅ All checks passed
+  - pytest unit tests: 197 passed, 3 pre-existing errors (unrelated — test_health needs conftest)
+- Not done: integration tests for admin enrichment endpoints (`tests/conftest.py` deleted from git, 31 pre-existing failures)
+- Next task:
+  - V1-008 — FTS search for title/description/genres/actors
+  - Or BUGFIX-027 — remove ffmpeg remux fallback
+  - Or fix `tests/conftest.py` to unblock all integration tests
+
+
 ## Task Report: POSTER-004 — 2026-06-17
 
 - Status: `done`

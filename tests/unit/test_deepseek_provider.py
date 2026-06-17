@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
-from filmoteka.infrastructure.deepseek_provider import deepseek_extract_search_info
+from filmoteka.infrastructure.deepseek_provider import (
+    deepseek_enrich_metadata,
+    deepseek_extract_search_info,
+)
 
 PATCH_TARGET = "filmoteka.infrastructure.deepseek_provider.urlopen"
 API_KEY = "test_ds_key_456"
@@ -221,3 +225,117 @@ class TestDeepseekExtractSearchInfoFallback:
         assert result["title"] == "Брат"
         assert result["year"] == 1997
         assert result["type"] is None
+
+
+# ---------------------------------------------------------------------------
+# deepseek_enrich_metadata — enrichment-specific tests
+# ---------------------------------------------------------------------------
+
+
+class TestDeepseekEnrichMetadata:
+    """deepseek_enrich_metadata — structured enrichment from DeepSeek."""
+
+    def test_happy_path(self) -> None:
+        """Full enrichment response → DeepSeekEnrichmentResult with all fields."""
+        body = _build_deepseek_body(json.dumps({
+            "genres": ["Action", "Sci-Fi"],
+            "description": "A hacker discovers the truth about reality.",
+            "actors": ["Keanu Reeves", "Laurence Fishburne"],
+            "country": "USA",
+        }))
+        with patch(PATCH_TARGET, return_value=_mock_response(200, body)):
+            result = deepseek_enrich_metadata("The Matrix", 1999, API_KEY)
+
+        assert result is not None
+        assert result.genres == ["Action", "Sci-Fi"]
+        assert result.description == "A hacker discovers the truth about reality."
+        assert result.actors == ["Keanu Reeves", "Laurence Fishburne"]
+        assert result.country == "USA"
+
+    def test_minimal_response(self) -> None:
+        """Minimal response without actors / country → partial result."""
+        body = _build_deepseek_body(json.dumps({
+            "genres": ["Drama"],
+            "description": "A story about life.",
+            "actors": [],
+            "country": None,
+        }))
+        with patch(PATCH_TARGET, return_value=_mock_response(200, body)):
+            result = deepseek_enrich_metadata("Life Story", 2020, API_KEY)
+
+        assert result is not None
+        assert result.genres == ["Drama"]
+        assert result.description == "A story about life."
+        assert result.actors == []
+        assert result.country is None
+
+    def test_markdown_wrapped_json(self) -> None:
+        """Markdown-wrapped JSON → parsed correctly."""
+        body = _build_deepseek_body(
+            "```json\n{\"genres\": [\"Comedy\"], \"description\": \"Funny film\","
+            " \"actors\": [], \"country\": \"UK\"}\n```",
+        )
+        with patch(PATCH_TARGET, return_value=_mock_response(200, body)):
+            result = deepseek_enrich_metadata("Funny Film", 2021, API_KEY)
+
+        assert result is not None
+        assert result.genres == ["Comedy"]
+        assert result.country == "UK"
+
+    def test_genre_not_a_list(self) -> None:
+        """Genre returned as string → gracefully handled (empty list)."""
+        body = _build_deepseek_body(json.dumps({
+            "genres": "Action",
+            "description": "A film.",
+            "actors": ["Someone"],
+            "country": None,
+        }))
+        with patch(PATCH_TARGET, return_value=_mock_response(200, body)):
+            result = deepseek_enrich_metadata("Test", 2020, API_KEY)
+
+        assert result is not None
+        assert result.genres == []  # non-list genres → empty
+
+    def test_non_200_returns_none(self) -> None:
+        """Non-200 status code → returns None."""
+        with patch(PATCH_TARGET, return_value=_mock_response(401, b"{}")):
+            result = deepseek_enrich_metadata("The Matrix", 1999, API_KEY)
+
+        assert result is None
+
+    def test_network_error_returns_none(self) -> None:
+        """Network error → returns None."""
+        with patch(PATCH_TARGET, side_effect=Exception("Connection refused")):
+            result = deepseek_enrich_metadata("Inception", 2010, API_KEY)
+
+        assert result is None
+
+    def test_empty_choices_returns_none(self) -> None:
+        """Empty choices list → returns None."""
+        body = json.dumps({
+            "id": "chatcmpl-123",
+            "object": "chat.completion",
+            "created": 1234567890,
+            "model": "deepseek-chat",
+            "choices": [],
+        }).encode("utf-8")
+        with patch(PATCH_TARGET, return_value=_mock_response(200, body)):
+            result = deepseek_enrich_metadata("No Choices", 2020, API_KEY)
+
+        assert result is None
+
+    def test_empty_content_returns_none(self) -> None:
+        """Empty assistant content → returns None."""
+        body = _build_deepseek_body("")
+        with patch(PATCH_TARGET, return_value=_mock_response(200, body)):
+            result = deepseek_enrich_metadata("Empty", 2020, API_KEY)
+
+        assert result is None
+
+    def test_invalid_json_content_returns_none(self) -> None:
+        """Invalid JSON in content → returns None."""
+        body = _build_deepseek_body("this is not json")
+        with patch(PATCH_TARGET, return_value=_mock_response(200, body)):
+            result = deepseek_enrich_metadata("Bad JSON", 2020, API_KEY)
+
+        assert result is None

@@ -444,10 +444,16 @@
   Проверка результата:
   1. Можно исправить ошибочную карточку без SQL вручную.
 
-- [ ] **V1-007** Написать unit/integration тесты enrichment-пайплайна.
-  
-  Проверка результата:
-  1. Нормализация и quality flags покрыты тестами.
+- [x] **V1-007** Написать unit тесты enrichment-пайплайна.
+
+  + `tests/unit/test_deepseek_provider.py` — `TestDeepseekEnrichMetadata`:
+    9 тестов (happy path, minimal, markdown JSON, non-list genres, non-200,
+    network error, empty choices, empty content, invalid JSON).
+  + `tests/unit/test_enrichment.py` — `_apply_deepseek_enrichment` с реальными
+    доменными моделями (Film, Genre, Person) через in-memory SQLite:
+    9 тестов (genre upsert, person upsert, duplicate link skip, quality flags,
+    description/country, unchanged preserve).
+  Integration-тесты не добавлены (`tests/conftest.py` удалён из git).
 
 ## 3.2. Расширенный поиск и фильтры
 
