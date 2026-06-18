@@ -4,6 +4,22 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: AGENTS-UPDATE — 2026-06-18
+
+- Status: `done`
+- Summary: Added consistency enforcement rules to AGENTS.md.
+  - New step "1b. Verify tasklist consistency" — auto-close stale [ ] before starting work
+  - Step 6 renamed "Close task + write report" — mandates marking [x] in agent-tasklist.md
+  - "What Done Means" — added point 4: task must be [x] in agent-tasklist.md
+  - "Verification Checklist" — added check for tasklist consistency
+  - "Commit Convention" — agent-tasklist.md always in staging
+- Changed files:
+  - `AGENTS.md` — 5 changes for document consistency
+  - `docs/progress.md` (this report)
+- Next task:
+  - BUGFIX-011, BUGFIX-012, BUGFIX-015
+
+
 ## Task Report: TASKLIST-CLEANUP — 2026-06-18
 
 - Status: `done`
