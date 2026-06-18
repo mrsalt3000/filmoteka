@@ -4,6 +4,17 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: TASKLIST-CLEANUP — 2026-06-18
+
+- Status: `done`
+- Summary: Closed all legacy stale tasks (INIT 1-15, MVP 1-27, PRD checklist, V2-030 checkboxes).
+  The only remaining open tasks: BUGFIX-011, BUGFIX-012, BUGFIX-015.
+  - 63 unchecked items → 3 remaining
+- Changed files:
+  - `agent-tasklist.md` — 60 items marked [x]
+  - `docs/progress.md` (this report)
+
+
 ## Task Report: V2-030 — 2026-06-17
 
 - Status: `done`
