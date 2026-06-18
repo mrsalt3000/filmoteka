@@ -4,6 +4,15 @@
 
 > Этот файл ведёт агент.
 
+## Task Report: BUGFIX-011 — 2026-06-18
+
+- Status: `done` (already implemented in `aa2d301` — just marked `[x]` in tasklist)
+- Changed files:
+  - `agent-tasklist.md` — BUGFIX-011 `[x]`
+  - `docs/progress.md` (this report)
+- Remaining open: BUGFIX-012, BUGFIX-015
+
+
 ## Task Report: AGENTS-UPDATE — 2026-06-18
 
 - Status: `done`
